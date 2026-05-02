@@ -36,9 +36,12 @@ struct ContentView: View {
             // gets the correct background colour on the very first frame.
             // It also installs the sidebar toggle as a titlebar accessory
             // (next to the traffic lights, no capsule) — see CoupletTheme.swift.
-            .background(WindowConfigurator(onToggleSidebar: {
-                withAnimation(.easeInOut(duration: 0.2)) { sidebarVisible.toggle() }
-            }))
+            .background(WindowConfigurator(
+                onToggleSidebar: {
+                    withAnimation(.easeInOut(duration: 0.2)) { sidebarVisible.toggle() }
+                },
+                sidebarVisible: sidebarVisible
+            ))
 
             // Lightbox overlay
             if lightboxOpen {

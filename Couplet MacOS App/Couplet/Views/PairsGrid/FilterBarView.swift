@@ -77,7 +77,8 @@ struct FilterBarView: View {
             .clipShape(RoundedRectangle(cornerRadius: 8))
         }
         .padding(.horizontal, 20)
-        .padding(.vertical, 6)
+        .padding(.top, 0)
+        .padding(.bottom, 8)
         .background(Color.appBackground)
         .overlay(alignment: .bottom) {
             Rectangle().fill(Color.appBorder).frame(height: 1)

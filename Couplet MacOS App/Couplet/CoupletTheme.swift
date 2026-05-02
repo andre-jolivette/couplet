@@ -43,6 +43,8 @@ extension Color {
 struct WindowConfigurator: NSViewRepresentable {
     /// Closure fired when the sidebar toggle in the title bar is tapped.
     let onToggleSidebar: () -> Void
+    /// Mirrors ContentView's sidebarVisible so the titlebar border line tracks it.
+    let sidebarVisible: Bool
 
     func makeNSView(context: Context) -> ConfigView {
         ConfigView(onToggleSidebar: onToggleSidebar)
@@ -50,6 +52,9 @@ struct WindowConfigurator: NSViewRepresentable {
 
     func updateNSView(_ nsView: ConfigView, context: Context) {
         nsView.onToggleSidebar = onToggleSidebar
+        if let window = nsView.window {
+            updateTitlebarSidebarBorder(in: window, visible: sidebarVisible)
+        }
     }
 
     final class ConfigView: NSView {
@@ -140,6 +145,8 @@ private final class SolidTitlebarCover: NSView {
     }
 }
 
+private final class TitlebarSidebarBorderLine: NSView {}
+
 private func installSolidTitlebar(in window: NSWindow, color: NSColor) {
     window.titlebarAppearsTransparent = true
     window.titleVisibility = .hidden
@@ -151,7 +158,7 @@ private func installSolidTitlebar(in window: NSWindow, color: NSColor) {
     // Update existing cover if already installed.
     if let existing = titlebarView.subviews.first(where: { $0 is SolidTitlebarCover }) as? SolidTitlebarCover {
         existing.fillColor = color.cgColor
-        return
+        return  // border line is already installed from the first call
     }
 
     // The frosted-glass effect comes from NSTitlebarBackgroundView, which is
@@ -170,6 +177,28 @@ private func installSolidTitlebar(in window: NSWindow, color: NSColor) {
         solid.topAnchor     .constraint(equalTo: titlebarView.topAnchor),
         solid.bottomAnchor  .constraint(equalTo: titlebarView.bottomAnchor),
     ])
+
+    // Sidebar border — 1px vertical line at x=192 (matching SidebarView width),
+    // inserted above SolidTitlebarCover so it's visible over the solid background.
+    // This extends the SwiftUI sidebar's trailing border into the AppKit titlebar layer.
+    let borderLine = TitlebarSidebarBorderLine()
+    borderLine.wantsLayer = true
+    borderLine.layer?.backgroundColor = NSColor(red: 39/255, green: 39/255, blue: 42/255, alpha: 1).cgColor
+    borderLine.translatesAutoresizingMaskIntoConstraints = false
+    titlebarView.addSubview(borderLine, positioned: .above, relativeTo: solid)
+    NSLayoutConstraint.activate([
+        borderLine.leadingAnchor.constraint(equalTo: titlebarView.leadingAnchor, constant: 192),
+        borderLine.widthAnchor  .constraint(equalToConstant: 1),
+        borderLine.topAnchor    .constraint(equalTo: titlebarView.topAnchor),
+        borderLine.bottomAnchor .constraint(equalTo: titlebarView.bottomAnchor),
+    ])
+}
+
+/// Shows or hides the sidebar border line in the titlebar when the sidebar is toggled.
+private func updateTitlebarSidebarBorder(in window: NSWindow, visible: Bool) {
+    guard let closeButton = window.standardWindowButton(.closeButton),
+          let titlebarView = closeButton.superview else { return }
+    titlebarView.subviews.first(where: { $0 is TitlebarSidebarBorderLine })?.isHidden = !visible
 }
 
 // MARK: - Title bar sidebar toggle button
