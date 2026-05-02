@@ -1,0 +1,30 @@
+# Xcode
+DerivedData/
+*.xcuserstate
+xcuserdata/
+*.xcworkspace/xcuserdata/
+
+# Swift Package Manager
+.build/
+Packages/
+
+# ML model (large binary, stored outside repo)
+clip-vit-base-patch32.mlpackage/
+
+# Database files
+*.db
+*.db-shm
+*.db-wal
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Photo test libraries (large image folders, not source code)
+00-Ram-Export/
+00-Ramses-20260415T003144Z-3-001/
+00-exports/
+00-sample-llm/
+00-test-pairing-folder/
+00 - Archive/
