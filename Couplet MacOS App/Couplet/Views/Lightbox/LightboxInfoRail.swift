@@ -8,6 +8,9 @@ struct LightboxInfoRail: View {
     let pair: DisplayPair
     static let width: CGFloat = 270
 
+    @State private var captionAExpanded = false
+    @State private var captionBExpanded = false
+
     var body: some View {
         ScrollView(.vertical, showsIndicators: false) {
             VStack(alignment: .leading, spacing: 0) {
@@ -48,27 +51,60 @@ struct LightboxInfoRail: View {
     private var captionsSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             label("Captions")
-            captionBlock(filename: pair.filenameA, caption: pair.captionA)
-            captionBlock(filename: pair.filenameB, caption: pair.captionB)
+            captionBlock(filename: pair.filenameA, caption: pair.captionA,
+                         isExpanded: $captionAExpanded)
+            captionBlock(filename: pair.filenameB, caption: pair.captionB,
+                         isExpanded: $captionBExpanded)
         }
     }
 
-    private func captionBlock(filename: String, caption: String) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+    private func captionBlock(filename: String, caption: String,
+                               isExpanded: Binding<Bool>) -> some View {
+        let displayCaption = caption.strippingCaptionOpener()
+        // Only show the toggle for captions long enough to overflow 3 lines
+        // (~45 chars/line × 3 lines in the 250px card interior).
+        let needsToggle = displayCaption.count > 120
+
+        return VStack(alignment: .leading, spacing: 4) {
             Text(filename)
                 .font(.system(size: 10, weight: .medium))
                 .foregroundColor(.white.opacity(0.40))
                 .lineLimit(1).truncationMode(.middle)
             if caption.isEmpty {
-                Text("No caption — moondream not run")
+                Text("No caption available")
                     .font(.system(size: 11))
                     .foregroundColor(.white.opacity(0.30))
                     .italic()
             } else {
-                Text(caption)
+                Text(displayCaption)
                     .font(.system(size: 11))
                     .foregroundColor(.white.opacity(0.70))
+                    .lineLimit(isExpanded.wrappedValue ? nil : 3)
                     .fixedSize(horizontal: false, vertical: true)
+                    .overlay(alignment: .bottom) {
+                        if !isExpanded.wrappedValue && needsToggle {
+                            LinearGradient(
+                                colors: [.clear, Color(white: 0.14)],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                            .frame(height: 18)
+                            .allowsHitTesting(false)
+                        }
+                    }
+                if needsToggle {
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            isExpanded.wrappedValue.toggle()
+                        }
+                    } label: {
+                        Text(isExpanded.wrappedValue ? "Show less" : "Show more")
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundColor(.white.opacity(0.45))
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.top, 2)
+                }
             }
         }
         .padding(10)

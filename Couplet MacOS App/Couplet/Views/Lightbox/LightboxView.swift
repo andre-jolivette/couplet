@@ -85,6 +85,7 @@ struct LightboxView: View {
             // Info rail — slides in from right
             if showInfoRail, let pair = vm.currentPair {
                 LightboxInfoRail(pair: pair)
+                    .id(pair.id)  // reset @State (collapsed captions) on pair change
                     .transition(.move(edge: .trailing).combined(with: .opacity))
             }
         } // end outer HStack
