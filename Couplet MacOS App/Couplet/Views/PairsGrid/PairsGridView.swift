@@ -16,9 +16,11 @@ struct PairsGridView: View {
     private let columns = [GridItem(.adaptive(minimum: 280, maximum: 380), spacing: 12)]
 
     var body: some View {
-        VStack(spacing: 0) {
-            FilterBarView(gridVM: gridVM)
+        contentView
+    }
 
+    private var contentView: some View {
+        VStack(spacing: 0) {
             if gridVM.isAnchored {
                 gridAnchorStrip
             }

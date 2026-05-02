@@ -40,7 +40,9 @@ struct ContentView: View {
                 onToggleSidebar: {
                     withAnimation(.easeInOut(duration: 0.2)) { sidebarVisible.toggle() }
                 },
-                sidebarVisible: sidebarVisible
+                sidebarVisible: sidebarVisible,
+                lightboxOpen: lightboxOpen,
+                filterBarContent: AnyView(FilterBarView(gridVM: gridVM))
             ))
 
             // Lightbox overlay
