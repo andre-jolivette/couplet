@@ -178,16 +178,20 @@ private func installSolidTitlebar(in window: NSWindow, color: NSColor) {
         solid.bottomAnchor  .constraint(equalTo: titlebarView.bottomAnchor),
     ])
 
-    // Sidebar border — 1px vertical line at x=192 (matching SidebarView width),
-    // inserted above SolidTitlebarCover so it's visible over the solid background.
-    // This extends the SwiftUI sidebar's trailing border into the AppKit titlebar layer.
+    // Sidebar border — 1px vertical line aligned with the SwiftUI sidebar's trailing edge.
+    // Coordinate-convert x=192 from contentView into titlebarView space so the line
+    // is pixel-exact even if the two view hierarchies have different x origins.
+    let borderX = window.contentView.map {
+        $0.convert(CGPoint(x: 192, y: 0), to: titlebarView).x
+    } ?? 192
+
     let borderLine = TitlebarSidebarBorderLine()
     borderLine.wantsLayer = true
     borderLine.layer?.backgroundColor = NSColor(red: 39/255, green: 39/255, blue: 42/255, alpha: 1).cgColor
     borderLine.translatesAutoresizingMaskIntoConstraints = false
     titlebarView.addSubview(borderLine, positioned: .above, relativeTo: solid)
     NSLayoutConstraint.activate([
-        borderLine.leadingAnchor.constraint(equalTo: titlebarView.leadingAnchor, constant: 192),
+        borderLine.leadingAnchor.constraint(equalTo: titlebarView.leadingAnchor, constant: borderX),
         borderLine.widthAnchor  .constraint(equalToConstant: 1),
         borderLine.topAnchor    .constraint(equalTo: titlebarView.topAnchor),
         borderLine.bottomAnchor .constraint(equalTo: titlebarView.bottomAnchor),
