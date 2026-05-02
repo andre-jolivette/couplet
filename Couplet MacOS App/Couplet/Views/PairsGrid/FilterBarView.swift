@@ -42,10 +42,7 @@ struct FilterBarView: View {
 
             // Clear filters button
             if gridVM.hasActiveFilters {
-                Button("Clear filters") { gridVM.clearFilters() }
-                    .buttonStyle(.plain)
-                    .font(.caption)
-                    .foregroundColor(Color.appMutedForeground)
+                ClearFiltersButton { gridVM.clearFilters() }
             }
 
             Spacer(minLength: 0)
@@ -61,14 +58,7 @@ struct FilterBarView: View {
                     .foregroundColor(Color.appForeground)
                     .frame(width: 160)
                 if !gridVM.searchText.isEmpty {
-                    Button {
-                        gridVM.searchText = ""
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundColor(Color.appMutedForeground)
-                            .font(.caption)
-                    }
-                    .buttonStyle(.plain)
+                    SearchClearButton { gridVM.searchText = "" }
                 }
             }
             .padding(.horizontal, 8)
@@ -106,6 +96,8 @@ private struct ModalityPill: View {
     let isSelected: Bool
     let action: () -> Void
 
+    @State private var hovered = false
+
     var body: some View {
         Button(action: action) {
             Text(label)
@@ -114,14 +106,53 @@ private struct ModalityPill: View {
                 .padding(.vertical, 4)
                 .background(
                     Capsule()
-                        .fill(isSelected ? Color.appPrimary : Color.clear)
+                        .fill(isSelected
+                              ? Color.appPrimary
+                              : (hovered ? Color.appSecondary : Color.clear))
                 )
                 .overlay(
                     Capsule()
                         .stroke(isSelected ? Color.clear : Color.appBorder, lineWidth: 1)
                 )
-                .foregroundColor(isSelected ? Color.appBackground : Color.appMutedForeground)
+                .foregroundColor(isSelected
+                                 ? Color.appBackground
+                                 : (hovered ? Color.appForeground : Color.appMutedForeground))
         }
         .buttonStyle(.plain)
+        .onHover { hovered = $0 }
+    }
+}
+
+// MARK: - Clear filters button
+
+private struct ClearFiltersButton: View {
+    let action: () -> Void
+    @State private var hovered = false
+
+    var body: some View {
+        Button(action: action) {
+            Text("Clear filters")
+                .font(.caption)
+                .foregroundColor(hovered ? Color.appForeground : Color.appMutedForeground)
+        }
+        .buttonStyle(.plain)
+        .onHover { hovered = $0 }
+    }
+}
+
+// MARK: - Search clear button
+
+private struct SearchClearButton: View {
+    let action: () -> Void
+    @State private var hovered = false
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "xmark.circle.fill")
+                .foregroundColor(hovered ? Color.appForeground : Color.appMutedForeground)
+                .font(.caption)
+        }
+        .buttonStyle(.plain)
+        .onHover { hovered = $0 }
     }
 }

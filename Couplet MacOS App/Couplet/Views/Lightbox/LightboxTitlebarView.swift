@@ -4,13 +4,15 @@ import SwiftUI
 /// when the lightbox is open. Mirrors the layout of LightboxView.topBar but sized
 /// for the ~50px titlebar band rather than SwiftUI content space.
 ///
-/// Leading padding of 140pt gives ~64pt of breathing room after the traffic lights
-/// (~76px). The back button fills the full titlebar height for a large hit target.
+/// Leading padding of 70pt gives ~(-6)pt of breathing room after the traffic lights (~76px).
+/// The back button fills the full titlebar height for a large hit target; the visual
+/// highlight is inset vertically so it reads as a floating button, not a full-bleed fill.
 struct LightboxTitlebarView: View {
     @ObservedObject var vm: LightboxViewModel
     let onDismiss: () -> Void
 
     @State private var backHovered = false
+    @State private var infoHovered = false
 
     var body: some View {
         let resting = !vm.controlsVisible
@@ -18,7 +20,8 @@ struct LightboxTitlebarView: View {
         let mutedOpacity: Double = resting ? 0.15 : 0.40
 
         HStack(spacing: 0) {
-            // Back button — fills full titlebar height for a large, reliable hit target.
+            // Back button — hit target fills full titlebar height; visual highlight is
+            // inset 7pt top/bottom so it reads as a floating rounded button.
             Button(action: onDismiss) {
                 HStack(spacing: 7) {
                     Image(systemName: "arrow.left")
@@ -28,11 +31,12 @@ struct LightboxTitlebarView: View {
                 }
                 .foregroundColor(.white.opacity(fgOpacity))
                 .padding(.horizontal, 12)
-                .frame(maxHeight: .infinity)
+                .padding(.vertical, 7)
                 .background(
-                    RoundedRectangle(cornerRadius: 5)
+                    RoundedRectangle(cornerRadius: 6)
                         .fill(Color.white.opacity(backHovered && !resting ? 0.08 : 0))
                 )
+                .frame(maxHeight: .infinity)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -66,17 +70,20 @@ struct LightboxTitlebarView: View {
                             .font(.system(size: 13))
                             .foregroundColor(.white.opacity(resting ? 0.25 : 0.70))
                     }
-                    .padding(.horizontal, 8).padding(.vertical, 4)
+                    .padding(.horizontal, 8).padding(.vertical, 5)
                     .background(
                         RoundedRectangle(cornerRadius: 6)
-                            .fill(vm.showInfoRail ? Color.white.opacity(0.10) : Color.clear)
+                            .fill(Color.white.opacity(
+                                vm.showInfoRail ? 0.10 : (infoHovered && !resting ? 0.06 : 0)
+                            ))
                     )
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .onHover { infoHovered = $0 }
             }
         }
-        .padding(.leading, 140)
+        .padding(.leading, 70)
         .padding(.trailing, 16)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .animation(.easeOut(duration: 0.25), value: vm.controlsVisible)
