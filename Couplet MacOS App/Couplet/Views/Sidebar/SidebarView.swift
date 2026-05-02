@@ -26,7 +26,10 @@ struct SidebarView: View {
         .frame(width: 192)
         .background(Color.appBackground)
         .overlay(alignment: .trailing) {
-            Rectangle().fill(Color.appBorder).frame(width: 1)
+            Rectangle()
+                .fill(Color.appBorder)
+                .frame(width: 1)
+                .ignoresSafeArea(.all, edges: .top)
         }
         .sheet(isPresented: $isAddingCollection) { addCollectionSheet }
         .popover(item: $collectionToRename) { collection in
