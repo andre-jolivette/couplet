@@ -83,7 +83,7 @@ struct LightboxTitlebarView: View {
                 .onHover { infoHovered = $0 }
             }
         }
-        .padding(.leading, 70)
+        .padding(.leading, 86)
         .padding(.trailing, 16)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .animation(.easeOut(duration: 0.25), value: vm.controlsVisible)
