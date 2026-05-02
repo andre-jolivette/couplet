@@ -11,26 +11,28 @@ struct FilterBarView: View {
 
             Divider().frame(height: 20)
 
-            // Sort
-            Picker("Sort", selection: $gridVM.sortOrder) {
-                ForEach(PairSortOrder.allCases) { order in
-                    Text(order.rawValue).tag(order)
+            // Sort + Tone grouped tightly
+            HStack(spacing: -8) {
+                Picker("Sort", selection: $gridVM.sortOrder) {
+                    ForEach(PairSortOrder.allCases) { order in
+                        Text(order.rawValue).tag(order)
+                    }
                 }
-            }
-            .labelsHidden()
-            .pickerStyle(.menu)
-            .frame(width: 150)
+                .labelsHidden()
+                .pickerStyle(.menu)
+                .frame(width: 150)
 
-            // Color tone filter
-            Picker("Tone", selection: $gridVM.colorToneFilter) {
-                Text("All tones").tag(Optional<DisplayPair.ColorTone>.none)
-                ForEach(DisplayPair.ColorTone.allCases, id: \.self) { tone in
-                    Text(tone.rawValue).tag(Optional(tone))
+                // Color tone filter
+                Picker("Tone", selection: $gridVM.colorToneFilter) {
+                    Text("All tones").tag(Optional<DisplayPair.ColorTone>.none)
+                    ForEach(DisplayPair.ColorTone.allCases, id: \.self) { tone in
+                        Text(tone.rawValue).tag(Optional(tone))
+                    }
                 }
+                .labelsHidden()
+                .pickerStyle(.menu)
+                .frame(width: 110)
             }
-            .labelsHidden()
-            .pickerStyle(.menu)
-            .frame(width: 110)
 
             Divider().frame(height: 20)
 
@@ -117,6 +119,7 @@ private struct ModalityPill: View {
                 .foregroundColor(isSelected
                                  ? Color.appBackground
                                  : (hovered ? Color.appForeground : Color.appMutedForeground))
+                .contentShape(Capsule())
         }
         .buttonStyle(.plain)
         .onHover { hovered = $0 }

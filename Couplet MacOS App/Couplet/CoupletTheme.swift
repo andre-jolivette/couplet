@@ -225,7 +225,7 @@ struct WindowConfigurator: NSViewRepresentable {
             hosting.wantsLayer = true
             hosting.layer?.backgroundColor = NSColor(red: 14/255, green: 14/255, blue: 16/255, alpha: 1).cgColor
             hosting.translatesAutoresizingMaskIntoConstraints = false
-            hosting.alphaValue = 0
+            hosting.isHidden = true
 
             // Must be above filterBarHostingView, not just above solidCover.
             // addSubview(.above, relativeTo: X) inserts just above X; if we reference
@@ -248,9 +248,9 @@ struct WindowConfigurator: NSViewRepresentable {
 
         func updateTitlebarBars(filterContent: AnyView, lightboxContent: AnyView, lightboxOpen: Bool) {
             filterBarHostingView?.rootView = filterContent
-            filterBarHostingView?.alphaValue = lightboxOpen ? 0 : 1
+            filterBarHostingView?.isHidden = lightboxOpen
             lightboxBarHostingView?.rootView = lightboxContent
-            lightboxBarHostingView?.alphaValue = lightboxOpen ? 1 : 0
+            lightboxBarHostingView?.isHidden = !lightboxOpen
         }
     }
 }
