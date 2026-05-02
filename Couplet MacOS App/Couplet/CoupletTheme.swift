@@ -341,6 +341,8 @@ private func updateTitlebarBottomBorderLeading(in window: NSWindow, lightboxOpen
 
 private func updateSidebarToggleAlpha(in window: NSWindow, lightboxOpen: Bool) {
     for accessory in window.titlebarAccessoryViewControllers {
+        // isHidden disables hit testing and tooltip tracking (alphaValue=0 alone does not).
+        accessory.view.isHidden = lightboxOpen
         accessory.view.alphaValue = lightboxOpen ? 0 : 1
     }
 }
