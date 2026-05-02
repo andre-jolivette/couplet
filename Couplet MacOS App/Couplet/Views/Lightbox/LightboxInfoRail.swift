@@ -14,8 +14,6 @@ struct LightboxInfoRail: View {
     var body: some View {
         ScrollView(.vertical, showsIndicators: false) {
             VStack(alignment: .leading, spacing: 0) {
-                captionsSection
-                Divider().opacity(0.2).padding(.vertical, 8)
                 scoreSection(
                     label: "Aesthetic", letter: "A",
                     score: pair.aestheticScore,
@@ -38,6 +36,8 @@ struct LightboxInfoRail: View {
                 )
                 Divider().opacity(0.2).padding(.vertical, 8)
                 compositeDetail
+                Divider().opacity(0.2).padding(.vertical, 8)
+                captionsSection
             }
             .padding(16)
             .textSelection(.enabled)
@@ -61,9 +61,9 @@ struct LightboxInfoRail: View {
     private func captionBlock(filename: String, caption: String,
                                isExpanded: Binding<Bool>) -> some View {
         let displayCaption = caption.strippingCaptionOpener()
-        // Only show the toggle for captions long enough to overflow 3 lines
-        // (~45 chars/line × 3 lines in the 250px card interior).
-        let needsToggle = displayCaption.count > 120
+        // Only show the toggle for captions long enough to overflow 7 lines
+        // (~40 chars/line × 7 lines in the 250px card interior).
+        let needsToggle = displayCaption.count > 280
 
         return VStack(alignment: .leading, spacing: 4) {
             Text(filename)
@@ -79,7 +79,7 @@ struct LightboxInfoRail: View {
                 Text(displayCaption)
                     .font(.system(size: 11))
                     .foregroundColor(.white.opacity(0.70))
-                    .lineLimit(isExpanded.wrappedValue ? nil : 3)
+                    .lineLimit(isExpanded.wrappedValue ? nil : 7)
                     .fixedSize(horizontal: false, vertical: true)
                     .overlay(alignment: .bottom) {
                         if !isExpanded.wrappedValue && needsToggle {
