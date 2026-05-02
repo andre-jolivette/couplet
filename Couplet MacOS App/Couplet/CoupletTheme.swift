@@ -59,29 +59,41 @@ struct WindowConfigurator: NSViewRepresentable {
     let sidebarVisible: Bool
     let lightboxOpen: Bool
     let filterBarContent: AnyView
+    let lightboxTitlebarContent: AnyView
 
     func makeNSView(context: Context) -> ConfigView {
-        ConfigView(onToggleSidebar: onToggleSidebar, filterBarContent: filterBarContent)
+        ConfigView(onToggleSidebar: onToggleSidebar, filterBarContent: filterBarContent,
+                   lightboxTitlebarContent: lightboxTitlebarContent)
     }
 
     func updateNSView(_ nsView: ConfigView, context: Context) {
         nsView.onToggleSidebar = onToggleSidebar
         if let window = nsView.window {
             updateTitlebarSidebarBorder(in: window, visible: sidebarVisible && !lightboxOpen)
+            nsView.updateSidebarToggle(in: window, lightboxOpen: lightboxOpen)
+            updateTitlebarBottomBorderLeading(in: window, lightboxOpen: lightboxOpen, sidebarVisible: sidebarVisible)
         }
-        nsView.updateFilterBar(content: filterBarContent, lightboxOpen: lightboxOpen)
+        nsView.updateTitlebarBars(filterContent: filterBarContent,
+                                  lightboxContent: lightboxTitlebarContent,
+                                  lightboxOpen: lightboxOpen)
     }
 
     final class ConfigView: NSView {
         var onToggleSidebar: () -> Void
         private let initialFilterBarContent: AnyView
+        private let initialLightboxTitlebarContent: AnyView
         private var filterBarHostingView: PassthroughHostingView<AnyView>?
+        private var lightboxBarHostingView: PassthroughHostingView<AnyView>?
         private var hasInstalledSidebarToggle = false
+        private var sidebarToggleAccessory: NSTitlebarAccessoryViewController?
         private var hasInstalledFilterBar = false
+        private var hasInstalledLightboxBar = false
 
-        init(onToggleSidebar: @escaping () -> Void, filterBarContent: AnyView) {
+        init(onToggleSidebar: @escaping () -> Void, filterBarContent: AnyView,
+             lightboxTitlebarContent: AnyView) {
             self.onToggleSidebar = onToggleSidebar
             self.initialFilterBarContent = filterBarContent
+            self.initialLightboxTitlebarContent = lightboxTitlebarContent
             super.init(frame: .zero)
         }
         required init?(coder: NSCoder) { fatalError() }
@@ -107,6 +119,7 @@ struct WindowConfigurator: NSViewRepresentable {
                 guard let window else { return }
                 installSolidTitlebar(in: window, color: appColor)
                 self?.installFilterBarInTitlebar(in: window)
+                self?.installLightboxBarInTitlebar(in: window)
                 NotificationCenter.default.addObserver(
                     forName: NSWindow.didBecomeKeyNotification,
                     object: window, queue: .main
@@ -114,6 +127,7 @@ struct WindowConfigurator: NSViewRepresentable {
                     guard let w = window else { return }
                     installSolidTitlebar(in: w, color: appColor)
                     self?.installFilterBarInTitlebar(in: w)
+                    self?.installLightboxBarInTitlebar(in: w)
                 }
                 NotificationCenter.default.addObserver(
                     forName: NSWindow.didBecomeMainNotification,
@@ -122,6 +136,7 @@ struct WindowConfigurator: NSViewRepresentable {
                     guard let w = window else { return }
                     installSolidTitlebar(in: w, color: appColor)
                     self?.installFilterBarInTitlebar(in: w)
+                    self?.installLightboxBarInTitlebar(in: w)
                 }
             }
         }
@@ -149,6 +164,23 @@ struct WindowConfigurator: NSViewRepresentable {
             accessory.view = hosting
             accessory.layoutAttribute = .leading
             window.addTitlebarAccessoryViewController(accessory)
+            sidebarToggleAccessory = accessory
+        }
+
+        /// Removes the sidebar toggle accessory from the window when the lightbox
+        /// is open (mere hide/alpha=0 still reserves the accessory's event zone in
+        /// AppKit's responder chain, blocking clicks on the back button arrow).
+        /// Re-adds it when the lightbox closes.
+        func updateSidebarToggle(in window: NSWindow, lightboxOpen: Bool) {
+            guard let accessory = sidebarToggleAccessory else { return }
+            let isInstalled = window.titlebarAccessoryViewControllers.contains { $0 === accessory }
+            if lightboxOpen && isInstalled {
+                if let idx = window.titlebarAccessoryViewControllers.firstIndex(where: { $0 === accessory }) {
+                    window.removeTitlebarAccessoryViewController(at: idx)
+                }
+            } else if !lightboxOpen && !isInstalled {
+                window.addTitlebarAccessoryViewController(accessory)
+            }
         }
 
         /// Inserts FilterBarView as a raw PassthroughHostingView directly into
@@ -179,9 +211,46 @@ struct WindowConfigurator: NSViewRepresentable {
             filterBarHostingView = hosting
         }
 
-        func updateFilterBar(content: AnyView, lightboxOpen: Bool) {
-            filterBarHostingView?.rootView = content
+        /// Inserts LightboxTitlebarView as a PassthroughHostingView directly into
+        /// NSTitlebarView, spanning the full width (leading + 0). Internal 80pt padding
+        /// inside the SwiftUI view clears the traffic lights and sidebar toggle accessory.
+        /// Initially hidden (alpha=0); shown when lightboxOpen is true.
+        private func installLightboxBarInTitlebar(in window: NSWindow) {
+            guard !hasInstalledLightboxBar else { return }
+            guard let closeButton = window.standardWindowButton(.closeButton),
+                  let titlebarView = closeButton.superview else { return }
+            hasInstalledLightboxBar = true
+
+            let hosting = PassthroughHostingView(rootView: initialLightboxTitlebarContent)
+            hosting.wantsLayer = true
+            hosting.layer?.backgroundColor = NSColor(red: 14/255, green: 14/255, blue: 16/255, alpha: 1).cgColor
+            hosting.translatesAutoresizingMaskIntoConstraints = false
+            hosting.alphaValue = 0
+
+            // Must be above filterBarHostingView, not just above solidCover.
+            // addSubview(.above, relativeTo: X) inserts just above X; if we reference
+            // solidCover again the filter bar (added first) ends up on top, blocking
+            // events in the filter-bar region (x≥192) even when its alpha is 0.
+            let reference: NSView = filterBarHostingView
+                ?? titlebarView.subviews.first(where: { $0 is SolidTitlebarCover })
+                ?? titlebarView
+            titlebarView.addSubview(hosting, positioned: .above, relativeTo: reference)
+
+            NSLayoutConstraint.activate([
+                hosting.leadingAnchor .constraint(equalTo: titlebarView.leadingAnchor),
+                hosting.trailingAnchor.constraint(equalTo: titlebarView.trailingAnchor),
+                hosting.topAnchor     .constraint(equalTo: titlebarView.topAnchor),
+                hosting.bottomAnchor  .constraint(equalTo: titlebarView.bottomAnchor),
+            ])
+
+            lightboxBarHostingView = hosting
+        }
+
+        func updateTitlebarBars(filterContent: AnyView, lightboxContent: AnyView, lightboxOpen: Bool) {
+            filterBarHostingView?.rootView = filterContent
             filterBarHostingView?.alphaValue = lightboxOpen ? 0 : 1
+            lightboxBarHostingView?.rootView = lightboxContent
+            lightboxBarHostingView?.alphaValue = lightboxOpen ? 1 : 0
         }
     }
 }
@@ -208,7 +277,9 @@ private final class SolidTitlebarCover: NSView {
 }
 
 private final class TitlebarSidebarBorderLine: NSView {}
-private final class TitlebarToolsBottomBorder: NSView {}
+private final class TitlebarToolsBottomBorder: NSView {
+    var leadingConstraint: NSLayoutConstraint?
+}
 
 private func installSolidTitlebar(in window: NSWindow, color: NSColor) {
     window.titlebarAppearsTransparent = true
@@ -265,8 +336,10 @@ private func installSolidTitlebar(in window: NSWindow, color: NSColor) {
     bottomBorder.layer?.backgroundColor = NSColor(red: 39/255, green: 39/255, blue: 42/255, alpha: 1).cgColor
     bottomBorder.translatesAutoresizingMaskIntoConstraints = false
     titlebarView.addSubview(bottomBorder, positioned: .above, relativeTo: solid)
+    let bottomBorderLeading = bottomBorder.leadingAnchor.constraint(equalTo: titlebarView.leadingAnchor, constant: 192)
+    bottomBorder.leadingConstraint = bottomBorderLeading
     NSLayoutConstraint.activate([
-        bottomBorder.leadingAnchor .constraint(equalTo: titlebarView.leadingAnchor, constant: 192),
+        bottomBorderLeading,
         bottomBorder.trailingAnchor.constraint(equalTo: titlebarView.trailingAnchor),
         bottomBorder.bottomAnchor  .constraint(equalTo: titlebarView.bottomAnchor),
         bottomBorder.heightAnchor  .constraint(equalToConstant: 1),
@@ -278,6 +351,18 @@ private func updateTitlebarSidebarBorder(in window: NSWindow, visible: Bool) {
           let titlebarView = closeButton.superview else { return }
     titlebarView.subviews.first(where: { $0 is TitlebarSidebarBorderLine })?.isHidden = !visible
 }
+
+private func updateTitlebarBottomBorderLeading(in window: NSWindow, lightboxOpen: Bool, sidebarVisible: Bool) {
+    guard let closeButton = window.standardWindowButton(.closeButton),
+          let titlebarView = closeButton.superview else { return }
+    guard let border = titlebarView.subviews.first(where: { $0 is TitlebarToolsBottomBorder })
+            as? TitlebarToolsBottomBorder else { return }
+    let newConstant: CGFloat = (lightboxOpen || !sidebarVisible) ? 0 : 192
+    if border.leadingConstraint?.constant != newConstant {
+        border.leadingConstraint?.constant = newConstant
+    }
+}
+
 
 // MARK: - Title bar sidebar toggle button
 

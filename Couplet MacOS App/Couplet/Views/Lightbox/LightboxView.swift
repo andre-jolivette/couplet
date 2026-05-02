@@ -12,7 +12,6 @@ struct LightboxView: View {
 
     @State private var showDeleteConfirm = false
     @State private var deleteTargetID: Int? = nil
-    @State private var showInfoRail = false
     @State private var showExportSheet = false
 
     private let dateFormatter: DateFormatter = {
@@ -28,7 +27,6 @@ struct LightboxView: View {
         HStack(spacing: 0) {
             // Main content
             VStack(spacing: 0) {
-                topBar
 
             // Image row — uses GeometryReader so it fills all remaining space.
             // Chevrons are fixed 48px; images split the rest equally.
@@ -83,7 +81,7 @@ struct LightboxView: View {
             } // end main VStack
 
             // Info rail — slides in from right
-            if showInfoRail, let pair = vm.currentPair {
+            if vm.showInfoRail, let pair = vm.currentPair {
                 LightboxInfoRail(pair: pair)
                     .id(pair.id)  // reset @State (collapsed captions) on pair change
                     .transition(.move(edge: .trailing).combined(with: .opacity))
@@ -194,7 +192,7 @@ struct LightboxView: View {
 
             if let pair = vm.currentPair {
                 Button {
-                    withAnimation(.easeInOut(duration: 0.20)) { showInfoRail.toggle() }
+                    withAnimation(.easeInOut(duration: 0.20)) { vm.showInfoRail.toggle() }
                 } label: {
                     HStack(spacing: 6) {
                         lightboxScorePill("A", value: pair.aestheticScore,
@@ -206,14 +204,14 @@ struct LightboxView: View {
                         Text(String(format: "%.3f", pair.compositeScore))
                             .font(.system(size: 11, design: .monospaced))
                             .foregroundColor(.white.opacity(mutedOpacity))
-                        Image(systemName: showInfoRail ? "info.circle.fill" : "info.circle")
+                        Image(systemName: vm.showInfoRail ? "info.circle.fill" : "info.circle")
                             .font(.system(size: 13))
                             .foregroundColor(.white.opacity(resting ? 0.25 : 0.70))
                     }
                     .padding(.horizontal, 8).padding(.vertical, 4)
                     .background(
                         RoundedRectangle(cornerRadius: 6)
-                            .fill(showInfoRail ? Color.white.opacity(0.10) : Color.clear)
+                            .fill(vm.showInfoRail ? Color.white.opacity(0.10) : Color.clear)
                     )
                     .contentShape(Rectangle())
                 }
