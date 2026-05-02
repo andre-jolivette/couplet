@@ -21,7 +21,7 @@ struct FilterBarView: View {
                 .labelsHidden()
                 .pickerStyle(.menu)
                 .frame(width: 150)
-                .padding(.leading, -8)  // compensate NSPopUpButton internal leading inset (~8pt on macOS 14)
+                .padding(.leading, -4)  // compensate NSPopUpButton internal leading inset (~4pt on macOS 14)
 
                 // Color tone filter
                 Picker("Tone", selection: $gridVM.colorToneFilter) {
