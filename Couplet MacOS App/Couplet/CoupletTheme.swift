@@ -71,7 +71,7 @@ struct WindowConfigurator: NSViewRepresentable {
         if let window = nsView.window {
             updateTitlebarSidebarBorder(in: window, visible: sidebarVisible && !lightboxOpen)
             updateSidebarToggleAlpha(in: window, lightboxOpen: lightboxOpen)
-            updateTitlebarBottomBorderLeading(in: window, lightboxOpen: lightboxOpen)
+            updateTitlebarBottomBorderLeading(in: window, lightboxOpen: lightboxOpen, sidebarVisible: sidebarVisible)
         }
         nsView.updateTitlebarBars(filterContent: filterBarContent,
                                   lightboxContent: lightboxTitlebarContent,
@@ -328,12 +328,12 @@ private func updateTitlebarSidebarBorder(in window: NSWindow, visible: Bool) {
     titlebarView.subviews.first(where: { $0 is TitlebarSidebarBorderLine })?.isHidden = !visible
 }
 
-private func updateTitlebarBottomBorderLeading(in window: NSWindow, lightboxOpen: Bool) {
+private func updateTitlebarBottomBorderLeading(in window: NSWindow, lightboxOpen: Bool, sidebarVisible: Bool) {
     guard let closeButton = window.standardWindowButton(.closeButton),
           let titlebarView = closeButton.superview else { return }
     guard let border = titlebarView.subviews.first(where: { $0 is TitlebarToolsBottomBorder })
             as? TitlebarToolsBottomBorder else { return }
-    let newConstant: CGFloat = lightboxOpen ? 0 : 192
+    let newConstant: CGFloat = (lightboxOpen || !sidebarVisible) ? 0 : 192
     if border.leadingConstraint?.constant != newConstant {
         border.leadingConstraint?.constant = newConstant
     }

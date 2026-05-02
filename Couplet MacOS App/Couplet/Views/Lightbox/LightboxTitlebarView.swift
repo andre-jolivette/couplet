@@ -4,31 +4,39 @@ import SwiftUI
 /// when the lightbox is open. Mirrors the layout of LightboxView.topBar but sized
 /// for the ~50px titlebar band rather than SwiftUI content space.
 ///
-/// Leading padding of 80pt clears the traffic lights (~76px) and the sidebar toggle
-/// accessory that remains in the NSTitlebarView subview tree.
+/// Leading padding of 140pt gives ~64pt of breathing room after the traffic lights
+/// (~76px). The back button fills the full titlebar height for a large hit target.
 struct LightboxTitlebarView: View {
     @ObservedObject var vm: LightboxViewModel
     let onDismiss: () -> Void
+
+    @State private var backHovered = false
 
     var body: some View {
         let resting = !vm.controlsVisible
         let fgOpacity: Double    = resting ? 0.25 : 0.85
         let mutedOpacity: Double = resting ? 0.15 : 0.40
 
-        HStack(spacing: 12) {
+        HStack(spacing: 0) {
+            // Back button — fills full titlebar height for a large, reliable hit target.
             Button(action: onDismiss) {
-                HStack(spacing: 6) {
-                    Image(systemName: "chevron.left")
-                        .font(.system(size: 13, weight: .semibold))
+                HStack(spacing: 7) {
+                    Image(systemName: "arrow.left")
+                        .font(.system(size: 13, weight: .medium))
                     Text("Pairs")
                         .font(.system(size: 13))
                 }
                 .foregroundColor(.white.opacity(fgOpacity))
-                .frame(minWidth: 60, minHeight: 28)
-                .padding(.horizontal, 4)
+                .padding(.horizontal, 12)
+                .frame(maxHeight: .infinity)
+                .background(
+                    RoundedRectangle(cornerRadius: 5)
+                        .fill(Color.white.opacity(backHovered && !resting ? 0.08 : 0))
+                )
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .onHover { backHovered = $0 }
 
             Spacer()
 
@@ -68,7 +76,7 @@ struct LightboxTitlebarView: View {
                 .buttonStyle(.plain)
             }
         }
-        .padding(.leading, 80)
+        .padding(.leading, 140)
         .padding(.trailing, 16)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .animation(.easeOut(duration: 0.25), value: vm.controlsVisible)
