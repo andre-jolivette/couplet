@@ -209,8 +209,14 @@ struct WindowConfigurator: NSViewRepresentable {
             hosting.translatesAutoresizingMaskIntoConstraints = false
             hosting.alphaValue = 0
 
-            let solidCover = titlebarView.subviews.first(where: { $0 is SolidTitlebarCover })
-            titlebarView.addSubview(hosting, positioned: .above, relativeTo: solidCover)
+            // Must be above filterBarHostingView, not just above solidCover.
+            // addSubview(.above, relativeTo: X) inserts just above X; if we reference
+            // solidCover again the filter bar (added first) ends up on top, blocking
+            // events in the filter-bar region (x≥192) even when its alpha is 0.
+            let reference: NSView = filterBarHostingView
+                ?? titlebarView.subviews.first(where: { $0 is SolidTitlebarCover })
+                ?? titlebarView
+            titlebarView.addSubview(hosting, positioned: .above, relativeTo: reference)
 
             NSLayoutConstraint.activate([
                 hosting.leadingAnchor .constraint(equalTo: titlebarView.leadingAnchor),
