@@ -28,6 +28,7 @@ final class LightboxViewModel: ObservableObject {
 
     @Published var controlsVisible: Bool = true
     @Published var infoPinned: Bool = false
+    @Published var showInfoRail: Bool = false
 
     private var hideTimer: AnyCancellable?
     private let hideDuration: TimeInterval = 3.5
@@ -49,6 +50,7 @@ final class LightboxViewModel: ObservableObject {
         anchorImageID = nil
         anchorFilename = nil
         anchorColor = nil
+        showInfoRail = false
         showControls()
     }
 

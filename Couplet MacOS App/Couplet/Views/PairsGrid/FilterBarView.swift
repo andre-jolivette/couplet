@@ -48,7 +48,9 @@ struct FilterBarView: View {
                     .foregroundColor(Color.appMutedForeground)
             }
 
-            // Search
+            Spacer(minLength: 0)
+
+            // Search — right-aligned
             HStack(spacing: 6) {
                 Image(systemName: "magnifyingglass")
                     .foregroundColor(Color.appMutedForeground)
@@ -73,26 +75,9 @@ struct FilterBarView: View {
             .padding(.vertical, 5)
             .background(Color.appSecondary)
             .clipShape(RoundedRectangle(cornerRadius: 8))
-
-            Spacer(minLength: 0)
-
-            Button(action: {}) {
-                HStack(spacing: 4) {
-                    Image(systemName: "magnifyingglass")
-                    Text("Find Pairs For\u{2026}")
-                }
-                .font(.system(size: 12))
-                .foregroundColor(Color.appMutedForeground)
-            }
-            .buttonStyle(.plain)
-            .help("Find pairs for a specific image")
         }
         .padding(.horizontal, 20)
-        .padding(.vertical, 10)
-        .background(Color.appBackground)
-        .overlay(alignment: .bottom) {
-            Rectangle().fill(Color.appBorder).frame(height: 1)
-        }
+        .padding(.vertical, 6)
     }
 
     private var modalityPills: some View {

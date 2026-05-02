@@ -12,6 +12,15 @@ struct ContentView: View {
 
     private var lightboxOpen: Bool { gridVM.lightboxPairID != nil }
 
+    private func dismissLightbox() {
+        if lightboxVM.isAnchored,
+           let id = lightboxVM.anchorImageID,
+           let name = lightboxVM.anchorFilename {
+            gridVM.applyAnchor(imageID: id, filename: name)
+        }
+        gridVM.closeLightbox()
+    }
+
     var body: some View {
         ZStack {
             HStack(spacing: 0) {
@@ -36,9 +45,15 @@ struct ContentView: View {
             // gets the correct background colour on the very first frame.
             // It also installs the sidebar toggle as a titlebar accessory
             // (next to the traffic lights, no capsule) — see CoupletTheme.swift.
-            .background(WindowConfigurator(onToggleSidebar: {
-                withAnimation(.easeInOut(duration: 0.2)) { sidebarVisible.toggle() }
-            }))
+            .background(WindowConfigurator(
+                onToggleSidebar: {
+                    withAnimation(.easeInOut(duration: 0.2)) { sidebarVisible.toggle() }
+                },
+                sidebarVisible: sidebarVisible,
+                lightboxOpen: lightboxOpen,
+                filterBarContent: AnyView(FilterBarView(gridVM: gridVM)),
+                lightboxTitlebarContent: AnyView(LightboxTitlebarView(vm: lightboxVM, onDismiss: dismissLightbox))
+            ))
 
             // Lightbox overlay
             if lightboxOpen {
@@ -52,14 +67,7 @@ struct ContentView: View {
                         let fid = libraryVM.selectedFolderID.map { Int64($0) }
                         return await engine.fetchPairs(folderID: fid, anchorImageID: Int64(imageID))
                     },
-                    onDismiss: {
-                        if lightboxVM.isAnchored,
-                           let id = lightboxVM.anchorImageID,
-                           let name = lightboxVM.anchorFilename {
-                            gridVM.applyAnchor(imageID: id, filename: name)
-                        }
-                        gridVM.closeLightbox()
-                    }
+                    onDismiss: dismissLightbox
                 )
                 .zIndex(100)
                 .transition(.opacity.animation(.easeInOut(duration: 0.2)))

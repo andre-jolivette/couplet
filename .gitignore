@@ -16,6 +16,9 @@ clip-vit-base-patch32.mlpackage/
 *.db-shm
 *.db-wal
 
+# Claude Code local settings (machine-specific paths)
+.claude/
+
 # macOS
 .DS_Store
 .AppleDouble
