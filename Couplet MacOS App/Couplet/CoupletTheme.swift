@@ -70,7 +70,7 @@ struct WindowConfigurator: NSViewRepresentable {
         nsView.onToggleSidebar = onToggleSidebar
         if let window = nsView.window {
             updateTitlebarSidebarBorder(in: window, visible: sidebarVisible && !lightboxOpen)
-            updateSidebarToggleAlpha(in: window, lightboxOpen: lightboxOpen)
+            nsView.updateSidebarToggle(in: window, lightboxOpen: lightboxOpen)
             updateTitlebarBottomBorderLeading(in: window, lightboxOpen: lightboxOpen, sidebarVisible: sidebarVisible)
         }
         nsView.updateTitlebarBars(filterContent: filterBarContent,
@@ -85,6 +85,7 @@ struct WindowConfigurator: NSViewRepresentable {
         private var filterBarHostingView: PassthroughHostingView<AnyView>?
         private var lightboxBarHostingView: PassthroughHostingView<AnyView>?
         private var hasInstalledSidebarToggle = false
+        private var sidebarToggleAccessory: NSTitlebarAccessoryViewController?
         private var hasInstalledFilterBar = false
         private var hasInstalledLightboxBar = false
 
@@ -163,6 +164,23 @@ struct WindowConfigurator: NSViewRepresentable {
             accessory.view = hosting
             accessory.layoutAttribute = .leading
             window.addTitlebarAccessoryViewController(accessory)
+            sidebarToggleAccessory = accessory
+        }
+
+        /// Removes the sidebar toggle accessory from the window when the lightbox
+        /// is open (mere hide/alpha=0 still reserves the accessory's event zone in
+        /// AppKit's responder chain, blocking clicks on the back button arrow).
+        /// Re-adds it when the lightbox closes.
+        func updateSidebarToggle(in window: NSWindow, lightboxOpen: Bool) {
+            guard let accessory = sidebarToggleAccessory else { return }
+            let isInstalled = window.titlebarAccessoryViewControllers.contains { $0 === accessory }
+            if lightboxOpen && isInstalled {
+                if let idx = window.titlebarAccessoryViewControllers.firstIndex(where: { $0 === accessory }) {
+                    window.removeTitlebarAccessoryViewController(at: idx)
+                }
+            } else if !lightboxOpen && !isInstalled {
+                window.addTitlebarAccessoryViewController(accessory)
+            }
         }
 
         /// Inserts FilterBarView as a raw PassthroughHostingView directly into
@@ -345,13 +363,6 @@ private func updateTitlebarBottomBorderLeading(in window: NSWindow, lightboxOpen
     }
 }
 
-private func updateSidebarToggleAlpha(in window: NSWindow, lightboxOpen: Bool) {
-    for accessory in window.titlebarAccessoryViewControllers {
-        // isHidden disables hit testing and tooltip tracking (alphaValue=0 alone does not).
-        accessory.view.isHidden = lightboxOpen
-        accessory.view.alphaValue = lightboxOpen ? 0 : 1
-    }
-}
 
 // MARK: - Title bar sidebar toggle button
 

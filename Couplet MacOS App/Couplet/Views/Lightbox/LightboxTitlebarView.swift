@@ -100,6 +100,7 @@ struct LightboxTitlebarView: View {
             Text(label).font(.system(size: 10, weight: .bold))
             Text(String(format: "%.2f", value)).font(.system(size: 10, design: .monospaced))
         }
+        .fixedSize()
         .padding(.horizontal, 6).padding(.vertical, 2)
         .background(Capsule().fill(color.opacity(opacity * 0.30)))
         .foregroundColor(color.opacity(opacity))
