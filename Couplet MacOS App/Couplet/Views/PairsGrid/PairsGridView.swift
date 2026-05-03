@@ -318,8 +318,8 @@ private struct PairDragPreview: View {
         .shadow(color: .black.opacity(0.45), radius: 14, y: 6)
         .scaleEffect(scale, anchor: .center)
         .onAppear {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-                withAnimation(.easeOut(duration: 0.35)) { scale = 0.65 }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                withAnimation(.easeInOut(duration: 0.4)) { scale = 0.45 }
             }
         }
     }
