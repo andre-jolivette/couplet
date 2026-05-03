@@ -208,7 +208,7 @@ struct ExportSheet: View {
 
 /// Load a full-resolution CGImage directly from disk using ImageIO.
 /// Thread-safe — safe to call from any queue.
-private func loadCGImage(from path: String) -> CGImage? {
+private nonisolated func loadCGImage(from path: String) -> CGImage? {
     let url = URL(fileURLWithPath: path) as CFURL
     guard let source = CGImageSourceCreateWithURL(url, nil) else { return nil }
     return CGImageSourceCreateImageAtIndex(source, 0, nil)

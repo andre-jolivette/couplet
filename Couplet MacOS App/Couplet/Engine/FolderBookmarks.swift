@@ -17,7 +17,7 @@ enum FolderBookmarks {
 
     /// Persist a security-scoped bookmark for `url`.
     /// Call this immediately after the user picks a folder (while sandbox access is live).
-    static func store(url: URL) {
+    nonisolated static func store(url: URL) {
         guard let data = try? url.bookmarkData(
             options: .withSecurityScope,
             includingResourceValuesForKeys: nil,
@@ -32,7 +32,7 @@ enum FolderBookmarks {
 
     /// Returns a security-scoped URL for `folderPath`, or nil if no bookmark exists.
     /// Access is NOT started — caller must call `startAccessingSecurityScopedResource()`.
-    static func resolve(folderPath: String) -> URL? {
+    nonisolated static func resolve(folderPath: String) -> URL? {
         guard let data = allBookmarks()[folderPath] else { return nil }
         var isStale = false
         guard let url = try? URL(
@@ -48,13 +48,13 @@ enum FolderBookmarks {
     // MARK: - Query
 
     /// Returns true if a bookmark exists for `folderPath`.
-    static func hasBookmark(for folderPath: String) -> Bool {
+    nonisolated static func hasBookmark(for folderPath: String) -> Bool {
         allBookmarks()[folderPath] != nil
     }
 
     // MARK: - Private
 
-    private static func allBookmarks() -> [String: Data] {
+    nonisolated private static func allBookmarks() -> [String: Data] {
         (UserDefaults.standard.dictionary(forKey: key) as? [String: Data]) ?? [:]
     }
 }

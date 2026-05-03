@@ -3,6 +3,7 @@ import AppKit
 
 // MARK: - Shared image cache
 
+@MainActor
 final class ThumbnailCache {
     static let shared = ThumbnailCache()
     private init() {
