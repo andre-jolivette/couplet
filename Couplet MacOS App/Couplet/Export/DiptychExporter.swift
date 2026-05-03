@@ -23,7 +23,7 @@ struct DiptychExporter: Sendable {
 
     // MARK: - Public API
 
-    func jpegData(quality: CGFloat = 0.92) -> Data? {
+    nonisolated func jpegData(quality: CGFloat = 0.92) -> Data? {
         guard let canvas = renderCanvas() else { return nil }
         let data = NSMutableData()
         guard let dest = CGImageDestinationCreateWithData(
@@ -37,7 +37,7 @@ struct DiptychExporter: Sendable {
         return data as Data
     }
 
-    func pdfData() -> Data? {
+    nonisolated func pdfData() -> Data? {
         guard let canvas = renderCanvas() else { return nil }
         let pxW = CGFloat(canvas.width)
         let pxH = CGFloat(canvas.height)
@@ -60,7 +60,7 @@ struct DiptychExporter: Sendable {
 
     // MARK: - Canvas rendering
 
-    func renderCanvas() -> CGImage? {
+    nonisolated func renderCanvas() -> CGImage? {
         let wA = CGFloat(cgImageA.width), hA = CGFloat(cgImageA.height)
         let wB = CGFloat(cgImageB.width), hB = CGFloat(cgImageB.height)
 
@@ -133,7 +133,7 @@ struct DiptychExporter: Sendable {
     // MARK: - Helpers
 
     /// Scale image to fit slot (never upscale), center with white letterbox fill.
-    private func letterbox(
+    private nonisolated func letterbox(
         _ image: CGImage, pixelW: CGFloat, pixelH: CGFloat,
         into ctx: CGContext, slot: CGRect
     ) {
@@ -147,7 +147,7 @@ struct DiptychExporter: Sendable {
     }
 
     /// Draw a single line of text left-aligned and vertically centered in rect.
-    private func drawLabel(
+    private nonisolated func drawLabel(
         _ text: String, in ctx: CGContext,
         rect: CGRect, fontSize: CGFloat, color: CGColor
     ) {
