@@ -46,6 +46,10 @@ final class PairsGridViewModel: ObservableObject {
         allPairs = []
         isLoading = true
         loadTask = Task {
+            // Debounce: if cancelled during the sleep, a newer loadPairs call is pending.
+            // This prevents rapid navigation from queueing multiple queries on the DB actor.
+            try? await Task.sleep(for: .milliseconds(100))
+            guard !Task.isCancelled else { return }
             let pairs = await engine.fetchRepresentativePairs(
                 folderID: folderID, collectionID: collectionID, sortOrder: sortOrder, page: 0
             )
