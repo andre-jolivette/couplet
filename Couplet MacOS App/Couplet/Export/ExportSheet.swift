@@ -114,10 +114,10 @@ struct ExportSheet: View {
 
         // 4. Render + write off the main thread.
         //    Security-scoped access remains active for the duration of the task.
-        let filenameA     = pair.filenameA
-        let filenameB     = pair.filenameB
-        let opts          = DiptychExportOptions(includeFilenames: includeFilenames)
-        let currentFormat = format
+        let filenameA = pair.filenameA
+        let filenameB = pair.filenameB
+        let opts      = DiptychExportOptions(includeFilenames: includeFilenames)
+        let useJPEG   = (format == .jpeg)
 
         do {
             let data: Data? = await Task.detached(priority: .userInitiated) {
@@ -134,7 +134,7 @@ struct ExportSheet: View {
                     filenameA: filenameA, filenameB: filenameB,
                     options: opts
                 )
-                return currentFormat == .jpeg ? exporter.jpegData() : exporter.pdfData()
+                return useJPEG ? exporter.jpegData() : exporter.pdfData()
             }.value
 
             guard let data else {
