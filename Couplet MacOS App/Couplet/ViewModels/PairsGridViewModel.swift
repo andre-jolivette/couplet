@@ -41,6 +41,7 @@ final class PairsGridViewModel: ObservableObject {
     func loadPairs(from engine: EngineController, folderID: Int64? = nil, collectionID: Int64? = nil) {
         currentPage = 0
         canLoadMore = true
+        allPairs = []
         isLoading = true
         Task {
             let pairs = await engine.fetchRepresentativePairs(

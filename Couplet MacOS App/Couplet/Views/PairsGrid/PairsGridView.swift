@@ -220,7 +220,8 @@ struct PairsGridView: View {
                             }
                             return PairDragPreview(
                                 imageA: imgA, imageB: imgB,
-                                colorA: pair.colorA, colorB: pair.colorB
+                                colorA: pair.colorA, colorB: pair.colorB,
+                                width: 126, height: 50
                             )
                         }
                     )
@@ -299,23 +300,17 @@ private struct PairDragPreview: View {
     let imageB: NSImage?
     let colorA: NSColor
     let colorB: NSColor
-
-    @State private var scale: CGFloat = 1.0
-
-    private let previewWidth: CGFloat = 280
-    private let previewHeight: CGFloat = 110
+    let width: CGFloat
+    let height: CGFloat
 
     var body: some View {
         HStack(spacing: 2) {
             pane(imageA, color: colorA)
             pane(imageB, color: colorB)
         }
-        .frame(width: previewWidth, height: previewHeight)
-        .clipShape(RoundedRectangle(cornerRadius: 8))
-        .shadow(color: .black.opacity(0.45), radius: 14, y: 6)
-        .scaleEffect(scale, anchor: .center)
-        .animation(.easeInOut(duration: 0.5), value: scale)
-        .onAppear { scale = 0.45 }
+        .frame(width: width, height: height)
+        .clipShape(RoundedRectangle(cornerRadius: 6))
+        .shadow(color: .black.opacity(0.45), radius: 8, y: 4)
     }
 
     private func pane(_ image: NSImage?, color: NSColor) -> some View {
@@ -328,7 +323,7 @@ private struct PairDragPreview: View {
                 Color(nsColor: color)
             }
         }
-        .frame(width: (previewWidth - 2) / 2, height: previewHeight)
+        .frame(width: (width - 2) / 2, height: height)
         .clipped()
     }
 }
