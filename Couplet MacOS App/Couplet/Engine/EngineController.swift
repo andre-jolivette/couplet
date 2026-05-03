@@ -36,7 +36,9 @@ final class EngineController: ObservableObject {
 
     /// Full cap-2-filtered representative pair list for the current folder/sort context.
     /// Populated on page-0 fetch; subsequent pages slice from this cache.
+    /// The key tracks which context the cache belongs to — stale slices are rejected.
     private var representativePairsCache: [DisplayPair] = []
+    private var representativePairsCacheKey: (folderID: Int64?, collectionID: Int64?, sortColumn: String) = (nil, nil, "")
 
     private let thumbnailBaseURL: URL = FileManager.default
         .urls(for: .cachesDirectory, in: .userDomainMask)[0]
@@ -354,11 +356,19 @@ final class EngineController: ObservableObject {
 
 
                 representativePairsCache = pairs
+                representativePairsCacheKey = (folderID, collectionID, sortOrder.dbColumn)
             } catch {
                 print("fetchRepresentativePairs error: \(error)")
                 representativePairsCache = []
+                representativePairsCacheKey = (nil, nil, "")
             }
         }
+
+        // Reject the slice if the cache belongs to a different context.
+        let expectedKey = (folderID, collectionID, sortOrder.dbColumn)
+        guard representativePairsCacheKey.folderID == expectedKey.0,
+              representativePairsCacheKey.collectionID == expectedKey.1,
+              representativePairsCacheKey.sortColumn == expectedKey.2 else { return [] }
 
         // Slice the requested page from the cache.
         let start = page * pageSize

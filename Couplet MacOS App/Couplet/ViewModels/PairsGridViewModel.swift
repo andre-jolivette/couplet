@@ -20,6 +20,7 @@ final class PairsGridViewModel: ObservableObject {
     private var currentPage: Int = 0
     private(set) var canLoadMore: Bool = true
     private let pageSize = 150
+    private var loadTask: Task<Void, Never>?
 
     // Lightbox trigger — owned here so ContentView can observe it
     @Published var lightboxPairID: Int? = nil
@@ -39,14 +40,16 @@ final class PairsGridViewModel: ObservableObject {
     func closeLightbox() { lightboxPairID = nil }
 
     func loadPairs(from engine: EngineController, folderID: Int64? = nil, collectionID: Int64? = nil) {
+        loadTask?.cancel()
         currentPage = 0
         canLoadMore = true
         allPairs = []
         isLoading = true
-        Task {
+        loadTask = Task {
             let pairs = await engine.fetchRepresentativePairs(
                 folderID: folderID, collectionID: collectionID, sortOrder: sortOrder, page: 0
             )
+            guard !Task.isCancelled else { return }
             self.allPairs = pairs
             self.canLoadMore = pairs.count == pageSize
             self.isLoading = false

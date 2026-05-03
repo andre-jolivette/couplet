@@ -72,14 +72,14 @@ struct PairsGridView: View {
             }
             .padding(20)
         }
-        .onChange(of: libraryVM.selectedFolderID) { _, folderID in
+        .onChange(of: libraryVM.selectedFolderID) { _, _ in
             Task { @MainActor in
-                gridVM.loadPairs(from: engine, folderID: folderID.map { Int64($0) })
+                gridVM.loadPairs(from: engine, folderID: currentFolderID, collectionID: currentCollectionID)
             }
         }
-        .onChange(of: libraryVM.selectedCollectionID) { _, cid in
+        .onChange(of: libraryVM.selectedCollectionID) { _, _ in
             Task { @MainActor in
-                gridVM.loadPairs(from: engine, collectionID: cid.map { Int64($0) })
+                gridVM.loadPairs(from: engine, folderID: currentFolderID, collectionID: currentCollectionID)
             }
         }
         .onChange(of: engine.isIndexing) { _, indexing in
