@@ -114,10 +114,10 @@ struct ExportSheet: View {
 
         // 4. Render + write off the main thread.
         //    Security-scoped access remains active for the duration of the task.
-        let filenameA     = pair.filenameA
-        let filenameB     = pair.filenameB
-        let opts          = DiptychExportOptions(includeFilenames: includeFilenames)
-        let currentFormat = format
+        let filenameA = pair.filenameA
+        let filenameB = pair.filenameB
+        let opts      = DiptychExportOptions(includeFilenames: includeFilenames)
+        let useJPEG   = (format == .jpeg)
 
         do {
             let data: Data? = await Task.detached(priority: .userInitiated) {
@@ -134,7 +134,8 @@ struct ExportSheet: View {
                     filenameA: filenameA, filenameB: filenameB,
                     options: opts
                 )
-                return currentFormat == .jpeg ? exporter.jpegData() : exporter.pdfData()
+                let result: Data? = useJPEG ? exporter.jpegData() : exporter.pdfData()
+                return result
             }.value
 
             guard let data else {
@@ -208,7 +209,7 @@ struct ExportSheet: View {
 
 /// Load a full-resolution CGImage directly from disk using ImageIO.
 /// Thread-safe — safe to call from any queue.
-private func loadCGImage(from path: String) -> CGImage? {
+private nonisolated func loadCGImage(from path: String) -> CGImage? {
     let url = URL(fileURLWithPath: path) as CFURL
     guard let source = CGImageSourceCreateWithURL(url, nil) else { return nil }
     return CGImageSourceCreateImageAtIndex(source, 0, nil)

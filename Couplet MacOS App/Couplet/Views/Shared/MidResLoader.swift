@@ -68,7 +68,7 @@ actor MidResLoader {
         let cacheFile = cacheDir.appendingPathComponent("\(imageID).jpg")
 
         // 1. Memory cache (ThumbnailCache is keyed by URL path)
-        if let cached = ThumbnailCache.shared.image(for: cacheFile) {
+        if let cached = await ThumbnailCache.shared.image(for: cacheFile) {
             return cached
         }
 
@@ -78,7 +78,7 @@ actor MidResLoader {
                 NSImage(contentsOf: cacheFile)
             }.value
             if let img = loaded {
-                ThumbnailCache.shared.store(img, for: cacheFile)
+                await ThumbnailCache.shared.store(img, for: cacheFile)
                 return img
             }
             // Corrupt cache file — fall through to regenerate
@@ -87,9 +87,12 @@ actor MidResLoader {
         // 3. Generate from source (requires security-scoped access)
         guard !sourcePath.isEmpty, !folderPath.isEmpty else { return nil }
 
-        let image = await Task.detached(priority: .userInitiated) { [cacheFile, targetLongEdge] in
-            // Resolve bookmark and start security-scoped access
-            guard let folderURL = FolderBookmarks.resolve(folderPath: folderPath) else { return nil as NSImage? }
+        // Resolve the bookmark before entering Task.detached — keep UserDefaults
+        // access on the actor rather than in a detached context.
+        let folderURL = FolderBookmarks.resolve(folderPath: folderPath)
+
+        let image = await Task.detached(priority: .userInitiated) { [cacheFile, targetLongEdge, folderURL] in
+            guard let folderURL else { return nil as NSImage? }
             _ = folderURL.startAccessingSecurityScopedResource()
             defer { folderURL.stopAccessingSecurityScopedResource() }
 
@@ -128,7 +131,7 @@ actor MidResLoader {
         }.value
 
         if let image {
-            ThumbnailCache.shared.store(image, for: cacheFile)
+            await ThumbnailCache.shared.store(image, for: cacheFile)
             try? evictIfNeeded()
         }
         return image
@@ -147,7 +150,7 @@ actor MidResLoader {
         guard contents.count > evictionHighWatermark else { return }
 
         // Sort oldest first
-        let sorted = try contents.sorted { a, b in
+        let sorted = contents.sorted { a, b in
             let dateA = (try? a.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
             let dateB = (try? b.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
             return dateA < dateB

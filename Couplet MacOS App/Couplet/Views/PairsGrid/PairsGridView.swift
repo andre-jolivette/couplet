@@ -20,6 +20,41 @@ struct PairsGridView: View {
 
     var body: some View {
         contentView
+            .onChange(of: libraryVM.selectedFolderID) { _, _ in reloadPairs() }
+            .onChange(of: libraryVM.selectedCollectionID) { _, _ in reloadPairs() }
+            .onChange(of: engine.isIndexing) { _, indexing in
+                if indexing { completionCardDismissed = false }
+                guard !indexing else { return }
+                reloadPairs()
+            }
+            .onChange(of: engine.isBackgroundScoring) { _, scoring in
+                guard !scoring else { return }
+                reloadPairs()
+            }
+            .onAppear {
+                Task { @MainActor in
+                    if !engine.folders.isEmpty { reloadPairs() }
+                }
+            }
+            .onChange(of: engine.folders.count) { _, count in
+                guard count > 0, !gridVM.isLoading, gridVM.pairCount == 0 else { return }
+                reloadPairs()
+            }
+            .onChange(of: settings.weights) { _, _ in reloadPairs() }
+            .onChange(of: settings.minThematicScore) { _, _ in reloadPairs() }
+            .onChange(of: settings.edgePeakednessFloor) { _, _ in reloadPairs() }
+            .onChange(of: settings.gridVarianceFloor) { _, _ in reloadPairs() }
+            .onChange(of: gridVM.sortOrder) { _, _ in reloadPairs() }
+            .onAppear { gridVM.hideSequential = settings.hideSequential }
+            .onChange(of: settings.hideSequential) { _, new in gridVM.hideSequential = new }
+    }
+
+    private func reloadPairs() {
+        let fid = currentFolderID
+        let cid = currentCollectionID
+        Task { @MainActor in
+            gridVM.loadPairs(from: engine, folderID: fid, collectionID: cid)
+        }
     }
 
     private var contentView: some View {
@@ -41,7 +76,6 @@ struct PairsGridView: View {
             }
         }
         .background(Color.appBackground)
-        // Scoring pill + indexing card stacked at bottom-trailing
         .overlay(alignment: .bottomTrailing) {
             VStack(alignment: .trailing, spacing: 8) {
                 if engine.isBackgroundScoring {
@@ -72,70 +106,6 @@ struct PairsGridView: View {
             }
             .padding(20)
         }
-        .onChange(of: libraryVM.selectedFolderID) { _, folderID in
-            Task { @MainActor in
-                gridVM.loadPairs(from: engine, folderID: folderID.map { Int64($0) })
-            }
-        }
-        .onChange(of: libraryVM.selectedCollectionID) { _, cid in
-            Task { @MainActor in
-                gridVM.loadPairs(from: engine, collectionID: cid.map { Int64($0) })
-            }
-        }
-        .onChange(of: engine.isIndexing) { _, indexing in
-            if indexing { completionCardDismissed = false }
-            guard !indexing else { return }
-            Task { @MainActor in
-                gridVM.loadPairs(from: engine, folderID: currentFolderID, collectionID: currentCollectionID)
-            }
-        }
-        .onChange(of: engine.isBackgroundScoring) { _, scoring in
-            guard !scoring else { return }
-            // Phase 2 done — reload so All view picks up cross-folder pairs.
-            Task { @MainActor in
-                gridVM.loadPairs(from: engine, folderID: currentFolderID, collectionID: currentCollectionID)
-            }
-        }
-        .onAppear {
-            Task { @MainActor in
-                if !engine.folders.isEmpty {
-                    gridVM.loadPairs(from: engine)
-                }
-            }
-        }
-        .onChange(of: engine.folders.count) { _, count in
-            guard count > 0, !gridVM.isLoading, gridVM.pairCount == 0 else { return }
-            Task { @MainActor in
-                gridVM.loadPairs(from: engine, folderID: currentFolderID, collectionID: currentCollectionID)
-            }
-        }
-        .onChange(of: settings.weights) { _, _ in
-            Task { @MainActor in
-                gridVM.loadPairs(from: engine, folderID: currentFolderID, collectionID: currentCollectionID)
-            }
-        }
-        .onChange(of: settings.minThematicScore) { _, _ in
-            Task { @MainActor in
-                gridVM.loadPairs(from: engine, folderID: currentFolderID, collectionID: currentCollectionID)
-            }
-        }
-        .onChange(of: settings.edgePeakednessFloor) { _, _ in
-            Task { @MainActor in
-                gridVM.loadPairs(from: engine, folderID: currentFolderID, collectionID: currentCollectionID)
-            }
-        }
-        .onChange(of: settings.gridVarianceFloor) { _, _ in
-            Task { @MainActor in
-                gridVM.loadPairs(from: engine, folderID: currentFolderID, collectionID: currentCollectionID)
-            }
-        }
-        .onChange(of: gridVM.sortOrder) { _, _ in
-            Task { @MainActor in
-                gridVM.loadPairs(from: engine, folderID: currentFolderID, collectionID: currentCollectionID)
-            }
-        }
-        .onAppear { gridVM.hideSequential = settings.hideSequential }
-        .onChange(of: settings.hideSequential) { _, new in gridVM.hideSequential = new }
     }
 
     private var shouldShowCompletionCard: Bool {
