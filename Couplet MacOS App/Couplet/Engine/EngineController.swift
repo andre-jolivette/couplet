@@ -378,6 +378,50 @@ final class EngineController: ObservableObject {
         Task { try? await qs.deletePairRecord(pairID: pairID) }
     }
 
+    // MARK: - Collection management
+
+    func fetchCollections() async -> [CollectionItem] {
+        guard let qs = queryService else { return [] }
+        do {
+            let results = try await qs.fetchCollections()
+            return results.map { CollectionItem(id: $0.id, name: $0.name, pairCount: $0.pairCount) }
+        } catch {
+            print("fetchCollections error: \(error)")
+            return []
+        }
+    }
+
+    func createCollection(name: String) async -> CollectionItem? {
+        guard let qs = queryService else { return nil }
+        do {
+            let newID = try await qs.createCollection(name: name)
+            return CollectionItem(id: Int(newID), name: name, pairCount: 0)
+        } catch {
+            print("createCollection error: \(error)")
+            return nil
+        }
+    }
+
+    func deleteCollectionFromDB(id: Int) async {
+        guard let qs = queryService else { return }
+        try? await qs.deleteCollection(id: Int64(id))
+    }
+
+    func renameCollectionInDB(id: Int, to name: String) async {
+        guard let qs = queryService else { return }
+        try? await qs.renameCollection(id: Int64(id), to: name)
+    }
+
+    func addPairToCollection(pairID: Int, collectionID: Int) async -> Bool {
+        guard let qs = queryService else { return false }
+        return (try? await qs.addPairToCollection(pairID: Int64(pairID), collectionID: Int64(collectionID))) ?? false
+    }
+
+    func removePairFromCollection(pairID: Int, collectionID: Int) async {
+        guard let qs = queryService else { return }
+        try? await qs.removePairFromCollection(pairID: Int64(pairID), collectionID: Int64(collectionID))
+    }
+
     // MARK: - Thumbnail
 
     func thumbnailURL(for path: String?) -> URL? {

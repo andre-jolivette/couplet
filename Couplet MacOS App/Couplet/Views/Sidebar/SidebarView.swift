@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct SidebarView: View {
 
@@ -10,6 +11,7 @@ struct SidebarView: View {
     @State private var newCollectionName = ""
     @State private var collectionToRename: CollectionItem? = nil
     @State private var renamedValue = ""
+    @State private var dropTargetCollectionID: Int? = nil
 
     var body: some View {
         VStack(spacing: 0) {
@@ -39,7 +41,7 @@ struct SidebarView: View {
                     Spacer()
                     Button("Cancel") { collectionToRename = nil }
                     Button("Rename") {
-                        libraryVM.renameCollection(id: collection.id, to: renamedValue)
+                        libraryVM.renameCollection(id: collection.id, to: renamedValue, engine: engine)
                         collectionToRename = nil
                     }
                     .buttonStyle(.borderedProminent)
@@ -165,15 +167,36 @@ struct SidebarView: View {
             }
 
             ForEach(libraryVM.collections) { collection in
-                SidebarRowView(
-                    label: collection.name,
-                    systemImage: "rectangle.stack",
-                    count: collection.pairCount,
+                let isDropTarget = dropTargetCollectionID == collection.id
+                CollectionRowView(
+                    collection: collection,
                     isSelected: libraryVM.selectedCollectionID == collection.id,
-                    isIndexing: false,
-                    indexingFraction: nil
+                    isDropTarget: isDropTarget
                 )
                 .onTapGesture { libraryVM.selectCollection(collection.id) }
+                .onDrop(
+                    of: [UTType.plainText],
+                    isTargeted: Binding(
+                        get: { dropTargetCollectionID == collection.id },
+                        set: { targeting in
+                            withAnimation(.easeInOut(duration: 0.15)) {
+                                dropTargetCollectionID = targeting ? collection.id : nil
+                            }
+                        }
+                    )
+                ) { providers in
+                    guard let provider = providers.first else { return false }
+                    _ = provider.loadObject(ofClass: NSString.self) { item, _ in
+                        guard let str = item as? String, let pairID = Int(str) else { return }
+                        Task { @MainActor in
+                            let inserted = await engine.addPairToCollection(pairID: pairID, collectionID: collection.id)
+                            if inserted {
+                                libraryVM.refreshPairCount(forCollection: collection.id, delta: +1)
+                            }
+                        }
+                    }
+                    return true
+                }
                 .contextMenu {
                     Button("Rename\u{2026}") {
                         collectionToRename = collection
@@ -181,7 +204,7 @@ struct SidebarView: View {
                     }
                     Divider()
                     Button("Delete", role: .destructive) {
-                        libraryVM.deleteCollection(id: collection.id)
+                        libraryVM.deleteCollection(id: collection.id, engine: engine)
                     }
                 }
             }
@@ -211,9 +234,69 @@ struct SidebarView: View {
     private func createCollection() {
         let name = newCollectionName.trimmingCharacters(in: .whitespaces)
         guard !name.isEmpty else { return }
-        libraryVM.addCollection(name: name)
         isAddingCollection = false
         newCollectionName = ""
+        Task { await libraryVM.addCollection(name: name, engine: engine) }
+    }
+}
+
+// MARK: - Collection drop-target row
+
+/// Dedicated row for collection items that carries drop-target visual state.
+/// When isDropTarget is true it fills with accent colour, scales up slightly,
+/// and shows a "+" badge next to the count — giving the impression the row is
+/// opening up to absorb the dragged pair.
+private struct CollectionRowView: View {
+    let collection: CollectionItem
+    let isSelected: Bool
+    let isDropTarget: Bool
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "rectangle.stack")
+                .frame(width: 14)
+                .font(.system(size: 13))
+                .foregroundColor(isDropTarget ? Color.accentColor : (isSelected ? Color.appForeground : Color.appMutedForeground))
+                .scaleEffect(isDropTarget ? 1.2 : 1.0)
+                .animation(.spring(response: 0.2, dampingFraction: 0.6), value: isDropTarget)
+
+            Text(collection.name)
+                .font(.system(size: 13))
+                .foregroundColor(Color.appForeground)
+                .lineLimit(1)
+
+            Spacer()
+
+            if isDropTarget {
+                HStack(spacing: 1) {
+                    Text("+1")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(Color.accentColor)
+                }
+                .transition(.scale(scale: 0.6).combined(with: .opacity))
+            } else {
+                Text(collection.pairCount.formatted())
+                    .font(.system(size: 11))
+                    .foregroundColor(Color.appMutedForeground)
+                    .transition(.opacity)
+            }
+        }
+        .padding(.vertical, 6)
+        .padding(.horizontal, 10)
+        .background(
+            RoundedRectangle(cornerRadius: 6)
+                .fill(isDropTarget
+                    ? Color.accentColor.opacity(0.12)
+                    : (isSelected ? Color.appSecondary : Color.clear))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 6)
+                .strokeBorder(Color.accentColor.opacity(isDropTarget ? 0.55 : 0), lineWidth: 1.5)
+        )
+        .scaleEffect(isDropTarget ? 1.02 : 1.0, anchor: .leading)
+        .animation(.spring(response: 0.2, dampingFraction: 0.65), value: isDropTarget)
+        .padding(.horizontal, 8)
+        .contentShape(Rectangle())
     }
 }
 

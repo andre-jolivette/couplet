@@ -438,4 +438,82 @@ public actor QueryService {
             )
         }
     }
+
+    // MARK: - Collection reads
+
+    public func fetchCollections() throws -> [CollectionQueryResult] {
+        try db.read { db in
+            let rows = try Row.fetchAll(
+                db,
+                sql: """
+                    SELECT c.id, c.name, COUNT(cp.pairID) as pairCount
+                    FROM collections c
+                    LEFT JOIN collectionPairs cp ON cp.collectionID = c.id
+                    GROUP BY c.id
+                    ORDER BY c.sortOrder, c.id
+                """
+            )
+            return rows.map { row in
+                func intCol(_ name: String) -> Int {
+                    (row[name] as? Int) ?? (row[name] as? Int64).map(Int.init) ?? 0
+                }
+                return CollectionQueryResult(
+                    id: intCol("id"),
+                    name: (row["name"] as? String) ?? "",
+                    pairCount: intCol("pairCount")
+                )
+            }
+        }
+    }
+
+    // MARK: - Collection writes
+
+    public func createCollection(name: String) throws -> Int64 {
+        try db.write { db in
+            try db.execute(
+                sql: "INSERT INTO collections (name, createdAt, sortOrder) VALUES (?, ?, 0)",
+                arguments: [name, Int64(Date().timeIntervalSince1970)]
+            )
+            return db.lastInsertedRowID
+        }
+    }
+
+    public func deleteCollection(id: Int64) throws {
+        try db.write { db in
+            try db.execute(sql: "DELETE FROM collections WHERE id = ?", arguments: [id])
+        }
+    }
+
+    public func renameCollection(id: Int64, to name: String) throws {
+        try db.write { db in
+            try db.execute(
+                sql: "UPDATE collections SET name = ? WHERE id = ?",
+                arguments: [name, id]
+            )
+        }
+    }
+
+    // MARK: - Collection pair membership
+
+    public func addPairToCollection(pairID: Int64, collectionID: Int64) throws -> Bool {
+        try db.write { db in
+            try db.execute(
+                sql: """
+                    INSERT OR IGNORE INTO collectionPairs (collectionID, pairID, addedAt)
+                    VALUES (?, ?, ?)
+                """,
+                arguments: [collectionID, pairID, Int64(Date().timeIntervalSince1970)]
+            )
+            return db.changesCount > 0
+        }
+    }
+
+    public func removePairFromCollection(pairID: Int64, collectionID: Int64) throws {
+        try db.write { db in
+            try db.execute(
+                sql: "DELETE FROM collectionPairs WHERE collectionID = ? AND pairID = ?",
+                arguments: [collectionID, pairID]
+            )
+        }
+    }
 }

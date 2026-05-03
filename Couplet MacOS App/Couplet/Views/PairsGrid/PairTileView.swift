@@ -16,6 +16,7 @@ struct PairTileView: View {
     let onReject: () -> Void
     let onDelete: () -> Void
     let onOpen: () -> Void
+    var onRemoveFromCollection: (() -> Void)? = nil
 
     @State private var isHovered = false
 
@@ -54,6 +55,10 @@ struct PairTileView: View {
             Divider()
             Button(pair.decision == .liked ? "Unlike" : "Favorite") { onLike() }
             Button("Reject") { onReject() }
+            if let remove = onRemoveFromCollection {
+                Divider()
+                Button("Remove from Collection", action: remove)
+            }
             Divider()
             Button("Delete", role: .destructive) { onDelete() }
         }
