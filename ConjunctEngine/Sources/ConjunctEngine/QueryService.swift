@@ -75,7 +75,7 @@ public actor QueryService {
     ///   - collectionID: If set, restricts to pairs in this collection.
     ///   - sortColumn: DB column to rank/sort by. Must be a valid pairs column name
     ///     (validated by the call site via PairSortOrder enum — not user input).
-    public func fetchRepresentativePairs(
+    public nonisolated func fetchRepresentativePairs(
         folderID: Int64? = nil,
         collectionID: Int64? = nil,
         sortColumn: String
@@ -196,7 +196,7 @@ public actor QueryService {
 
     /// Returns total pair count per image (both as A and B side) for the given context.
     /// Used to populate the dot badge threshold and lightbox count badges.
-    public func fetchImagePairCounts(
+    public nonisolated func fetchImagePairCounts(
         folderID: Int64? = nil,
         collectionID: Int64? = nil
     ) throws -> [Int64: Int] {

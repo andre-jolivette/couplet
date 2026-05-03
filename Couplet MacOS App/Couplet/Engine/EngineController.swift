@@ -39,6 +39,7 @@ final class EngineController: ObservableObject {
     /// The key tracks which context the cache belongs to — stale slices are rejected.
     private var representativePairsCache: [DisplayPair] = []
     private var representativePairsCacheKey: (folderID: Int64?, collectionID: Int64?, sortColumn: String) = (nil, nil, "")
+    private var loadGeneration: Int = 0
 
     private let thumbnailBaseURL: URL = FileManager.default
         .urls(for: .cachesDirectory, in: .userDomainMask)[0]
@@ -281,23 +282,25 @@ final class EngineController: ObservableObject {
     ) async -> [DisplayPair] {
         guard !Task.isCancelled else { return [] }
         guard let qs = queryService else { return [] }
+        loadGeneration += 1
+        let myGeneration = loadGeneration
         let pageSize = 150
 
         if page == 0 {
             do {
-                // Refresh per-image pair counts (dot badges, lightbox count labels).
-                let counts = try await qs.fetchImagePairCounts(
-                    folderID: folderID, collectionID: collectionID
-                )
-                imagePairCounts = Dictionary(uniqueKeysWithValues: counts.map { (Int($0.key), $0.value) })
+                // Both DB calls run on a detached task so they never queue behind an
+                // in-flight actor-isolated query (nonisolated methods, DatabasePool
+                // concurrent reads via WAL). Stale results are discarded by the
+                // generation counter after the await returns.
+                let sortColumn = sortOrder.dbColumn
+                let (counts, results) = try await Task.detached(priority: .userInitiated) {
+                    let c = try qs.fetchImagePairCounts(folderID: folderID, collectionID: collectionID)
+                    let r = try qs.fetchRepresentativePairs(folderID: folderID, collectionID: collectionID, sortColumn: sortColumn)
+                    return (c, r)
+                }.value
+                guard loadGeneration == myGeneration else { return [] }
 
-                // Fetch ALL representative candidates — no SQL LIMIT.
-                // ~1,028 pairs expected (one per image; many shared).
-                let results = try await qs.fetchRepresentativePairs(
-                    folderID: folderID,
-                    collectionID: collectionID,
-                    sortColumn: sortOrder.dbColumn
-                )
+                imagePairCounts = Dictionary(uniqueKeysWithValues: counts.map { (Int($0.key), $0.value) })
 
                 let peakFloor = settings.edgePeakednessFloor
                 let varFloor  = settings.gridVarianceFloor
@@ -317,44 +320,47 @@ final class EngineController: ObservableObject {
                 case .aesthetic: pairs.sort { $0.aestheticScore > $1.aestheticScore }
                 }
 
-                // Pass 1: strict greedy — both images must be unrepresented.
-                // Highest-scoring pairs get first claim; each image appears at most once.
-                var seenImages = Set<Int>()
-                var pass1: [DisplayPair] = []
-                for pair in pairs {
-                    guard !seenImages.contains(pair.imageAID),
-                          !seenImages.contains(pair.imageBID) else { continue }
-                    pass1.append(pair)
-                    seenImages.insert(pair.imageAID)
-                    seenImages.insert(pair.imageBID)
-                }
+                if collectionID == nil {
+                    // Pass 1: strict greedy — both images must be unrepresented.
+                    // Highest-scoring pairs get first claim; each image appears at most once.
+                    var seenImages = Set<Int>()
+                    var pass1: [DisplayPair] = []
+                    for pair in pairs {
+                        guard !seenImages.contains(pair.imageAID),
+                              !seenImages.contains(pair.imageBID) else { continue }
+                        pass1.append(pair)
+                        seenImages.insert(pair.imageAID)
+                        seenImages.insert(pair.imageBID)
+                    }
 
-                // Pass 2: cover images left unrepresented after pass 1.
-                // For each remaining pair (score order) where at least one image is
-                // still unseen, include it — allowing the already-seen partner to
-                // appear a second time. Each image is used at most once in this pass.
-                var pass2Seen = Set<Int>()
-                var pass2: [DisplayPair] = []
-                for pair in pairs {
-                    let aUnseen = !seenImages.contains(pair.imageAID)
-                    let bUnseen = !seenImages.contains(pair.imageBID)
-                    guard aUnseen || bUnseen else { continue }
-                    guard !pass2Seen.contains(pair.imageAID),
-                          !pass2Seen.contains(pair.imageBID) else { continue }
-                    pass2.append(pair)
-                    pass2Seen.insert(pair.imageAID)
-                    pass2Seen.insert(pair.imageBID)
-                }
+                    // Pass 2: cover images left unrepresented after pass 1.
+                    // For each remaining pair (score order) where at least one image is
+                    // still unseen, include it — allowing the already-seen partner to
+                    // appear a second time. Each image is used at most once in this pass.
+                    var pass2Seen = Set<Int>()
+                    var pass2: [DisplayPair] = []
+                    for pair in pairs {
+                        let aUnseen = !seenImages.contains(pair.imageAID)
+                        let bUnseen = !seenImages.contains(pair.imageBID)
+                        guard aUnseen || bUnseen else { continue }
+                        guard !pass2Seen.contains(pair.imageAID),
+                              !pass2Seen.contains(pair.imageBID) else { continue }
+                        pass2.append(pair)
+                        pass2Seen.insert(pair.imageAID)
+                        pass2Seen.insert(pair.imageBID)
+                    }
 
-                pairs = pass1 + pass2
-                // Re-sort the combined result so pass-2 pairs slot in by score.
-                switch sortOrder {
-                case .composite: pairs.sort { $0.compositeScore > $1.compositeScore }
-                case .thematic:  pairs.sort { $0.thematicScore  > $1.thematicScore  }
-                case .geometric: pairs.sort { $0.geometricScore > $1.geometricScore }
-                case .aesthetic: pairs.sort { $0.aestheticScore > $1.aestheticScore }
+                    pairs = pass1 + pass2
+                    // Re-sort the combined result so pass-2 pairs slot in by score.
+                    switch sortOrder {
+                    case .composite: pairs.sort { $0.compositeScore > $1.compositeScore }
+                    case .thematic:  pairs.sort { $0.thematicScore  > $1.thematicScore  }
+                    case .geometric: pairs.sort { $0.geometricScore > $1.geometricScore }
+                    case .aesthetic: pairs.sort { $0.aestheticScore > $1.aestheticScore }
+                    }
                 }
-
+                // Collection fast-path: curated sets skip cap-2 deduplication;
+                // pairs is already sorted from the initial sort above.
 
                 representativePairsCache = pairs
                 representativePairsCacheKey = (folderID, collectionID, sortOrder.dbColumn)
