@@ -11,7 +11,7 @@ import Foundation
 /// folder gets exactly one entry that is refreshed whenever it goes stale.
 enum FolderBookmarks {
 
-    private static let key = "com.toastbrigade.Couplet.folderBookmarks"
+    nonisolated(unsafe) private static let key = "com.toastbrigade.Couplet.folderBookmarks"
 
     // MARK: - Store
 

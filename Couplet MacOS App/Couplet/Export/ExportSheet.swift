@@ -134,7 +134,8 @@ struct ExportSheet: View {
                     filenameA: filenameA, filenameB: filenameB,
                     options: opts
                 )
-                return useJPEG ? exporter.jpegData() : exporter.pdfData()
+                let result: Data? = useJPEG ? exporter.jpegData() : exporter.pdfData()
+                return result
             }.value
 
             guard let data else {

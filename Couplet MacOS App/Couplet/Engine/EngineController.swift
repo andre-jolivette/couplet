@@ -279,6 +279,7 @@ final class EngineController: ObservableObject {
         sortOrder: PairSortOrder = .composite,
         page: Int = 0
     ) async -> [DisplayPair] {
+        guard !Task.isCancelled else { return [] }
         guard let qs = queryService else { return [] }
         let pageSize = 150
 
