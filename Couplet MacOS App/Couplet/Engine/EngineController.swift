@@ -412,9 +412,9 @@ final class EngineController: ObservableObject {
         try? await qs.renameCollection(id: Int64(id), to: name)
     }
 
-    func addPairToCollection(pairID: Int, collectionID: Int) async {
-        guard let qs = queryService else { return }
-        try? await qs.addPairToCollection(pairID: Int64(pairID), collectionID: Int64(collectionID))
+    func addPairToCollection(pairID: Int, collectionID: Int) async -> Bool {
+        guard let qs = queryService else { return false }
+        return (try? await qs.addPairToCollection(pairID: Int64(pairID), collectionID: Int64(collectionID))) ?? false
     }
 
     func removePairFromCollection(pairID: Int, collectionID: Int) async {

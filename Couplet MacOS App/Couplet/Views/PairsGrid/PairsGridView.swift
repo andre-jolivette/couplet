@@ -294,9 +294,6 @@ struct PairsGridView: View {
 /// synchronously (cache → disk) so the very first frame has real pixels.
 /// Async state updates do not reliably repaint AppKit-managed drag preview
 /// windows, so we don't attempt them here.
-///
-/// Scale animation uses DispatchQueue.main.asyncAfter; SwiftUI's .delay modifier
-/// is unreliable inside AppKit-managed drag preview NSWindows.
 private struct PairDragPreview: View {
     let imageA: NSImage?
     let imageB: NSImage?
@@ -317,11 +314,8 @@ private struct PairDragPreview: View {
         .clipShape(RoundedRectangle(cornerRadius: 8))
         .shadow(color: .black.opacity(0.45), radius: 14, y: 6)
         .scaleEffect(scale, anchor: .center)
-        .onAppear {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                withAnimation(.easeInOut(duration: 0.4)) { scale = 0.45 }
-            }
-        }
+        .animation(.easeInOut(duration: 0.5), value: scale)
+        .onAppear { scale = 0.45 }
     }
 
     private func pane(_ image: NSImage?, color: NSColor) -> some View {

@@ -189,9 +189,10 @@ struct SidebarView: View {
                     _ = provider.loadObject(ofClass: NSString.self) { item, _ in
                         guard let str = item as? String, let pairID = Int(str) else { return }
                         Task { @MainActor in
-                            // Optimistic update — count shows immediately, write is fire-and-forget
-                            libraryVM.refreshPairCount(forCollection: collection.id, delta: +1)
-                            Task { await engine.addPairToCollection(pairID: pairID, collectionID: collection.id) }
+                            let inserted = await engine.addPairToCollection(pairID: pairID, collectionID: collection.id)
+                            if inserted {
+                                libraryVM.refreshPairCount(forCollection: collection.id, delta: +1)
+                            }
                         }
                     }
                     return true

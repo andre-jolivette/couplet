@@ -495,7 +495,7 @@ public actor QueryService {
 
     // MARK: - Collection pair membership
 
-    public func addPairToCollection(pairID: Int64, collectionID: Int64) throws {
+    public func addPairToCollection(pairID: Int64, collectionID: Int64) throws -> Bool {
         try db.write { db in
             try db.execute(
                 sql: """
@@ -504,6 +504,7 @@ public actor QueryService {
                 """,
                 arguments: [collectionID, pairID, Int64(Date().timeIntervalSince1970)]
             )
+            return db.changesCount > 0
         }
     }
 

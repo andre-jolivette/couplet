@@ -66,9 +66,11 @@ struct ContentView: View {
                     },
                     onAddToCollection: { pairID, collectionID in
                         Task {
-                            await engine.addPairToCollection(pairID: pairID, collectionID: collectionID)
-                            await MainActor.run {
-                                libraryVM.refreshPairCount(forCollection: collectionID, delta: +1)
+                            let inserted = await engine.addPairToCollection(pairID: pairID, collectionID: collectionID)
+                            if inserted {
+                                await MainActor.run {
+                                    libraryVM.refreshPairCount(forCollection: collectionID, delta: +1)
+                                }
                             }
                         }
                     },
