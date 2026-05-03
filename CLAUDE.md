@@ -65,12 +65,15 @@ Four clusters use two-signal gating (require ≥1 keyword from each of two vocab
 
 **Double-onChange race in PairsGridView** — `LibraryViewModel.selectFolder` and `selectCollection` each set *both* `selectedFolderID` and `selectedCollectionID` in the same synchronous pass. If PairsGridView has separate `onChange(of: selectedFolderID)` and `onChange(of: selectedCollectionID)` handlers, both fire within milliseconds with different settled-state snapshots, launching two competing `loadPairs` calls. Fix: merge both handlers to call a single `reloadPairs()` helper that reads the *settled* `currentFolderID` / `currentCollectionID` published values (not the argument to `onChange`). Any future state mutations that touch both properties will hit the same race if separate observers are used. See decision #39.
 
+**QueryService.fetchRepresentativePairs and fetchImagePairCounts are nonisolated** — both methods are `nonisolated` synchronous functions. Calling them directly from `@MainActor` context (e.g. inside `EngineController`) runs them synchronously on the main thread and blocks the UI for the duration of the SQL query. Always call them from a `Task.detached` block. The existing call site in `EngineController.fetchRepresentativePairs` already does this correctly — any new call sites must follow the same pattern. See decision #40.
+
 ## Open Backlog Items
 | # | Title | Notes |
 |---|-------|-------|
 | 25 | Full re-caption pass | 57% of captions truncated mid-sentence; num_predict raised to 400 but DB not yet refreshed |
 | 27 | Aesthetic score inflation | 0.968 for weak pair — investigate harmony sub-score; consider cross-axis confidence penalty |
 | 28 | Same-subject discount | Dogs/cars pairing with no cross-context resonance; possible CLIP secondary ceiling (>0.75 → ×0.65) |
+| 41 | Move cap-2 off @MainActor | Two-pass greedy deduplication still runs on @MainActor after the detached DB call returns. Move it into the Task.detached block. Requires verifying adjustedGeometric/convertToPair/settings are safe off @MainActor. |
 
 ## Commit Convention
 Use `#ID` prefix matching the decisions log:
