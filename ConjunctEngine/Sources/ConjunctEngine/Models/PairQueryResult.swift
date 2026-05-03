@@ -49,3 +49,9 @@ public struct FolderQueryResult: Sendable {
     public let pairCount: Int
     public let lastIndexedAt: Date?
 }
+
+public struct CollectionQueryResult: Sendable {
+    public let id: Int
+    public let name: String
+    public let pairCount: Int
+}

@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct SidebarView: View {
 
@@ -10,6 +11,7 @@ struct SidebarView: View {
     @State private var newCollectionName = ""
     @State private var collectionToRename: CollectionItem? = nil
     @State private var renamedValue = ""
+    @State private var dropTargetCollectionID: Int? = nil
 
     var body: some View {
         VStack(spacing: 0) {
@@ -39,7 +41,7 @@ struct SidebarView: View {
                     Spacer()
                     Button("Cancel") { collectionToRename = nil }
                     Button("Rename") {
-                        libraryVM.renameCollection(id: collection.id, to: renamedValue)
+                        libraryVM.renameCollection(id: collection.id, to: renamedValue, engine: engine)
                         collectionToRename = nil
                     }
                     .buttonStyle(.borderedProminent)
@@ -173,7 +175,32 @@ struct SidebarView: View {
                     isIndexing: false,
                     indexingFraction: nil
                 )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6)
+                        .strokeBorder(Color.accentColor.opacity(0.7), lineWidth: 1.5)
+                        .padding(.horizontal, 8)
+                        .opacity(dropTargetCollectionID == collection.id ? 1 : 0)
+                )
                 .onTapGesture { libraryVM.selectCollection(collection.id) }
+                .onDrop(
+                    of: [UTType.plainText],
+                    isTargeted: Binding(
+                        get: { dropTargetCollectionID == collection.id },
+                        set: { targeting in
+                            dropTargetCollectionID = targeting ? collection.id : nil
+                        }
+                    )
+                ) { providers in
+                    guard let provider = providers.first else { return false }
+                    _ = provider.loadObject(ofClass: NSString.self) { item, _ in
+                        guard let str = item as? String, let pairID = Int(str) else { return }
+                        Task { @MainActor in
+                            await engine.addPairToCollection(pairID: pairID, collectionID: collection.id)
+                            libraryVM.refreshPairCount(forCollection: collection.id, delta: +1)
+                        }
+                    }
+                    return true
+                }
                 .contextMenu {
                     Button("Rename\u{2026}") {
                         collectionToRename = collection
@@ -181,7 +208,7 @@ struct SidebarView: View {
                     }
                     Divider()
                     Button("Delete", role: .destructive) {
-                        libraryVM.deleteCollection(id: collection.id)
+                        libraryVM.deleteCollection(id: collection.id, engine: engine)
                     }
                 }
             }
@@ -211,9 +238,9 @@ struct SidebarView: View {
     private func createCollection() {
         let name = newCollectionName.trimmingCharacters(in: .whitespaces)
         guard !name.isEmpty else { return }
-        libraryVM.addCollection(name: name)
         isAddingCollection = false
         newCollectionName = ""
+        Task { await libraryVM.addCollection(name: name, engine: engine) }
     }
 }
 

@@ -1,5 +1,6 @@
 import SwiftUI
 import ConjunctEngine
+import UniformTypeIdentifiers
 
 struct PairsGridView: View {
 
@@ -9,11 +10,13 @@ struct PairsGridView: View {
     @Environment(SettingsStore.self) private var settings
     @State private var completionCardDismissed = false
 
-
     // Fixed row height prevents tiles from collapsing/expanding during window resize.
     // The tile height = 120px thumbnail + ~36px metadata strip.
     private static let tileHeight: CGFloat = 160
     private let columns = [GridItem(.adaptive(minimum: 280, maximum: 380), spacing: 12)]
+
+    private var currentFolderID: Int64? { libraryVM.selectedFolderID.map { Int64($0) } }
+    private var currentCollectionID: Int64? { libraryVM.selectedCollectionID.map { Int64($0) } }
 
     var body: some View {
         contentView
@@ -71,24 +74,26 @@ struct PairsGridView: View {
         }
         .onChange(of: libraryVM.selectedFolderID) { _, folderID in
             Task { @MainActor in
-                let fid = folderID.map { Int64($0) }
-                gridVM.loadPairs(from: engine, folderID: fid)
+                gridVM.loadPairs(from: engine, folderID: folderID.map { Int64($0) })
+            }
+        }
+        .onChange(of: libraryVM.selectedCollectionID) { _, cid in
+            Task { @MainActor in
+                gridVM.loadPairs(from: engine, collectionID: cid.map { Int64($0) })
             }
         }
         .onChange(of: engine.isIndexing) { _, indexing in
             if indexing { completionCardDismissed = false }
             guard !indexing else { return }
             Task { @MainActor in
-                let fid = libraryVM.selectedFolderID.map { Int64($0) }
-                gridVM.loadPairs(from: engine, folderID: fid)
+                gridVM.loadPairs(from: engine, folderID: currentFolderID, collectionID: currentCollectionID)
             }
         }
         .onChange(of: engine.isBackgroundScoring) { _, scoring in
             guard !scoring else { return }
             // Phase 2 done — reload so All view picks up cross-folder pairs.
             Task { @MainActor in
-                let fid = libraryVM.selectedFolderID.map { Int64($0) }
-                gridVM.loadPairs(from: engine, folderID: fid)
+                gridVM.loadPairs(from: engine, folderID: currentFolderID, collectionID: currentCollectionID)
             }
         }
         .onAppear {
@@ -101,38 +106,32 @@ struct PairsGridView: View {
         .onChange(of: engine.folders.count) { _, count in
             guard count > 0, !gridVM.isLoading, gridVM.pairCount == 0 else { return }
             Task { @MainActor in
-                let fid = libraryVM.selectedFolderID.map { Int64($0) }
-                gridVM.loadPairs(from: engine, folderID: fid)
+                gridVM.loadPairs(from: engine, folderID: currentFolderID, collectionID: currentCollectionID)
             }
         }
         .onChange(of: settings.weights) { _, _ in
             Task { @MainActor in
-                let fid = libraryVM.selectedFolderID.map { Int64($0) }
-                gridVM.loadPairs(from: engine, folderID: fid)
+                gridVM.loadPairs(from: engine, folderID: currentFolderID, collectionID: currentCollectionID)
             }
         }
         .onChange(of: settings.minThematicScore) { _, _ in
             Task { @MainActor in
-                let fid = libraryVM.selectedFolderID.map { Int64($0) }
-                gridVM.loadPairs(from: engine, folderID: fid)
+                gridVM.loadPairs(from: engine, folderID: currentFolderID, collectionID: currentCollectionID)
             }
         }
         .onChange(of: settings.edgePeakednessFloor) { _, _ in
             Task { @MainActor in
-                let fid = libraryVM.selectedFolderID.map { Int64($0) }
-                gridVM.loadPairs(from: engine, folderID: fid)
+                gridVM.loadPairs(from: engine, folderID: currentFolderID, collectionID: currentCollectionID)
             }
         }
         .onChange(of: settings.gridVarianceFloor) { _, _ in
             Task { @MainActor in
-                let fid = libraryVM.selectedFolderID.map { Int64($0) }
-                gridVM.loadPairs(from: engine, folderID: fid)
+                gridVM.loadPairs(from: engine, folderID: currentFolderID, collectionID: currentCollectionID)
             }
         }
         .onChange(of: gridVM.sortOrder) { _, _ in
             Task { @MainActor in
-                let fid = libraryVM.selectedFolderID.map { Int64($0) }
-                gridVM.loadPairs(from: engine, folderID: fid)
+                gridVM.loadPairs(from: engine, folderID: currentFolderID, collectionID: currentCollectionID)
             }
         }
         .onAppear { gridVM.hideSequential = settings.hideSequential }
@@ -182,7 +181,9 @@ struct PairsGridView: View {
 
     private var grid: some View {
         let pairs = gridVM.displayedPairs
-        let fid = libraryVM.selectedFolderID.map { Int64($0) }
+        let fid = currentFolderID
+        let cid = currentCollectionID
+        let activeCID = libraryVM.selectedCollectionID
         return ScrollView {
             LazyVGrid(columns: columns, spacing: 12) {
                 ForEach(pairs) { pair in
@@ -191,14 +192,25 @@ struct PairsGridView: View {
                         onLike:   { gridVM.likePair(id: pair.id, engine: engine) },
                         onReject: { gridVM.rejectPair(id: pair.id, engine: engine) },
                         onDelete: { gridVM.deletePair(id: pair.id, engine: engine) },
-                        onOpen:   { gridVM.openLightbox(pairID: pair.id) }
+                        onOpen:   { gridVM.openLightbox(pairID: pair.id) },
+                        onRemoveFromCollection: activeCID == nil ? nil : {
+                            guard let collectionID = activeCID else { return }
+                            Task {
+                                await engine.removePairFromCollection(
+                                    pairID: pair.id, collectionID: collectionID
+                                )
+                                gridVM.removePair(id: pair.id)
+                                libraryVM.refreshPairCount(forCollection: collectionID, delta: -1)
+                            }
+                        }
                     )
                     .frame(height: Self.tileHeight)
                     .opacity(pair.decision == .rejected ? 0.4 : 1.0)
                     .animation(.easeOut(duration: 0.15), value: pair.decision)
+                    .onDrag { NSItemProvider(object: "\(pair.id)" as NSString) }
                     if pair.id == pairs.last?.id {
                         Color.clear.frame(height: 1).onAppear {
-                            gridVM.loadMorePairs(from: engine, folderID: fid)
+                            gridVM.loadMorePairs(from: engine, folderID: fid, collectionID: cid)
                         }
                     }
                 }
@@ -232,6 +244,13 @@ struct PairsGridView: View {
                 Text("No pairs match these filters").foregroundColor(Color.appMutedForeground)
                 Button("Clear filters") { gridVM.clearFilters() }
                     .buttonStyle(.plain).foregroundColor(Color.appMutedForeground)
+            } else if libraryVM.selectedCollectionID != nil {
+                Image(systemName: "rectangle.stack")
+                    .font(.system(size: 40)).foregroundColor(Color.appMutedForeground.opacity(0.4))
+                Text("No pairs in this collection").foregroundColor(Color.appMutedForeground)
+                Text("Drag pairs from the grid or use \u{201C}Add to Collection\u{201D} in the lightbox")
+                    .font(.caption).foregroundColor(Color.appMutedForeground.opacity(0.6))
+                    .multilineTextAlignment(.center)
             } else if engine.folders.isEmpty {
                 Image(systemName: "rectangle.2.swap")
                     .font(.system(size: 40)).foregroundColor(Color.appMutedForeground.opacity(0.4))

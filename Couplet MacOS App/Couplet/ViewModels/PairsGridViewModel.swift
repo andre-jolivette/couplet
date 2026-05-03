@@ -38,13 +38,13 @@ final class PairsGridViewModel: ObservableObject {
     }
     func closeLightbox() { lightboxPairID = nil }
 
-    func loadPairs(from engine: EngineController, folderID: Int64? = nil) {
+    func loadPairs(from engine: EngineController, folderID: Int64? = nil, collectionID: Int64? = nil) {
         currentPage = 0
         canLoadMore = true
         isLoading = true
         Task {
             let pairs = await engine.fetchRepresentativePairs(
-                folderID: folderID, sortOrder: sortOrder, page: 0
+                folderID: folderID, collectionID: collectionID, sortOrder: sortOrder, page: 0
             )
             self.allPairs = pairs
             self.canLoadMore = pairs.count == pageSize
@@ -52,13 +52,13 @@ final class PairsGridViewModel: ObservableObject {
         }
     }
 
-    func loadMorePairs(from engine: EngineController, folderID: Int64? = nil) {
+    func loadMorePairs(from engine: EngineController, folderID: Int64? = nil, collectionID: Int64? = nil) {
         guard canLoadMore, !isLoadingMore, !isLoading else { return }
         isLoadingMore = true
         let nextPage = currentPage + 1
         Task {
             let morePairs = await engine.fetchRepresentativePairs(
-                folderID: folderID, sortOrder: sortOrder, page: nextPage
+                folderID: folderID, collectionID: collectionID, sortOrder: sortOrder, page: nextPage
             )
             if morePairs.isEmpty {
                 self.canLoadMore = false
@@ -73,6 +73,10 @@ final class PairsGridViewModel: ObservableObject {
             }
             self.isLoadingMore = false
         }
+    }
+
+    func removePair(id: Int) {
+        allPairs.removeAll { $0.id == id }
     }
 
     var displayedPairs: [DisplayPair] {

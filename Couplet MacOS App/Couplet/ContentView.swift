@@ -60,8 +60,17 @@ struct ContentView: View {
                 LightboxView(
                     vm: lightboxVM,
                     allPairs: gridVM.allPairsForAnchor,
+                    collections: libraryVM.collections,
                     onDecision: { id, decision in
                         gridVM.applyDecision(id: id, decision: decision, engine: engine)
+                    },
+                    onAddToCollection: { pairID, collectionID in
+                        Task {
+                            await engine.addPairToCollection(pairID: pairID, collectionID: collectionID)
+                            await MainActor.run {
+                                libraryVM.refreshPairCount(forCollection: collectionID, delta: +1)
+                            }
+                        }
                     },
                     onAnchor: { imageID in
                         let fid = libraryVM.selectedFolderID.map { Int64($0) }
@@ -80,6 +89,7 @@ struct ContentView: View {
         .onAppear {
             Task { @MainActor in
                 engine.initialize()
+                await libraryVM.loadCollections(engine: engine)
                 try? await Task.sleep(nanoseconds: 800_000_000)
                 if !engine.hasModelBookmark { showSetupSheet = true }
             }

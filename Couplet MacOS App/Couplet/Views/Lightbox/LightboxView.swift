@@ -6,13 +6,16 @@ struct LightboxView: View {
     @EnvironmentObject var engine: EngineController
     @ObservedObject var vm: LightboxViewModel
     let allPairs: [DisplayPair]
+    let collections: [CollectionItem]
     let onDecision: (Int, PairDecision) -> Void
+    let onAddToCollection: (Int, Int) -> Void
     let onAnchor: (Int) async -> [DisplayPair]
     let onDismiss: () -> Void
 
     @State private var showDeleteConfirm = false
     @State private var deleteTargetID: Int? = nil
     @State private var showExportSheet = false
+    @State private var showCollectionPicker = false
 
     private let dateFormatter: DateFormatter = {
         let f = DateFormatter()
@@ -341,7 +344,7 @@ struct LightboxView: View {
                 }
                 Divider().frame(height: 18).opacity(resting ? 0.10 : 0.25)
                 Button {
-                    vm.showToast("Add to collection — coming soon")
+                    showCollectionPicker = true
                 } label: {
                     HStack(spacing: 5) {
                         Image(systemName: "rectangle.stack.badge.plus")
@@ -353,6 +356,16 @@ struct LightboxView: View {
                     .frame(minWidth: 44, minHeight: 34).contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .popover(isPresented: $showCollectionPicker) {
+                    CollectionPickerPopover(
+                        collections: collections,
+                        onSelect: { collectionID in
+                            guard let pair = vm.currentPair else { return }
+                            onAddToCollection(pair.id, collectionID)
+                            showCollectionPicker = false
+                        }
+                    )
+                }
 
                 Divider().frame(height: 18).opacity(resting ? 0.10 : 0.25)
 
@@ -535,5 +548,52 @@ private extension View {
         self.onHover { hovering in
             if hovering { cursor.push() } else { NSCursor.pop() }
         }
+    }
+}
+
+// MARK: - Collection picker popover
+
+private struct CollectionPickerPopover: View {
+    let collections: [CollectionItem]
+    let onSelect: (Int) -> Void
+
+    @State private var hoveredID: Int? = nil
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("Add to Collection")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundColor(.secondary)
+                .padding(.horizontal, 12)
+                .padding(.top, 12)
+                .padding(.bottom, 6)
+
+            if collections.isEmpty {
+                Text("No collections — create one in the sidebar.")
+                    .font(.system(size: 12))
+                    .foregroundColor(.secondary)
+                    .padding(.horizontal, 12)
+                    .padding(.bottom, 12)
+            } else {
+                ForEach(collections) { c in
+                    Button(action: { onSelect(c.id) }) {
+                        HStack {
+                            Text(c.name)
+                                .font(.system(size: 13))
+                                .foregroundColor(.primary)
+                            Spacer()
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 7)
+                        .background(hoveredID == c.id ? Color.accentColor.opacity(0.15) : Color.clear)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .onHover { hoveredID = $0 ? c.id : nil }
+                }
+                .padding(.bottom, 4)
+            }
+        }
+        .frame(minWidth: 200)
     }
 }
