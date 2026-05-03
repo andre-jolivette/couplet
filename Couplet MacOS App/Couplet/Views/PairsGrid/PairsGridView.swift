@@ -209,7 +209,20 @@ struct PairsGridView: View {
                     .animation(.easeOut(duration: 0.15), value: pair.decision)
                     .onDrag(
                         { NSItemProvider(object: "\(pair.id)" as NSString) },
-                        preview: { PairDragPreview(pair: pair) }
+                        preview: {
+                            // Load synchronously: cache hit is free; miss reads a
+                            // ~30–80 KB local JPEG (~10 ms) — safe on any thread.
+                            let imgA = pair.thumbnailURLA.flatMap {
+                                ThumbnailCache.shared.image(for: $0) ?? NSImage(contentsOf: $0)
+                            }
+                            let imgB = pair.thumbnailURLB.flatMap {
+                                ThumbnailCache.shared.image(for: $0) ?? NSImage(contentsOf: $0)
+                            }
+                            return PairDragPreview(
+                                imageA: imgA, imageB: imgB,
+                                colorA: pair.colorA, colorB: pair.colorB
+                            )
+                        }
                     )
                     if pair.id == pairs.last?.id {
                         Color.clear.frame(height: 1).onAppear {
@@ -277,21 +290,19 @@ struct PairsGridView: View {
 
 /// Shown as the drag ghost when a pair tile is dragged.
 ///
-/// Images are loaded in onAppear rather than passed pre-fetched from the call site.
-/// This handles the first-drag case where ThumbnailView.task hasn't yet populated
-/// the cache: onAppear checks the cache first (instant), then falls back to a
-/// userInitiated disk read if either image is missing. Because the drag preview is
-/// a live SwiftUI view, the state update re-renders it with the real image within
-/// ~50 ms, before the user has moved far.
+/// Images must arrive as already-loaded NSImages — the caller resolves them
+/// synchronously (cache → disk) so the very first frame has real pixels.
+/// Async state updates do not reliably repaint AppKit-managed drag preview
+/// windows, so we don't attempt them here.
 ///
-/// Shrink animation: delay 0.4 s + 0.3 s spring = completes by ~0.7 s, well
-/// within a typical drag gesture. The previous 0.9 s delay let users drop before
-/// the animation fired, causing inconsistent behaviour.
+/// Scale animation uses DispatchQueue.main.asyncAfter; SwiftUI's .delay modifier
+/// is unreliable inside AppKit-managed drag preview NSWindows.
 private struct PairDragPreview: View {
-    let pair: DisplayPair
+    let imageA: NSImage?
+    let imageB: NSImage?
+    let colorA: NSColor
+    let colorB: NSColor
 
-    @State private var imageA: NSImage?
-    @State private var imageB: NSImage?
     @State private var scale: CGFloat = 1.0
 
     private let previewWidth: CGFloat = 280
@@ -299,35 +310,16 @@ private struct PairDragPreview: View {
 
     var body: some View {
         HStack(spacing: 2) {
-            pane(imageA, color: pair.colorA)
-            pane(imageB, color: pair.colorB)
+            pane(imageA, color: colorA)
+            pane(imageB, color: colorB)
         }
         .frame(width: previewWidth, height: previewHeight)
         .clipShape(RoundedRectangle(cornerRadius: 8))
         .shadow(color: .black.opacity(0.45), radius: 14, y: 6)
         .scaleEffect(scale, anchor: .center)
         .onAppear {
-            // Fast path: already in cache from the visible tile
-            imageA = pair.thumbnailURLA.flatMap { ThumbnailCache.shared.image(for: $0) }
-            imageB = pair.thumbnailURLB.flatMap { ThumbnailCache.shared.image(for: $0) }
-
-            // Slow path: first drag before cache is warm — load from disk directly.
-            // Local JPEG thumbnails are small (~30–80 KB), so this takes < 50 ms.
-            if imageA == nil || imageB == nil {
-                let urlA = pair.thumbnailURLA
-                let urlB = pair.thumbnailURLB
-                Task.detached(priority: .userInitiated) {
-                    let a: NSImage? = urlA.flatMap { NSImage(contentsOf: $0) }
-                    let b: NSImage? = urlB.flatMap { NSImage(contentsOf: $0) }
-                    await MainActor.run {
-                        if let a { imageA = a }
-                        if let b { imageB = b }
-                    }
-                }
-            }
-
-            withAnimation(.easeOut(duration: 0.3).delay(0.4)) {
-                scale = 0.6
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                withAnimation(.easeOut(duration: 0.35)) { scale = 0.65 }
             }
         }
     }
