@@ -209,14 +209,7 @@ struct PairsGridView: View {
                     .animation(.easeOut(duration: 0.15), value: pair.decision)
                     .onDrag(
                         { NSItemProvider(object: "\(pair.id)" as NSString) },
-                        preview: {
-                            PairDragPreview(
-                                imageA: pair.thumbnailURLA.flatMap { ThumbnailCache.shared.image(for: $0) },
-                                imageB: pair.thumbnailURLB.flatMap { ThumbnailCache.shared.image(for: $0) },
-                                colorA: pair.colorA,
-                                colorB: pair.colorB
-                            )
-                        }
+                        preview: { PairDragPreview(pair: pair) }
                     )
                     if pair.id == pairs.last?.id {
                         Color.clear.frame(height: 1).onAppear {
@@ -283,15 +276,22 @@ struct PairsGridView: View {
 // MARK: - Drag preview
 
 /// Shown as the drag ghost when a pair tile is dragged.
-/// Uses pre-cached NSImages to avoid the async-load grey-flash that ThumbnailView
-/// would produce in a freshly-instantiated view. Animates from full size to 60%
-/// after a short hold so the user can see exactly where they're placing it.
+///
+/// Images are loaded in onAppear rather than passed pre-fetched from the call site.
+/// This handles the first-drag case where ThumbnailView.task hasn't yet populated
+/// the cache: onAppear checks the cache first (instant), then falls back to a
+/// userInitiated disk read if either image is missing. Because the drag preview is
+/// a live SwiftUI view, the state update re-renders it with the real image within
+/// ~50 ms, before the user has moved far.
+///
+/// Shrink animation: delay 0.4 s + 0.3 s spring = completes by ~0.7 s, well
+/// within a typical drag gesture. The previous 0.9 s delay let users drop before
+/// the animation fired, causing inconsistent behaviour.
 private struct PairDragPreview: View {
-    let imageA: NSImage?
-    let imageB: NSImage?
-    let colorA: NSColor
-    let colorB: NSColor
+    let pair: DisplayPair
 
+    @State private var imageA: NSImage?
+    @State private var imageB: NSImage?
     @State private var scale: CGFloat = 1.0
 
     private let previewWidth: CGFloat = 280
@@ -299,15 +299,34 @@ private struct PairDragPreview: View {
 
     var body: some View {
         HStack(spacing: 2) {
-            pane(imageA, color: colorA)
-            pane(imageB, color: colorB)
+            pane(imageA, color: pair.colorA)
+            pane(imageB, color: pair.colorB)
         }
         .frame(width: previewWidth, height: previewHeight)
         .clipShape(RoundedRectangle(cornerRadius: 8))
         .shadow(color: .black.opacity(0.45), radius: 14, y: 6)
         .scaleEffect(scale, anchor: .center)
         .onAppear {
-            withAnimation(.spring(response: 0.45, dampingFraction: 0.75).delay(0.9)) {
+            // Fast path: already in cache from the visible tile
+            imageA = pair.thumbnailURLA.flatMap { ThumbnailCache.shared.image(for: $0) }
+            imageB = pair.thumbnailURLB.flatMap { ThumbnailCache.shared.image(for: $0) }
+
+            // Slow path: first drag before cache is warm — load from disk directly.
+            // Local JPEG thumbnails are small (~30–80 KB), so this takes < 50 ms.
+            if imageA == nil || imageB == nil {
+                let urlA = pair.thumbnailURLA
+                let urlB = pair.thumbnailURLB
+                Task.detached(priority: .userInitiated) {
+                    let a: NSImage? = urlA.flatMap { NSImage(contentsOf: $0) }
+                    let b: NSImage? = urlB.flatMap { NSImage(contentsOf: $0) }
+                    await MainActor.run {
+                        if let a { imageA = a }
+                        if let b { imageB = b }
+                    }
+                }
+            }
+
+            withAnimation(.easeOut(duration: 0.3).delay(0.4)) {
                 scale = 0.6
             }
         }
