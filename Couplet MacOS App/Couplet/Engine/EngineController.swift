@@ -290,78 +290,40 @@ final class EngineController: ObservableObject {
             do {
                 // Both DB calls run on a detached task so they never queue behind an
                 // in-flight actor-isolated query (nonisolated methods, DatabasePool
-                // concurrent reads via WAL). Stale results are discarded by the
-                // generation counter after the await returns.
+                // concurrent reads via WAL). The map + sort + cap-2 dedup also run
+                // in the detached block — @MainActor values are captured as locals
+                // before entering the closure so self is never touched inside it.
+                // Stale results are discarded by the generation counter on return.
                 let sortColumn = sortOrder.dbColumn
-                let (counts, results) = try await Task.detached(priority: .userInitiated) {
+                let capturedWeights     = settings.weights
+                let capturedPeakFloor   = settings.edgePeakednessFloor
+                let capturedVarFloor    = settings.gridVarianceFloor
+                let capturedMinThematic = settings.minThematicScore
+                let capturedThumbnailBase = thumbnailBaseURL
+
+                let (pairCounts, pairs) = try await Task.detached(priority: .userInitiated) {
                     let c = try qs.fetchImagePairCounts(folderID: folderID, collectionID: collectionID)
                     let r = try qs.fetchRepresentativePairs(folderID: folderID, collectionID: collectionID, sortColumn: sortColumn)
-                    return (c, r)
+                    let pairCountMap = Dictionary(uniqueKeysWithValues: c.map { (Int($0.key), $0.value) })
+                    var mapped = r.map { result -> DisplayPair in
+                        let adjGeo = adjustedGeometricFree(result, peakFloor: capturedPeakFloor, varFloor: capturedVarFloor)
+                        return convertToPairFree(result, adjustedGeometricScore: adjGeo,
+                                                 weights: capturedWeights, pairCounts: pairCountMap,
+                                                 thumbnailBase: capturedThumbnailBase)
+                    }
+                    if capturedMinThematic > 0 {
+                        mapped = mapped.filter { $0.thematicScore >= capturedMinThematic }
+                    }
+                    mapped.sort(by: pairSortComparator(for: sortOrder))
+                    // Collection fast-path: curated sets skip cap-2 deduplication.
+                    if collectionID == nil {
+                        mapped = applyCap2Free(mapped)
+                        mapped.sort(by: pairSortComparator(for: sortOrder))
+                    }
+                    return (pairCountMap, mapped)
                 }.value
                 guard loadGeneration == myGeneration else { return [] }
-
-                imagePairCounts = Dictionary(uniqueKeysWithValues: counts.map { (Int($0.key), $0.value) })
-
-                let peakFloor = settings.edgePeakednessFloor
-                let varFloor  = settings.gridVarianceFloor
-                var pairs = results.map { result in
-                    let adjGeo = adjustedGeometric(result, peakFloor: peakFloor, varFloor: varFloor)
-                    return convertToPair(result, adjustedGeometricScore: adjGeo)
-                }
-
-                if settings.minThematicScore > 0 {
-                    pairs = pairs.filter { $0.thematicScore >= settings.minThematicScore }
-                }
-
-                switch sortOrder {
-                case .composite: pairs.sort { $0.compositeScore > $1.compositeScore }
-                case .thematic:  pairs.sort { $0.thematicScore  > $1.thematicScore  }
-                case .geometric: pairs.sort { $0.geometricScore > $1.geometricScore }
-                case .aesthetic: pairs.sort { $0.aestheticScore > $1.aestheticScore }
-                }
-
-                if collectionID == nil {
-                    // Pass 1: strict greedy — both images must be unrepresented.
-                    // Highest-scoring pairs get first claim; each image appears at most once.
-                    var seenImages = Set<Int>()
-                    var pass1: [DisplayPair] = []
-                    for pair in pairs {
-                        guard !seenImages.contains(pair.imageAID),
-                              !seenImages.contains(pair.imageBID) else { continue }
-                        pass1.append(pair)
-                        seenImages.insert(pair.imageAID)
-                        seenImages.insert(pair.imageBID)
-                    }
-
-                    // Pass 2: cover images left unrepresented after pass 1.
-                    // For each remaining pair (score order) where at least one image is
-                    // still unseen, include it — allowing the already-seen partner to
-                    // appear a second time. Each image is used at most once in this pass.
-                    var pass2Seen = Set<Int>()
-                    var pass2: [DisplayPair] = []
-                    for pair in pairs {
-                        let aUnseen = !seenImages.contains(pair.imageAID)
-                        let bUnseen = !seenImages.contains(pair.imageBID)
-                        guard aUnseen || bUnseen else { continue }
-                        guard !pass2Seen.contains(pair.imageAID),
-                              !pass2Seen.contains(pair.imageBID) else { continue }
-                        pass2.append(pair)
-                        pass2Seen.insert(pair.imageAID)
-                        pass2Seen.insert(pair.imageBID)
-                    }
-
-                    pairs = pass1 + pass2
-                    // Re-sort the combined result so pass-2 pairs slot in by score.
-                    switch sortOrder {
-                    case .composite: pairs.sort { $0.compositeScore > $1.compositeScore }
-                    case .thematic:  pairs.sort { $0.thematicScore  > $1.thematicScore  }
-                    case .geometric: pairs.sort { $0.geometricScore > $1.geometricScore }
-                    case .aesthetic: pairs.sort { $0.aestheticScore > $1.aestheticScore }
-                    }
-                }
-                // Collection fast-path: curated sets skip cap-2 deduplication;
-                // pairs is already sorted from the initial sort above.
-
+                imagePairCounts = pairCounts
                 representativePairsCache = pairs
                 representativePairsCacheKey = (folderID, collectionID, sortOrder.dbColumn)
             } catch {
@@ -381,6 +343,113 @@ final class EngineController: ObservableObject {
         let start = page * pageSize
         guard start < representativePairsCache.count else { return [] }
         return Array(representativePairsCache[start..<min(start + pageSize, representativePairsCache.count)])
+    }
+
+    // MARK: - Progressive pair streaming (page 0)
+
+    /// Streams page-0 pairs progressively as chunks arrive from the DB.
+    ///
+    /// Each yield is a batch of accepted pairs (pass-1 greedy accepts arrive per
+    /// 20-row chunk; pass-2 orphan-cover pairs arrive in a final batch). The
+    /// consumer can append each batch to the grid array immediately so SwiftUI
+    /// renders incrementally. After the stream finishes, `representativePairsCache`
+    /// is updated on @MainActor for `loadMorePairs` compatibility.
+    ///
+    /// All @MainActor-isolated values are captured as locals before the detached
+    /// task starts; self is never accessed inside the closure.
+    func streamPage0Pairs(
+        folderID: Int64?, collectionID: Int64?, sortOrder: PairSortOrder
+    ) -> AsyncStream<[DisplayPair]> {
+        guard let qs = queryService else { return AsyncStream { $0.finish() } }
+
+        loadGeneration += 1
+        let myGeneration = loadGeneration
+        let capturedWeights     = settings.weights
+        let capturedPeakFloor   = settings.edgePeakednessFloor
+        let capturedVarFloor    = settings.gridVarianceFloor
+        let capturedMinThematic = settings.minThematicScore
+        let capturedThumbnailBase = thumbnailBaseURL
+        let sortColumn = sortOrder.dbColumn
+
+        return AsyncStream { continuation in
+            let innerTask = Task.detached(priority: .userInitiated) { [weak self] in
+                do {
+                    let counts = try qs.fetchImagePairCounts(folderID: folderID, collectionID: collectionID)
+                    let pairCounts = Dictionary(uniqueKeysWithValues: counts.map { (Int($0.key), $0.value) })
+
+                    let chunkSize = 20
+                    var offset = 0
+                    var seenImages = Set<Int>()
+                    var pass1Rejected: [DisplayPair] = []
+                    var allAccepted: [DisplayPair] = []
+
+                    while !Task.isCancelled {
+                        let chunk = try qs.fetchRepresentativePairs(
+                            folderID: folderID, collectionID: collectionID,
+                            sortColumn: sortColumn, limit: chunkSize, offset: offset
+                        )
+                        guard !chunk.isEmpty else { break }
+                        let isLastChunk = chunk.count < chunkSize
+
+                        let converted = chunk.compactMap { result -> DisplayPair? in
+                            let adjGeo = adjustedGeometricFree(result, peakFloor: capturedPeakFloor, varFloor: capturedVarFloor)
+                            let pair = convertToPairFree(result, adjustedGeometricScore: adjGeo,
+                                                         weights: capturedWeights, pairCounts: pairCounts,
+                                                         thumbnailBase: capturedThumbnailBase)
+                            if capturedMinThematic > 0 && pair.thematicScore < capturedMinThematic { return nil }
+                            return pair
+                        }
+
+                        if collectionID == nil {
+                            // Incremental pass-1: greedy gate using running seenImages across chunks.
+                            var accepted: [DisplayPair] = []
+                            for pair in converted {
+                                if !seenImages.contains(pair.imageAID) && !seenImages.contains(pair.imageBID) {
+                                    accepted.append(pair)
+                                    seenImages.insert(pair.imageAID)
+                                    seenImages.insert(pair.imageBID)
+                                } else {
+                                    pass1Rejected.append(pair)
+                                }
+                            }
+                            if !accepted.isEmpty { continuation.yield(accepted) }
+                            allAccepted.append(contentsOf: accepted)
+                        } else {
+                            // Collection fast-path: no cap-2.
+                            continuation.yield(converted)
+                            allAccepted.append(contentsOf: converted)
+                        }
+
+                        if isLastChunk { break }
+                        offset += chunkSize
+                    }
+
+                    // Pass-2: cover images left unrepresented after pass-1.
+                    if collectionID == nil, !Task.isCancelled {
+                        let pass2 = applyPass2Free(pass1Rejected, seenImages: seenImages)
+                        if !pass2.isEmpty {
+                            continuation.yield(pass2)
+                            allAccepted.append(contentsOf: pass2)
+                        }
+                    }
+
+                    // Populate cache on @MainActor so loadMorePairs can still slice it.
+                    if !Task.isCancelled {
+                        let finalSorted = allAccepted.sorted(by: pairSortComparator(for: sortOrder))
+                        await MainActor.run { [weak self] in
+                            guard let self, self.loadGeneration == myGeneration else { return }
+                            self.imagePairCounts = pairCounts
+                            self.representativePairsCache = finalSorted
+                            self.representativePairsCacheKey = (folderID, collectionID, sortColumn)
+                        }
+                    }
+                } catch {
+                    print("streamPage0Pairs error: \(error)")
+                }
+                continuation.finish()
+            }
+            continuation.onTermination = { _ in innerTask.cancel() }
+        }
     }
 
     // MARK: - Decisions
@@ -696,3 +765,4 @@ final class EngineController: ObservableObject {
         }
     }
 }
+

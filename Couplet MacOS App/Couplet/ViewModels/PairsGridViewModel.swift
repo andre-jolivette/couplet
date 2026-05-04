@@ -42,7 +42,7 @@ final class PairsGridViewModel: ObservableObject {
     func loadPairs(from engine: EngineController, folderID: Int64? = nil, collectionID: Int64? = nil) {
         loadTask?.cancel()
         currentPage = 0
-        canLoadMore = true
+        canLoadMore = false
         allPairs = []
         isLoading = true
         loadTask = Task {
@@ -50,12 +50,18 @@ final class PairsGridViewModel: ObservableObject {
             // This prevents rapid navigation from queueing multiple queries on the DB actor.
             try? await Task.sleep(for: .milliseconds(250))
             guard !Task.isCancelled else { return }
-            let pairs = await engine.fetchRepresentativePairs(
-                folderID: folderID, collectionID: collectionID, sortOrder: sortOrder, page: 0
+            // streamPage0Pairs fetches in 20-row chunks and yields accepted batches as
+            // they arrive so LazyVGrid can start rendering before the full query completes.
+            // The stream also populates representativePairsCache on completion so that
+            // any future loadMorePairs call can still slice from it.
+            let stream = engine.streamPage0Pairs(
+                folderID: folderID, collectionID: collectionID, sortOrder: sortOrder
             )
+            for await batch in stream {
+                guard !Task.isCancelled else { break }
+                self.allPairs.append(contentsOf: batch)
+            }
             guard !Task.isCancelled else { return }
-            self.allPairs = pairs
-            self.canLoadMore = pairs.count == pageSize
             self.isLoading = false
         }
     }
