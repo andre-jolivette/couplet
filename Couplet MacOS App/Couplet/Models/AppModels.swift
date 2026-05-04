@@ -1,5 +1,5 @@
 import Foundation
-import AppKit
+@preconcurrency import AppKit
 import SwiftUI
 
 // MARK: - Pairing Modality
@@ -130,12 +130,16 @@ struct DisplayPair: Identifiable, Hashable {
         return "Both images share a sense of \(sharedReadable)\(contrast)."
     }
 
-    // Fallback stub colour when thumbnail is not yet available
-    var colorA: NSColor { SampleData.stubColor(for: imageAID) }
-    var colorB: NSColor { SampleData.stubColor(for: imageBID) }
+    // Fallback stub colour when thumbnail is not yet available.
+    // Explicitly @MainActor to prevent Swift from inferring the whole struct
+    // (and its init) as @MainActor due to NSColor's actor annotation in the SDK.
+    @MainActor var colorA: NSColor { SampleData.stubColor(for: imageAID) }
+    @MainActor var colorB: NSColor { SampleData.stubColor(for: imageBID) }
 
-    // Explicit init so EngineController can set all fields including thumbnail URLs
-    init(
+    // Explicit init so EngineController can set all fields including thumbnail URLs.
+    // nonisolated prevents Swift from inferring @MainActor on the init due to the
+    // @MainActor computed properties (colorA/colorB) that use NSColor.
+    nonisolated init(
         id: Int, imageAID: Int, imageBID: Int,
         filenameA: String, filenameB: String,
         folderA: String, folderB: String,

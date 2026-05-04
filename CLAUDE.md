@@ -67,13 +67,16 @@ Four clusters use two-signal gating (require ≥1 keyword from each of two vocab
 
 **QueryService.fetchRepresentativePairs and fetchImagePairCounts are nonisolated** — both methods are `nonisolated` synchronous functions. Calling them directly from `@MainActor` context (e.g. inside `EngineController`) runs them synchronously on the main thread and blocks the UI for the duration of the SQL query. Always call them from a `Task.detached` block. The existing call site in `EngineController.fetchRepresentativePairs` already does this correctly — any new call sites must follow the same pattern. See decision #40.
 
+**PairHelpers.swift functions must stay nonisolated** — `adjustedGeometricFree`, `convertToPairFree`, `pairSortComparator`, `applyCap2Free`, `applyPass2Free` are free functions in `PairHelpers.swift` marked `nonisolated` to prevent Swift 6.3 from inferring `@MainActor` on them. The inference chain is: `DisplayPair.colorA/colorB` use `NSColor` (which is `@MainActor` in the macOS 14+ SDK) → Swift infers `@MainActor` on the `DisplayPair.init` → infers it on any function that constructs a `DisplayPair`. The `nonisolated` keyword on the helpers and `nonisolated init` on `DisplayPair` together break this chain. Do not remove these annotations. See decision #41.
+
+**streamPage0Pairs populates representativePairsCache on completion** — `EngineController.streamPage0Pairs` runs DB fetching and cap-2 in a `Task.detached`, yields accepted batches through `AsyncStream<[DisplayPair]>`, then updates `representativePairsCache` via `await MainActor.run` (with generation check) after the last batch. `PairsGridViewModel.loadPairs` consumes the stream and appends batches directly to `allPairs`. `loadMorePairs` still slices from the cache as before. Do not skip the `MainActor.run` cache update at the end of the inner detached task or `loadMorePairs` will return empty results. See decision #41.
+
 ## Open Backlog Items
 | # | Title | Notes |
 |---|-------|-------|
 | 25 | Full re-caption pass | 57% of captions truncated mid-sentence; num_predict raised to 400 but DB not yet refreshed |
 | 27 | Aesthetic score inflation | 0.968 for weak pair — investigate harmony sub-score; consider cross-axis confidence penalty |
 | 28 | Same-subject discount | Dogs/cars pairing with no cross-context resonance; possible CLIP secondary ceiling (>0.75 → ×0.65) |
-| 41 | Move cap-2 off @MainActor | Two-pass greedy deduplication still runs on @MainActor after the detached DB call returns. Move it into the Task.detached block. Requires verifying adjustedGeometric/convertToPair/settings are safe off @MainActor. |
 
 ## Commit Convention
 Use `#ID` prefix matching the decisions log:

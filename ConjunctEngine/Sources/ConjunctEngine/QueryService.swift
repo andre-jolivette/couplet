@@ -78,7 +78,9 @@ public actor QueryService {
     public nonisolated func fetchRepresentativePairs(
         folderID: Int64? = nil,
         collectionID: Int64? = nil,
-        sortColumn: String
+        sortColumn: String,
+        limit: Int? = nil,
+        offset: Int = 0
     ) throws -> [PairQueryResult] {
 
         var conditions: [String] = [
@@ -97,6 +99,7 @@ public actor QueryService {
         }
 
         let where_ = "WHERE " + conditions.joined(separator: " AND ")
+        let limitClause = limit.map { "LIMIT \($0) OFFSET \(offset)" } ?? ""
 
         // Fetch all active pairs ordered by the requested sort column.
         // The greedy 1-per-image selection happens in EngineController after
@@ -104,6 +107,8 @@ public actor QueryService {
         // as the candidate pool — any SQL pre-filtering (e.g. top-N per image)
         // leaves hub-heavy libraries with insufficient fallback diversity,
         // causing many images to go unrepresented.
+        // When limit/offset are supplied the caller fetches in chunks for
+        // progressive rendering; the same candidate-pool rationale applies.
         let sql = """
             SELECT
                 p.id        AS pairID,
@@ -145,6 +150,7 @@ public actor QueryService {
             JOIN folders fb ON fb.id = b.folderID
             \(where_)
             ORDER BY p.\(sortColumn) DESC
+            \(limitClause)
         """
 
         return try db.read { db in
