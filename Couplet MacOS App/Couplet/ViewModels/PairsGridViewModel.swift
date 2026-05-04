@@ -60,10 +60,9 @@ final class PairsGridViewModel: ObservableObject {
             for await batch in stream {
                 guard !Task.isCancelled else { break }
                 self.allPairs.append(contentsOf: batch)
-                // Yield to the main-actor run loop so SwiftUI renders this batch
-                // before the next one arrives. Without this, AsyncStream's unbounded
-                // buffer lets the producer fill all batches before the consumer runs,
-                // causing SwiftUI to coalesce everything into a single render.
+                // Show the grid as soon as the first batch arrives so LazyVGrid
+                // starts rendering while remaining chunks are still in flight.
+                if self.isLoading { self.isLoading = false }
                 await Task.yield()
             }
             guard !Task.isCancelled else { return }
