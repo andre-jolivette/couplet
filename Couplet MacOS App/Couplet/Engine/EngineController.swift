@@ -377,19 +377,23 @@ final class EngineController: ObservableObject {
                     let counts = try qs.fetchImagePairCounts(folderID: folderID, collectionID: collectionID)
                     let pairCounts = Dictionary(uniqueKeysWithValues: counts.map { (Int($0.key), $0.value) })
 
+                    // Fetch all rows in one query. LIMIT/OFFSET is O(n²) — each
+                    // page scans and skips all previous rows. Chunking in memory
+                    // is O(n) and achieves the same progressive-rendering effect.
+                    let allResults = try qs.fetchRepresentativePairs(
+                        folderID: folderID, collectionID: collectionID, sortColumn: sortColumn
+                    )
+
                     let chunkSize = 20
-                    var offset = 0
                     var seenImages = Set<Int>()
                     var pass1Rejected: [DisplayPair] = []
                     var allAccepted: [DisplayPair] = []
+                    var idx = 0
 
-                    while !Task.isCancelled {
-                        let chunk = try qs.fetchRepresentativePairs(
-                            folderID: folderID, collectionID: collectionID,
-                            sortColumn: sortColumn, limit: chunkSize, offset: offset
-                        )
-                        guard !chunk.isEmpty else { break }
-                        let isLastChunk = chunk.count < chunkSize
+                    while !Task.isCancelled && idx < allResults.count {
+                        let end = min(idx + chunkSize, allResults.count)
+                        let chunk = allResults[idx..<end]
+                        idx = end
 
                         let converted = chunk.compactMap { result -> DisplayPair? in
                             let adjGeo = adjustedGeometricFree(result, peakFloor: capturedPeakFloor, varFloor: capturedVarFloor)
@@ -419,9 +423,6 @@ final class EngineController: ObservableObject {
                             continuation.yield(converted)
                             allAccepted.append(contentsOf: converted)
                         }
-
-                        if isLastChunk { break }
-                        offset += chunkSize
                     }
 
                     // Pass-2: cover images left unrepresented after pass-1.
