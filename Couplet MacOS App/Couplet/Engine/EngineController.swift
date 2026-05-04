@@ -374,31 +374,34 @@ final class EngineController: ObservableObject {
         return AsyncStream { continuation in
             let innerTask = Task.detached(priority: .userInitiated) { [weak self] in
                 do {
-                    let counts = try qs.fetchImagePairCounts(folderID: folderID, collectionID: collectionID)
-                    let pairCounts = Dictionary(uniqueKeysWithValues: counts.map { (Int($0.key), $0.value) })
+                    // fetchImagePairCounts runs concurrently with the pair cursor.
+                    // DatabasePool WAL allows concurrent readers, so both queries
+                    // execute in parallel. Counts are awaited after streaming so
+                    // they don't block the first pair from appearing.
+                    let countsTask = Task.detached(priority: .userInitiated) {
+                        try qs.fetchImagePairCounts(folderID: folderID, collectionID: collectionID)
+                    }
 
-                    // Fetch all rows in one query. LIMIT/OFFSET is O(n²) — each
-                    // page scans and skips all previous rows. Chunking in memory
-                    // is O(n) and achieves the same progressive-rendering effect.
-                    let allResults = try qs.fetchRepresentativePairs(
-                        folderID: folderID, collectionID: collectionID, sortColumn: sortColumn
-                    )
-
-                    let chunkSize = 20
+                    // Stream rows via GRDB cursor. SQLite walks idx_pairs_score in
+                    // descending order and emits matching rows as it goes — the first
+                    // 20-row chunk arrives within milliseconds without waiting for the
+                    // full result set. pairCounts are not yet available (counts run
+                    // concurrently), so pairCountA/B = 0 for the current load;
+                    // imagePairCounts is updated on @MainActor after streaming.
                     var seenImages = Set<Int>()
                     var pass1Rejected: [DisplayPair] = []
                     var allAccepted: [DisplayPair] = []
-                    var idx = 0
 
-                    while !Task.isCancelled && idx < allResults.count {
-                        let end = min(idx + chunkSize, allResults.count)
-                        let chunk = allResults[idx..<end]
-                        idx = end
+                    try qs.streamRepresentativePairs(
+                        folderID: folderID, collectionID: collectionID,
+                        sortColumn: sortColumn, chunkSize: 20
+                    ) { rawChunk in
+                        guard !Task.isCancelled else { throw CancellationError() }
 
-                        let converted = chunk.compactMap { result -> DisplayPair? in
+                        let converted = rawChunk.compactMap { result -> DisplayPair? in
                             let adjGeo = adjustedGeometricFree(result, peakFloor: capturedPeakFloor, varFloor: capturedVarFloor)
                             let pair = convertToPairFree(result, adjustedGeometricScore: adjGeo,
-                                                         weights: capturedWeights, pairCounts: pairCounts,
+                                                         weights: capturedWeights, pairCounts: [:],
                                                          thumbnailBase: capturedThumbnailBase)
                             if capturedMinThematic > 0 && pair.thematicScore < capturedMinThematic { return nil }
                             return pair
@@ -434,6 +437,12 @@ final class EngineController: ObservableObject {
                         }
                     }
 
+                    // Await counts (ran concurrently with the cursor — likely already
+                    // done by now). Silently ignore errors; missing counts just mean
+                    // pairCountA/B remain 0 and badges don't show for this session.
+                    let rawCounts = (try? await countsTask.value) ?? [:]
+                    let pairCounts = Dictionary(uniqueKeysWithValues: rawCounts.map { (Int($0.key), $0.value) })
+
                     // Populate cache on @MainActor so loadMorePairs can still slice it.
                     if !Task.isCancelled {
                         let finalSorted = allAccepted.sorted(by: pairSortComparator(for: sortOrder))
@@ -444,6 +453,8 @@ final class EngineController: ObservableObject {
                             self.representativePairsCacheKey = (folderID, collectionID, sortColumn)
                         }
                     }
+                } catch is CancellationError {
+                    // Normal early exit — stream was cancelled by a newer navigation.
                 } catch {
                     print("streamPage0Pairs error: \(error)")
                 }

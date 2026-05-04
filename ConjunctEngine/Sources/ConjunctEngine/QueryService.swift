@@ -78,11 +78,28 @@ public actor QueryService {
     public nonisolated func fetchRepresentativePairs(
         folderID: Int64? = nil,
         collectionID: Int64? = nil,
-        sortColumn: String,
-        limit: Int? = nil,
-        offset: Int = 0
+        sortColumn: String
     ) throws -> [PairQueryResult] {
+        var results: [PairQueryResult] = []
+        try streamRepresentativePairs(
+            folderID: folderID, collectionID: collectionID,
+            sortColumn: sortColumn, chunkSize: Int.max
+        ) { results.append(contentsOf: $0) }
+        return results
+    }
 
+    /// Streams pairs in chunks using a GRDB cursor inside a single read transaction.
+    /// Rows arrive as SQLite produces them via the compositeScore index scan, so the
+    /// first chunk is available within milliseconds rather than after the full result
+    /// set is collected. `process` is called synchronously for each chunk; throw
+    /// `CancellationError` to stop early.
+    public nonisolated func streamRepresentativePairs(
+        folderID: Int64? = nil,
+        collectionID: Int64? = nil,
+        sortColumn: String,
+        chunkSize: Int = 20,
+        process: ([PairQueryResult]) throws -> Void
+    ) throws {
         var conditions: [String] = [
             "a.isActive = 1",
             "b.isActive = 1",
@@ -99,16 +116,6 @@ public actor QueryService {
         }
 
         let where_ = "WHERE " + conditions.joined(separator: " AND ")
-        let limitClause = limit.map { "LIMIT \($0) OFFSET \(offset)" } ?? ""
-
-        // Fetch all active pairs ordered by the requested sort column.
-        // The greedy 1-per-image selection happens in EngineController after
-        // display-time score adjustments are applied. We need the full table
-        // as the candidate pool — any SQL pre-filtering (e.g. top-N per image)
-        // leaves hub-heavy libraries with insufficient fallback diversity,
-        // causing many images to go unrepresented.
-        // When limit/offset are supplied the caller fetches in chunks for
-        // progressive rendering; the same candidate-pool rationale applies.
         let sql = """
             SELECT
                 p.id        AS pairID,
@@ -150,17 +157,16 @@ public actor QueryService {
             JOIN folders fb ON fb.id = b.folderID
             \(where_)
             ORDER BY p.\(sortColumn) DESC
-            \(limitClause)
         """
 
-        return try db.read { db in
-            let rows = try Row.fetchAll(db, sql: sql, arguments: StatementArguments(args))
-            return rows.map { row in
-                // captureDate is stored as INTEGER in SQLite; GRDB's `as? Double`
-                // silently returns nil for int64 values. Coerce explicitly.
+        try db.read { db in
+            let cursor = try Row.fetchCursor(db, sql: sql, arguments: StatementArguments(args))
+            var chunk: [PairQueryResult] = []
+            chunk.reserveCapacity(min(chunkSize, 64))
+            while let row = try cursor.next() {
                 let tsA = (row["captureDateA"] as? Double) ?? (row["captureDateA"] as? Int64).map { Double($0) }
                 let tsB = (row["captureDateB"] as? Double) ?? (row["captureDateB"] as? Int64).map { Double($0) }
-                return PairQueryResult(
+                chunk.append(PairQueryResult(
                     pairID: row["pairID"] as! Int64,
                     imageAID: row["imageAID"] as! Int64,
                     imageBID: row["imageBID"] as! Int64,
@@ -195,8 +201,13 @@ public actor QueryService {
                     compositeScore: row["compositeScore"] as! Double,
                     rationale: row["rationale"] as! String,
                     userDecision: row["userDecision"] as? String
-                )
+                ))
+                if chunk.count == chunkSize {
+                    try process(chunk)
+                    chunk.removeAll(keepingCapacity: true)
+                }
             }
+            if !chunk.isEmpty { try process(chunk) }
         }
     }
 
