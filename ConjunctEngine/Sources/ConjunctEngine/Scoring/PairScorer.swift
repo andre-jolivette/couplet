@@ -123,16 +123,10 @@ public enum PairScorer {
         let clipSim = thematicScore(vA.clipEmbeddingFloats, vB.clipEmbeddingFloats)
         if clipSim > 0.88 {
             composite *= 0.40
-        }
-
-        // Secondary CLIP tier: same-subject discount.
-        // Pairs with high CLIP similarity but no meaningful thematic connection are
-        // likely same-subject-type (dogs/dogs, cars/cars) with no cross-context resonance.
-        // Thematic guard avoids penalising visually-similar pairs that are genuinely
-        // resonant (e.g. two protest photos sharing bodily_gesture + tension_conflict).
-        // Diagnostic: print clipSim for affected pairs during re-index to verify thresholds.
-        if clipSim > 0.75 && thematic < 0.20 {
-            print("[DIAG #42] same-subject discount clipSim=\(String(format: "%.3f", clipSim)) thematic=\(String(format: "%.3f", thematic)) composite=\(String(format: "%.3f", composite)) \(filenameA) + \(filenameB)")
+        } else if clipSim > 0.75 && thematic < 0.20 {
+            // Secondary CLIP tier: same-subject discount (dogs/dogs, cars/cars).
+            // Thematic guard avoids penalising visually-similar pairs that are genuinely
+            // resonant (e.g. two protest photos sharing bodily_gesture + tension_conflict).
             composite *= 0.65
         }
 
