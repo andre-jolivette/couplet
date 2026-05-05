@@ -219,6 +219,16 @@ public final class DatabaseManager: Sendable {
             try db.execute(sql: "UPDATE images SET caption = NULL")
         }
 
+        // ── v8: selectedFor — records which topK path inserted the pair ───
+        // 'thematic' = entered exclusively via thematic topK-10; 'composite' = entered
+        // via composite topK-150 (possibly also thematic). NULL = pre-migration row;
+        // app falls back to post-hoc score comparison for those rows.
+        migrator.registerMigration("v8_selected_for") { db in
+            try db.alter(table: "pairs") { t in
+                t.add(column: "selectedFor", .text)
+            }
+        }
+
         try migrator.migrate(pool)
     }
 }

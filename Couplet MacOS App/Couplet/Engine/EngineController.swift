@@ -673,12 +673,13 @@ final class EngineController: ObservableObject {
     }
 
     private func convertToPair(_ r: PairQueryResult, adjustedGeometricScore: Float) -> DisplayPair {
-        // Label as thematic if the thematic component score reaches the minimum
-        // threshold used in scoring — this captures caption-boosted pairs that
-        // may have lower raw thematic than geometric/aesthetic components.
         let geoScore = adjustedGeometricScore
         let modality: PairingModality
-        if r.thematicScore >= 0.25 && r.thematicScore > Double(geoScore) {
+        // selectedFor records the actual topK path at scoring time; use it directly
+        // when available. NULL (pre-v8 rows) fall back to post-hoc score comparison.
+        if r.selectedFor == "thematic" {
+            modality = .thematic
+        } else if r.thematicScore >= 0.25 && r.thematicScore > Double(geoScore) {
             modality = .thematic
         } else if Double(geoScore) >= r.aestheticScore {
             modality = .geometric

@@ -366,10 +366,14 @@ public actor IndexingEngine {
             }
 
             var toInsert = [String: PairScore]()
+            var compositeKeys = Set<String>()
             for (_, scores) in perImage {
                 for s in scores.sorted(by: { $0.compositeScore > $1.compositeScore }).prefix(topK) {
                     let key = "\(s.imageAID)_\(s.imageBID)"
-                    if toInsert[key] == nil { toInsert[key] = s }
+                    if toInsert[key] == nil {
+                        toInsert[key] = s
+                        compositeKeys.insert(key)
+                    }
                 }
             }
 
@@ -385,7 +389,7 @@ public actor IndexingEngine {
                 }
             }
 
-            for s in toInsert.values {
+            for (key, s) in toInsert {
                 var record = PairRecord(
                     imageAID: s.imageAID, imageBID: s.imageBID,
                     aestheticScore: Double(s.aestheticScore),
@@ -397,6 +401,7 @@ public actor IndexingEngine {
                     maxGridVariance: Double(s.maxGridVariance),
                     edgePeakednessMult: Double(s.edgePeakednessMult),
                     gridVarianceMult: Double(s.gridVarianceMult),
+                    selectedFor: compositeKeys.contains(key) ? "composite" : "thematic",
                     thematicScore: Double(s.thematicScore),
                     compositeScore: Double(s.compositeScore),
                     rationale: s.rationale
@@ -497,10 +502,14 @@ public actor IndexingEngine {
             }
 
             var toInsert = [String: PairScore]()
+            var compositeKeys = Set<String>()
             for (_, scores) in perImage {
                 for s in scores.sorted(by: { $0.compositeScore > $1.compositeScore }).prefix(topK) {
                     let key = "\(s.imageAID)_\(s.imageBID)"
-                    if toInsert[key] == nil { toInsert[key] = s }
+                    if toInsert[key] == nil {
+                        toInsert[key] = s
+                        compositeKeys.insert(key)
+                    }
                 }
             }
 
@@ -516,7 +525,7 @@ public actor IndexingEngine {
                 }
             }
 
-            for s in toInsert.values {
+            for (key, s) in toInsert {
                 var record = PairRecord(
                     imageAID: s.imageAID, imageBID: s.imageBID,
                     aestheticScore: Double(s.aestheticScore),
@@ -528,6 +537,7 @@ public actor IndexingEngine {
                     maxGridVariance: Double(s.maxGridVariance),
                     edgePeakednessMult: Double(s.edgePeakednessMult),
                     gridVarianceMult: Double(s.gridVarianceMult),
+                    selectedFor: compositeKeys.contains(key) ? "composite" : "thematic",
                     thematicScore: Double(s.thematicScore),
                     compositeScore: Double(s.compositeScore),
                     rationale: s.rationale

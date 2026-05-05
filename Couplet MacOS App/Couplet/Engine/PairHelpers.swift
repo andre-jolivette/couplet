@@ -39,7 +39,9 @@ nonisolated func convertToPairFree(
 ) -> DisplayPair {
     let geoScore = adjustedGeometricScore
     let modality: PairingModality
-    if r.thematicScore >= 0.25 && r.thematicScore > Double(geoScore) {
+    if r.selectedFor == "thematic" {
+        modality = .thematic
+    } else if r.thematicScore >= 0.25 && r.thematicScore > Double(geoScore) {
         modality = .thematic
     } else if Double(geoScore) >= r.aestheticScore {
         modality = .geometric
