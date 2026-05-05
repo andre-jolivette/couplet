@@ -74,9 +74,7 @@ Four clusters use two-signal gating (require ≥1 keyword from each of two vocab
 ## Open Backlog Items
 | # | Title | Notes |
 |---|-------|-------|
-| 25 | Full re-caption pass | 57% of captions truncated mid-sentence; num_predict raised to 400 but DB not yet refreshed |
-| 27 | Aesthetic score inflation | 0.968 for weak pair — investigate harmony sub-score; consider cross-axis confidence penalty |
-| 28 | Same-subject discount | Dogs/cars pairing with no cross-context resonance; possible CLIP secondary ceiling (>0.75 → ×0.65) |
+| 43 | Layout recursion warning | Console: "-layoutSubtreeIfNeeded on a view which is already being laid out" — once per launch, likely PassthroughHostingView insertion timing. See decision #43. |
 
 ## Commit Convention
 Use `#ID` prefix matching the decisions log:
