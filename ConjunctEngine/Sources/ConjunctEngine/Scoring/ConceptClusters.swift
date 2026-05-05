@@ -207,7 +207,9 @@ public enum ConceptClusters {
         // deliberate observation.
         Cluster(name: "looking_watching", keywords: [
             // deliberate gaze / sustained watching
-            "watch", "stare", "gaze", "peer", "squint",
+            // "gaz" added alongside "gaze": the stemmer strips "-ing" from 7-char words
+            // (gazing → gaz) but not 6-char "gazing"-fail-case words, so both forms needed.
+            "watch", "stare", "gaze", "gaz", "peer", "squint",
             "glance", "glimps", "observ", "witness", "behold",
             "survey", "scan", "scrutin",
             // being seen / caught in the act
@@ -373,6 +375,47 @@ public enum ConceptClusters {
                 ["nurtur", "groom", "nest", "habitual", "intimate", "caring"]
             ]
         ),
+
+        // animal_presence: two-signal — requires BOTH a specific animal subject AND
+        // a behavioral or relational context word. Single-signal "dog" would fire on
+        // nearly any street caption that incidentally mentions a dog in the background.
+        //
+        // Tier 0.75: animal presence is meaningful without being as emotionally
+        // specific as grief or tenderness. When both images center on an animal
+        // subject the connection is worth surfacing, but it doesn't carry the weight
+        // of a shared human emotional experience.
+        //
+        // G1 uses exact short nouns (dog, cat, horse, bird) that the stemmer leaves
+        // unchanged. G2 uses behavioral/relational words that indicate the animal is
+        // the emotional anchor of the scene, not just scenery.
+        //
+        // Diagnostic basis (#9, 2026-05-05): 3,244 animal-animal pairs in DB;
+        // 87 (2.7%) score below thematic 0.20 because no current cluster fires for
+        // both images — e.g., "lone horse silhouette" + "cowboy in landscape" share
+        // no cluster despite both being equine subjects.
+        Cluster(
+            name: "animal_presence",
+            keywords: [
+                // G1: specific animal subject nouns
+                "dog", "cat", "horse", "bird", "pup", "mutt", "hound",
+                "stray", "pigeon", "crow", "donkey", "canine", "equine",
+                "feline", "anim", "creature", "colt", "mare",
+                // G2: behavioral or relational context (animal as emotional anchor)
+                "leash", "tether", "patient", "roam", "trot", "sniff",
+                "paw", "tongue", "companion", "follow", "wag", "rider",
+                "mount", "gallop"
+            ],
+            requiredGroups: [
+                // G1 — a specific animal must be present as subject
+                ["dog", "cat", "horse", "bird", "pup", "mutt", "hound",
+                 "stray", "pigeon", "crow", "donkey", "canine", "equine",
+                 "feline", "anim", "creature", "colt", "mare"],
+                // G2 — animal behavior or human-animal relational context
+                ["leash", "tether", "patient", "roam", "trot", "sniff",
+                 "paw", "tongue", "companion", "follow", "wag", "rider",
+                 "mount", "gallop"]
+            ]
+        ),
     ]
 
     // MARK: - Cluster weights
@@ -419,6 +462,8 @@ public enum ConceptClusters {
         "domestic_intimacy":      1.0,
         // Tier 0.75 — meaningful; two-signal gate prevents ambient over-firing
         "humor_absurdity":        0.75,
+        // Tier 0.75 — animal presence as emotional anchor (#9, 2026-05-05)
+        "animal_presence":        0.75,
     ]
 
     // MARK: - Weighted Dice floor
