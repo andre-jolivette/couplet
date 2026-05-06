@@ -74,9 +74,17 @@ Four clusters use two-signal gating (require ≥1 keyword from each of two vocab
 ## Open Backlog Items
 | # | Title | Notes |
 |---|-------|-------|
-| 25 | Full re-caption pass | 57% of captions truncated mid-sentence; num_predict raised to 400 but DB not yet refreshed |
-| 27 | Aesthetic score inflation | 0.968 for weak pair — investigate harmony sub-score; consider cross-axis confidence penalty |
-| 28 | Same-subject discount | Dogs/cars pairing with no cross-context resonance; possible CLIP secondary ceiling (>0.75 → ×0.65) |
+| 1 | Store selected_for flag at scoring time | Add `selectedFor` column (thematic/composite) to pairs table at INSERT time. Use for modality labeling instead of post-hoc score comparison. Fixes labeling bias where geometric dominates. See decision #1. |
+| 7 | Settings that require re-index | dHash threshold + CLIP similarity ceiling affect data written to DB; UI should distinguish these from cheap runtime settings. See decision #7. |
+| 8 | Double CLIP build on launch | Race in `engineBuildTask?.cancel()` on some launches. No crashes recently — monitor. See decision #8. |
+| 9 | ConceptClusters vocabulary audit | Audit qwen captions for language patterns clusters don't catch. Diagnostic-first; implement vocabulary additions only after patterns are clear. See decision #9. |
+| 11 | FileAccessCoordinator centralization | Centralise security-scoped bookmark management; detect invalid bookmarks; clean up stale entries on `removeFolder`; handle offline volumes. See decision #11. |
+| 14 | Continue geometric scorer tuning | Step distinctiveness multiplier exponent down from 0.4; add multiplier-strength slider; evaluate normalization anchors. See decision #14. |
+| 16 | Center-cell discount | Slider + Apply button for peripheral composition cell weighting. Requires re-score (not full re-index). See decision #16. |
+| 21 | Caption UI in lightbox info rail | Collapsed-by-default captions with "show more" toggle; strip redundant qwen openers (optional). See decision #21. |
+| 23 | Revisit dot badge on pair grid tiles | Recalibrate threshold + improve visual legibility after topK and scoring changes settle. See decision #23. |
+| 35 | "Find Pairs For…" — explore or retire | Button removed (no implementation); evaluate vs. existing anchor/filmstrip flow before building. See decision #35. |
+| 43 | Layout recursion warning | Console: "-layoutSubtreeIfNeeded on a view which is already being laid out" — once per launch, likely PassthroughHostingView insertion timing. See decision #43. |
 
 ## Commit Convention
 Use `#ID` prefix matching the decisions log:

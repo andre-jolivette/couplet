@@ -34,6 +34,8 @@ public struct PairQueryResult: Sendable {
     /// Nil for pairs scored before v6_distinctivenessMultipliers migration.
     public let edgePeakednessMult: Double?
     public let gridVarianceMult: Double?
+    /// Nil for pairs scored before v8_selected_for migration; falls back to post-hoc labeling.
+    public let selectedFor: String?
     public let thematicScore: Double
     public let compositeScore: Double
     public let rationale: String

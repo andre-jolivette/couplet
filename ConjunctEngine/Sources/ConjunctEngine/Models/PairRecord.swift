@@ -20,6 +20,8 @@ public struct PairRecord: Codable, FetchableRecord, MutablePersistableRecord, Se
     public var edgePeakednessMult: Double?
     /// √(normVar_A × normVar_B). Nil for pairs scored before v6.
     public var gridVarianceMult: Double?
+    /// Which topK path inserted this pair: 'thematic' or 'composite'. Nil for pre-v8 rows.
+    public var selectedFor: String?
     public var thematicScore: Double
     public var compositeScore: Double
     public var rationale: String
@@ -43,6 +45,7 @@ public struct PairRecord: Codable, FetchableRecord, MutablePersistableRecord, Se
         maxGridVariance: Double? = nil,
         edgePeakednessMult: Double? = nil,
         gridVarianceMult: Double? = nil,
+        selectedFor: String? = nil,
         thematicScore: Double,
         compositeScore: Double,
         rationale: String,
@@ -59,6 +62,7 @@ public struct PairRecord: Codable, FetchableRecord, MutablePersistableRecord, Se
         self.maxGridVariance = maxGridVariance
         self.edgePeakednessMult = edgePeakednessMult
         self.gridVarianceMult = gridVarianceMult
+        self.selectedFor = selectedFor
         self.thematicScore = thematicScore
         self.compositeScore = compositeScore
         self.rationale = String(rationale.prefix(120))
