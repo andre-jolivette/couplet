@@ -51,6 +51,7 @@ public enum PairScorer {
         captureDateA: Double? = nil, captureDateB: Double? = nil,
         filenameA: String = "", filenameB: String = "",
         captionA: String = "", captionB: String = "",
+        captionEmbeddingA: [Float]? = nil, captionEmbeddingB: [Float]? = nil,
         weights: ScoringWeights = .default
     ) -> PairScore {
         let (aID, bID, vA, vB): (Int64, Int64, FeatureVector, FeatureVector) =
@@ -58,7 +59,24 @@ public enum PairScorer {
                 ? (imageAID, imageBID, vectorA, vectorB)
                 : (imageBID, imageAID, vectorB, vectorA)
 
-        // Thematic: use concept-cluster scoring when captions are available.
+        // Thematic: caption embedding cosine (primary) + weighted Dice (secondary).
+        //
+        // When caption embeddings are available, the blend is:
+        //   thematic = 0.65 × normEmbeddingSim + 0.35 × clusterScore
+        // where normEmbeddingSim = max(0, (cosine - 0.50) / 0.50) — a floor
+        // subtraction that removes the ~0.55 baseline all caption pairs share in
+        // the nomic-embed-text embedding space. Calibrated against 7 real caption
+        // pairs: grief-grief=0.732, protest-ritual=0.658, urban-urban=0.660,
+        // grief-joy=0.568, grief-urban=0.551. After flooring at 0.50:
+        //   grief-grief: norm=0.464 → 0.302 (passes boost)
+        //   protest-ritual: norm=0.316 → 0.205 (passes boost — key zero-cluster case)
+        //   grief-joy: norm=0.136 → 0.088 (does not pass boost)
+        //   grief-urban: norm=0.102 → 0.066 (does not pass boost)
+        // See decision #44 in DECISIONS.md for full calibration rationale.
+        //
+        // When embeddings are absent but captions are present, falls back to
+        // cluster-only weighted Dice. When captions are absent, falls back to
+        // CLIP image embedding cosine similarity.
         let thematic: Float
         let hasCaptions = !captionA.isEmpty && !captionB.isEmpty
         if hasCaptions {
@@ -84,14 +102,28 @@ public enum PairScorer {
             let weightedSharedSum = shared.reduce(0.0 as Float) { $0 + (ConceptClusters.weights[$1] ?? 0.5) }
             let saturated = weightedSharedSum > 5.0
 
+            let clusterScore: Float
             if saturated || !hasAsymmetry {
-                thematic = 0
+                clusterScore = 0
             } else {
                 // Weighted Dice via ConceptClusters — emotionally specific clusters
                 // (weight 1.0) contribute more than ambient setting clusters (weight 0.2).
                 // Meaningful-tier gate, asymmetry gate, and saturation gate all applied
                 // above or inside weightedDice; formula lives in one place.
-                thematic = ConceptClusters.weightedDice(clustersA: clustersA, clustersB: clustersB)
+                clusterScore = ConceptClusters.weightedDice(clustersA: clustersA, clustersB: clustersB)
+            }
+
+            if let embA = captionEmbeddingA, let embB = captionEmbeddingB,
+               !embA.isEmpty, !embB.isEmpty {
+                let rawCosine = captionEmbeddingCosineSim(embA, embB)
+                // Floor subtraction: nomic-embed-text cosines live in [~0.55, ~0.95]
+                // for real captions; subtracting the 0.50 floor before scaling
+                // expands the discriminative range to [0, 1].
+                let kFloor: Float = 0.50
+                let normSim = max(0, (rawCosine - kFloor) / (1.0 - kFloor))
+                thematic = 0.65 * normSim + 0.35 * clusterScore
+            } else {
+                thematic = clusterScore
             }
         } else {
             thematic = thematicScore(vA.clipEmbeddingFloats, vB.clipEmbeddingFloats)
@@ -236,13 +268,30 @@ public enum PairScorer {
         }
     }
 
-    // MARK: - Original CLIP-based thematic score (fallback)
+    // MARK: - Original CLIP-based thematic score (fallback when no captions)
 
     static func thematicScore(_ a: [Float], _ b: [Float]) -> Float {
         guard a.count == b.count, !a.isEmpty else { return 0 }
         var dot: Float = 0
         vDSP_dotpr(a, 1, b, 1, &dot, vDSP_Length(a.count))
         return (dot + 1) / 2
+    }
+
+    /// Raw cosine similarity between two caption embedding vectors, clamped to [0, 1].
+    /// nomic-embed-text produces L2-normalised vectors so cosine = dot product,
+    /// but we compute it defensively. Unlike CLIP image embeddings (which range [-1, 1]
+    /// and need the (dot+1)/2 shift), text embeddings are always positive-valued.
+    static func captionEmbeddingCosineSim(_ a: [Float], _ b: [Float]) -> Float {
+        guard a.count == b.count, !a.isEmpty else { return 0 }
+        var dot: Float = 0
+        var normA: Float = 0
+        var normB: Float = 0
+        vDSP_dotpr(a, 1, b, 1, &dot, vDSP_Length(a.count))
+        vDSP_svesq(a, 1, &normA, vDSP_Length(a.count))
+        vDSP_svesq(b, 1, &normB, vDSP_Length(b.count))
+        let denom = sqrt(normA) * sqrt(normB)
+        guard denom > 1e-8 else { return 0 }
+        return max(0, min(1, dot / denom))
     }
 
     static func aestheticScore(_ vA: FeatureVector, _ vB: FeatureVector) -> (Float, String) {
