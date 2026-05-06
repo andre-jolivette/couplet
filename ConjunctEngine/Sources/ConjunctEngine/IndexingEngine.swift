@@ -12,6 +12,7 @@ public actor IndexingEngine {
     private let db: DatabaseManager
     private let clipEngine: any CLIPInferenceEngine
     private let captioningEngine: any CaptioningEngine
+    private let embeddingEngine: any CaptionEmbeddingEngine
     private let maxConcurrency: Int
     /// Holds the running cross-folder (phase 2) scoring task so it can be
     /// cancelled when a new index is triggered before phase 2 finishes.
@@ -21,11 +22,13 @@ public actor IndexingEngine {
         db: DatabaseManager,
         clipEngine: any CLIPInferenceEngine,
         captioningEngine: any CaptioningEngine = MockCaptioningEngine(),
+        embeddingEngine: any CaptionEmbeddingEngine = MockEmbeddingEngine(),
         maxConcurrency: Int = min(ProcessInfo.processInfo.processorCount, 4)
     ) {
         self.db = db
         self.clipEngine = clipEngine
         self.captioningEngine = captioningEngine
+        self.embeddingEngine = embeddingEngine
         self.maxConcurrency = maxConcurrency
     }
 
@@ -263,6 +266,52 @@ public actor IndexingEngine {
                 phase: .captioning, itemsComplete: captioned, itemsTotal: captionTotal
             ))
         }
+        // ── Phase 3.6: Caption embedding generation ──────────────────────
+        // Compute nomic-embed-text embeddings for all captioned images that
+        // don't have one yet. Same backfill pattern as the caption phase —
+        // runs across the whole library, skips images already embedded.
+        // MockEmbeddingEngine returns [] immediately so this is a no-op when
+        // ollama is not available.
+        continuation.yield(IndexingProgress(
+            phase: .embedding, itemsComplete: 0, itemsTotal: 0
+        ))
+
+        let unembedded: [(Int64, String)] = try db.read { db in
+            try Row.fetchAll(db, sql: """
+                SELECT id, caption FROM images
+                WHERE isActive = 1
+                  AND caption IS NOT NULL AND caption != ''
+                  AND captionEmbedding IS NULL
+            """).compactMap { row -> (Int64, String)? in
+                guard let id = row["id"] as? Int64,
+                      let caption = row["caption"] as? String else { return nil }
+                return (id, caption)
+            }
+        }
+
+        var embedded = 0
+        let embedTotal = unembedded.count
+        for (imageID, caption) in unembedded {
+            try Task.checkCancellation()
+            do {
+                let floats = try await embeddingEngine.embed(caption: caption)
+                guard !floats.isEmpty else { continue }
+                let data: Data = floats.withUnsafeBufferPointer { Data(buffer: $0) }
+                try db.write { db in
+                    try db.execute(
+                        sql: "UPDATE images SET captionEmbedding = ? WHERE id = ?",
+                        arguments: [data, imageID]
+                    )
+                }
+                embedded += 1
+            } catch {
+                print("EMBED: skipped \(imageID) — \(error.localizedDescription)")
+            }
+            continuation.yield(IndexingProgress(
+                phase: .embedding, itemsComplete: embedded, itemsTotal: embedTotal
+            ))
+        }
+
         // ── Phase 4: Intra-folder pair scoring ───────────────────────────
         // Scores only images in the current scan batch against each other.
         // Cross-folder scoring (batch × all other) runs as phase 2 in background
@@ -279,21 +328,25 @@ public actor IndexingEngine {
         let batchVectors = allHeroVectors.filter { batchIDs.contains($0.imageID) }
 
         // Build metadata only for batch images — sufficient for intra-folder scoring.
-        typealias ImageMeta = (captureDate: Double?, filename: String, caption: String)
+        typealias ImageMeta = (captureDate: Double?, filename: String, caption: String, captionEmbedding: [Float]?)
         let imageMeta: [Int64: ImageMeta] = try db.read { db in
             guard !batchIDs.isEmpty else { return [:] }
             let ids = batchIDs.map { "\($0)" }.joined(separator: ",")
             let rows = try Row.fetchAll(
-                db, sql: "SELECT id, captureDate, filename, caption FROM images WHERE id IN (\(ids))"
+                db, sql: "SELECT id, captureDate, filename, caption, captionEmbedding FROM images WHERE id IN (\(ids))"
             )
             var result = [Int64: ImageMeta]()
             for row in rows {
                 let id = row["id"] as! Int64
+                let embedding: [Float]? = (row["captionEmbedding"] as? Data).map { data in
+                    data.withUnsafeBytes { ptr in Array(ptr.bindMemory(to: Float.self)) }
+                }
                 result[id] = (
                     captureDate: (row["captureDate"] as? Double)
                         ?? (row["captureDate"] as? Int64).map(Double.init),
                     filename: row["filename"] as? String ?? "",
-                    caption: row["caption"] as? String ?? ""
+                    caption: row["caption"] as? String ?? "",
+                    captionEmbedding: embedding
                 )
             }
             return result
@@ -318,6 +371,8 @@ public actor IndexingEngine {
                     filenameB: metaB?.filename ?? "",
                     captionA: metaA?.caption ?? "",
                     captionB: metaB?.caption ?? "",
+                    captionEmbeddingA: metaA?.captionEmbedding,
+                    captionEmbeddingB: metaB?.captionEmbedding,
                     weights: weights
                 )
                 if s.compositeScore > 0 {
@@ -436,19 +491,23 @@ public actor IndexingEngine {
 
         guard !batchVectors.isEmpty, !otherVectors.isEmpty else { return }
 
-        typealias ImageMeta = (captureDate: Double?, filename: String, caption: String)
+        typealias ImageMeta = (captureDate: Double?, filename: String, caption: String, captionEmbedding: [Float]?)
         let imageMeta: [Int64: ImageMeta] = try db.read { db in
             let rows = try Row.fetchAll(
-                db, sql: "SELECT id, captureDate, filename, caption FROM images WHERE isActive = 1"
+                db, sql: "SELECT id, captureDate, filename, caption, captionEmbedding FROM images WHERE isActive = 1"
             )
             var result = [Int64: ImageMeta]()
             for row in rows {
                 let id = row["id"] as! Int64
+                let embedding: [Float]? = (row["captionEmbedding"] as? Data).map { data in
+                    data.withUnsafeBytes { ptr in Array(ptr.bindMemory(to: Float.self)) }
+                }
                 result[id] = (
                     captureDate: (row["captureDate"] as? Double)
                         ?? (row["captureDate"] as? Int64).map(Double.init),
                     filename: row["filename"] as? String ?? "",
-                    caption: row["caption"] as? String ?? ""
+                    caption: row["caption"] as? String ?? "",
+                    captionEmbedding: embedding
                 )
             }
             return result
@@ -471,6 +530,8 @@ public actor IndexingEngine {
                     filenameB: metaB?.filename ?? "",
                     captionA: metaA?.caption ?? "",
                     captionB: metaB?.caption ?? "",
+                    captionEmbeddingA: metaA?.captionEmbedding,
+                    captionEmbeddingB: metaB?.captionEmbedding,
                     weights: weights
                 )
                 if s.compositeScore > 0 {
