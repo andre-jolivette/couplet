@@ -113,32 +113,7 @@ public enum PairScorer {
                 clusterScore = ConceptClusters.weightedDice(clustersA: clustersA, clustersB: clustersB)
             }
 
-            if let embA = captionEmbeddingA, let embB = captionEmbeddingB,
-               !embA.isEmpty, !embB.isEmpty {
-                let rawCosine = captionEmbeddingCosineSim(embA, embB)
-
-                // Embedding ceiling: rawCosine > 0.85 means captions describe the same
-                // scene (sequential shots, near-duplicate frames). Cap thematic at the
-                // ambient floor so same-scene pairs can't rank in the thematic topK-10
-                // or boost composite. This mirrors the CLIP image ceiling (>0.88) but
-                // applied to the thematic score rather than composite.
-                // Threshold calibrated: different-scene resonant pairs land at 0.65–0.80;
-                // same-scene sequential shots land above 0.85.
-                let kEmbeddingCeiling: Float = 0.85
-                let kAmbientFloor: Float = 0.10
-                if rawCosine > kEmbeddingCeiling {
-                    thematic = min(clusterScore, kAmbientFloor)
-                } else {
-                    // Floor subtraction: nomic-embed-text cosines live in [~0.55, ~0.95]
-                    // for real captions; subtracting the 0.50 floor before scaling
-                    // expands the discriminative range to [0, 1].
-                    let kFloor: Float = 0.50
-                    let normSim = max(0, (rawCosine - kFloor) / (1.0 - kFloor))
-                    thematic = 0.65 * normSim + 0.35 * clusterScore
-                }
-            } else {
-                thematic = clusterScore
-            }
+            thematic = clusterScore
         } else {
             thematic = thematicScore(vA.clipEmbeddingFloats, vB.clipEmbeddingFloats)
         }

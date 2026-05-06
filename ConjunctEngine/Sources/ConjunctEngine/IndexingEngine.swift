@@ -266,51 +266,9 @@ public actor IndexingEngine {
                 phase: .captioning, itemsComplete: captioned, itemsTotal: captionTotal
             ))
         }
-        // ── Phase 3.6: Caption embedding generation ──────────────────────
-        // Compute nomic-embed-text embeddings for all captioned images that
-        // don't have one yet. Same backfill pattern as the caption phase —
-        // runs across the whole library, skips images already embedded.
-        // MockEmbeddingEngine returns [] immediately so this is a no-op when
-        // ollama is not available.
-        continuation.yield(IndexingProgress(
-            phase: .embedding, itemsComplete: 0, itemsTotal: 0
-        ))
-
-        let unembedded: [(Int64, String)] = try db.read { db in
-            try Row.fetchAll(db, sql: """
-                SELECT id, caption FROM images
-                WHERE isActive = 1
-                  AND caption IS NOT NULL AND caption != ''
-                  AND captionEmbedding IS NULL
-            """).compactMap { row -> (Int64, String)? in
-                guard let id = row["id"] as? Int64,
-                      let caption = row["caption"] as? String else { return nil }
-                return (id, caption)
-            }
-        }
-
-        var embedded = 0
-        let embedTotal = unembedded.count
-        for (imageID, caption) in unembedded {
-            try Task.checkCancellation()
-            do {
-                let floats = try await embeddingEngine.embed(caption: caption)
-                guard !floats.isEmpty else { continue }
-                let data: Data = floats.withUnsafeBufferPointer { Data(buffer: $0) }
-                try db.write { db in
-                    try db.execute(
-                        sql: "UPDATE images SET captionEmbedding = ? WHERE id = ?",
-                        arguments: [data, imageID]
-                    )
-                }
-                embedded += 1
-            } catch {
-                print("EMBED: skipped \(imageID) — \(error.localizedDescription)")
-            }
-            continuation.yield(IndexingProgress(
-                phase: .embedding, itemsComplete: embedded, itemsTotal: embedTotal
-            ))
-        }
+        // ── Phase 3.6: Caption embedding generation (dormant) ────────────
+        // Infrastructure preserved but not active — embedding is not currently
+        // used in scoring. Re-enable when a scoring role is established.
 
         // ── Phase 4: Intra-folder pair scoring ───────────────────────────
         // Scores only images in the current scan batch against each other.
