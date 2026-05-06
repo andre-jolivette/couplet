@@ -229,6 +229,18 @@ public final class DatabaseManager: Sendable {
             }
         }
 
+        // ── v9: Caption embedding vector ──────────────────────────────────
+        // 768-dim L2-normalised float vector from nomic-embed-text, serialised as
+        // raw bytes (768 × 4 = 3,072 bytes per image). NULL = not yet embedded.
+        // Stored alongside caption on images so the imageMeta query needs no JOIN.
+        // Backfill: computed for all images with caption IS NOT NULL AND captionEmbedding
+        // IS NULL on every re-index pass — same pattern as the caption backfill.
+        migrator.registerMigration("v9_caption_embeddings") { db in
+            try db.alter(table: "images") { t in
+                t.add(column: "captionEmbedding", .blob)
+            }
+        }
+
         try migrator.migrate(pool)
     }
 }
