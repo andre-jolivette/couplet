@@ -390,7 +390,7 @@ public actor IndexingEngine {
                 }
             }
 
-            let thematicK = max(10, topK / 5)
+            let thematicK = max(30, topK / 3)
             for (_, scores) in perImage {
                 let thematicCandidates = scores
                     .filter { $0.thematicScore >= 0.20 }
@@ -532,7 +532,7 @@ public actor IndexingEngine {
                 }
             }
 
-            let thematicK = max(10, topK / 5)
+            let thematicK = max(30, topK / 3)
             for (_, scores) in perImage {
                 let thematicCandidates = scores
                     .filter { $0.thematicScore >= 0.20 }
