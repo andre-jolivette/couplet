@@ -16,7 +16,6 @@ final class EngineController: ObservableObject {
     /// True once a real CLIPCoreMLEngine is loaded (not mock)
     @Published private(set) var hasRealCLIP: Bool = false
     @Published private(set) var captioningAvailable: Bool = false
-    @Published private(set) var embeddingAvailable: Bool = false
     /// Total pair count per image (both sides), in the current folder context.
     /// Refreshed on every page-0 load of representative pairs.
     @Published private(set) var imagePairCounts: [Int: Int] = [:]
@@ -592,13 +591,11 @@ final class EngineController: ObservableObject {
             guard let self else { return }
             let clip = await self.buildCLIPEngine()
             let captioning = await self.buildCaptioningEngine()
-            let embedding = await self.buildEmbeddingEngine()
             guard !Task.isCancelled else { return }
             await MainActor.run {
                 self.indexingEngine = IndexingEngine(
                     db: db, clipEngine: clip,
-                    captioningEngine: captioning,
-                    embeddingEngine: embedding
+                    captioningEngine: captioning
                 )
             }
         }
@@ -613,17 +610,6 @@ final class EngineController: ObservableObject {
         }
         print("CAPTION: ollama not available — captioning disabled. Install ollama and run: ollama pull qwen2.5vl:7b && ollama create qwen2.5vl-caption -f ConjunctEngine/Modelfile")
         return MockCaptioningEngine()
-    }
-
-    private func buildEmbeddingEngine() async -> any CaptionEmbeddingEngine {
-        let available = await OllamaEmbeddingEngine.isAvailable()
-        await MainActor.run { self.embeddingAvailable = available }
-        if available {
-            print("EMBED: ollama + nomic-embed-text available")
-            return OllamaEmbeddingEngine()
-        }
-        print("EMBED: nomic-embed-text not available — embedding disabled. Run: ollama pull nomic-embed-text")
-        return MockEmbeddingEngine()
     }
 
     private func refreshFolders() async {

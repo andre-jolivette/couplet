@@ -51,7 +51,6 @@ public enum PairScorer {
         captureDateA: Double? = nil, captureDateB: Double? = nil,
         filenameA: String = "", filenameB: String = "",
         captionA: String = "", captionB: String = "",
-        captionEmbeddingA: [Float]? = nil, captionEmbeddingB: [Float]? = nil,
         weights: ScoringWeights = .default
     ) -> PairScore {
         let (aID, bID, vA, vB): (Int64, Int64, FeatureVector, FeatureVector) =
@@ -94,9 +93,15 @@ public enum PairScorer {
             let onlyA = clustersA.subtracting(clustersB)
             let onlyB = clustersB.subtracting(clustersA)
 
-            // Require asymmetry: each image must have at least one cluster
-            // the other doesn't. Pure overlap = redundancy, not resonance.
-            let hasAsymmetry = !onlyA.isEmpty && !onlyB.isEmpty
+            // Require MEANINGFUL asymmetry: each image must have at least one
+            // non-ambient cluster (weight ≥ 0.75) that the other doesn't share.
+            // Ambient-only asymmetry (urban_street vs. community_gathering) is
+            // trivially satisfied by any two different street photos and does not
+            // signal genuine thematic difference. Dog+dog pairs pass the old gate
+            // because they differ by ambient clusters while sharing all meaningful ones.
+            let meaningfulOnlyA = onlyA.filter { (ConceptClusters.weights[$0] ?? 0) >= 0.75 }
+            let meaningfulOnlyB = onlyB.filter { (ConceptClusters.weights[$0] ?? 0) >= 0.75 }
+            let hasAsymmetry = !meaningfulOnlyA.isEmpty && !meaningfulOnlyB.isEmpty
 
             // Saturation gate: weight-based rather than raw count.
             let weightedSharedSum = shared.reduce(0.0 as Float) { $0 + (ConceptClusters.weights[$1] ?? 0.5) }
@@ -109,7 +114,23 @@ public enum PairScorer {
                 clusterScore = ConceptClusters.weightedDice(clustersA: clustersA, clustersB: clustersB)
             }
 
-            thematic = min(1.0, clusterScore * diversityMult)
+            // Complementary axis bonus: rescues pairs that have NO meaningful shared cluster
+            // (Dice at ambient floor 0.10) but are on opposite ends of the same phenomenon.
+            // Intentionally does NOT add to pairs that already score via Dice — those don't
+            // need rescuing, and adding to them inflates scores past 1.0 when combined with
+            // the diversity multiplier.
+            let axisBonus: Float
+            if saturated || clusterScore > 0.10 {
+                axisBonus = 0
+            } else {
+                axisBonus = ConceptClusters.axisPairs.reduce(0.0) { best, axis in
+                    let fires = (clustersA.contains(axis.a) && clustersB.contains(axis.b))
+                             || (clustersA.contains(axis.b) && clustersB.contains(axis.a))
+                    return fires ? max(best, axis.bonus) : best
+                }
+            }
+
+            thematic = min(1.0, (clusterScore + axisBonus) * diversityMult)
         } else {
             thematic = thematicScore(vA.clipEmbeddingFloats, vB.clipEmbeddingFloats)
         }
@@ -182,9 +203,16 @@ public enum PairScorer {
             let cA = ConceptClusters.matchedClusters(for: captionA)
             let cB = ConceptClusters.matchedClusters(for: captionB)
             let shared = cA.intersection(cB)
-            if let theme = shared.first {
+            let meaningfulShared = shared.filter { (ConceptClusters.weights[$0] ?? 0) >= 0.75 }
+            if let theme = meaningfulShared.first {
                 let readable = theme.replacingOccurrences(of: "_", with: " ")
                 rationaleText = "Thematic resonance — both images share a sense of \(readable)."
+            } else if let axis = ConceptClusters.axisPairs.first(where: { axis in
+                (cA.contains(axis.a) && cB.contains(axis.b)) || (cA.contains(axis.b) && cB.contains(axis.a))
+            }) {
+                let aName = axis.a.replacingOccurrences(of: "_", with: " ")
+                let bName = axis.b.replacingOccurrences(of: "_", with: " ")
+                rationaleText = "Complementary resonance — \(aName) meets \(bName)."
             } else {
                 rationaleText = "Conceptual contrast — subjects from different worlds, connected by emotional register."
             }
@@ -258,23 +286,6 @@ public enum PairScorer {
         var dot: Float = 0
         vDSP_dotpr(a, 1, b, 1, &dot, vDSP_Length(a.count))
         return (dot + 1) / 2
-    }
-
-    /// Raw cosine similarity between two caption embedding vectors, clamped to [0, 1].
-    /// nomic-embed-text produces L2-normalised vectors so cosine = dot product,
-    /// but we compute it defensively. Unlike CLIP image embeddings (which range [-1, 1]
-    /// and need the (dot+1)/2 shift), text embeddings are always positive-valued.
-    static func captionEmbeddingCosineSim(_ a: [Float], _ b: [Float]) -> Float {
-        guard a.count == b.count, !a.isEmpty else { return 0 }
-        var dot: Float = 0
-        var normA: Float = 0
-        var normB: Float = 0
-        vDSP_dotpr(a, 1, b, 1, &dot, vDSP_Length(a.count))
-        vDSP_svesq(a, 1, &normA, vDSP_Length(a.count))
-        vDSP_svesq(b, 1, &normB, vDSP_Length(b.count))
-        let denom = sqrt(normA) * sqrt(normB)
-        guard denom > 1e-8 else { return 0 }
-        return max(0, min(1, dot / denom))
     }
 
     static func aestheticScore(_ vA: FeatureVector, _ vB: FeatureVector) -> (Float, String) {
