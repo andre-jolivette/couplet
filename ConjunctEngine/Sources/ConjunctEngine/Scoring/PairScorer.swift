@@ -355,11 +355,29 @@ public enum PairScorer {
         // Increment in 0.1 steps toward 0.0 (disabled) to find the right balance.
         // Current: 0.4 — one step gentler than the sqrt default.
         let kDistinctivenessExponent: Float = 0.4
-        let edgeMult   = pow(normPeakA * normPeakB, kDistinctivenessExponent)
+        // Breath-pair exception: when one image is geometrically rich and the other is
+        // intentionally open/sparse (|normPeakA - normPeakB| > 0.5), the product form
+        // suppresses the pair to near-zero. Give partial credit based on the richer image
+        // instead. Does not fire when both images are similarly dense or similarly flat.
+        var edgeMult   = pow(normPeakA * normPeakB, kDistinctivenessExponent)
+        let kBreathThreshold: Float = 0.5
+        let kBreathFactor:    Float = 0.6
+        if abs(normPeakA - normPeakB) > kBreathThreshold {
+            let richCredit = pow(max(normPeakA, normPeakB), kDistinctivenessExponent) * kBreathFactor
+            edgeMult = max(edgeMult, richCredit)
+        }
         let varMult    = pow(normVarA  * normVarB,  kDistinctivenessExponent)
 
+        // Tonal weight differential: rewards compositional density asymmetry.
+        // Peaks when one image is grid-complex (dense layered scene) and the other is
+        // grid-uniform (plain wall, open sky). Similarity-based rawGridSim cannot surface
+        // these breath pairs — they need a complementarity signal instead.
+        // Weight 0.4 adds a third term; denominator adjusts accordingly.
+        let kBreathWeight: Float = 0.4
+        let breathScore = abs(normVarA - normVarB)
+
         return (
-            score:              (rawEdge * edgeMult + rawGrid * varMult) / 2,
+            score:              (rawEdge * edgeMult + rawGrid * varMult + breathScore * kBreathWeight) / (2 + kBreathWeight),
             rawEdgeSim:         rawEdge,
             rawGridSim:         rawGrid,
             maxEdgePeakedness:  max(peakA, peakB),

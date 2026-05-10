@@ -34,7 +34,7 @@ Mid-res preview cache: `~/Library/Caches/Conjunct/previews/{imageID}.jpg`
 
 ### Three Scoring Axes (PairScorer.swift)
 - **Aesthetic (weight 0.40)** — HSL histogram intersection (harmony) + LAB palette contrast
-- **Geometric (weight 0.20)** — edge orientation cosine similarity + composition grid cosine similarity
+- **Geometric (weight 0.20)** — edge orientation cosine similarity + composition grid cosine similarity + tonal weight differential (`abs(normVarA − normVarB)`, rewards breath pairs where one image is compositionally dense and the other is open/spare); edge peakedness exception for strong asymmetry (decision #53)
 - **Thematic (weight 0.40, boosted to 0.60 when ≥0.20)** — weighted Dice coefficient on ConceptClusters matched from qwen captions; CLIP cosine fallback when no captions
 
 ### ConceptClusters
@@ -92,6 +92,7 @@ Five clusters use two-signal gating (require ≥1 keyword from each of two vocab
 | 48 | Complementary axis pair bonus | Done. 9 axis pairs defined in `ConceptClusters.axisPairs`. Axis bonus fires only when `clusterScore ≤ 0.10`. See decision #48. |
 | 49 | Meaningful asymmetry gate — weight ≥ 0.75 unique clusters per side | Done. Replaced `!onlyA.isEmpty && !onlyB.isEmpty` with meaningful-tier filter in `PairScorer.swift`. See decision #49. |
 | 50 | Caption prompt redesign — emotional register over scene description | Keyword cluster system at architectural ceiling after #45, #47, #48, #49. qwen2.5vl-caption captions describe what is visible, not what is felt. Recommended first step: redesign qwen prompt to request emotional register and human condition rather than scene inventory. Define 3–5 failing test pairs before committing to a full re-caption. See decision #46 outcome note and backlog #50 in DECISIONS.md. |
+| 55 | Breath pairs — aesthetic axis tonal weight complementarity | Geometric axis (#53) contributes `abs(normVarA − normVarB)` differential (weight 0.4/2.4) but max composite lift is ~0.07 — not enough to surface breath pairs reliably. Next step: add tonal weight complementarity as Component 3 of the aesthetic axis (weight 0.30 within aesthetic, ~0.12 max composite lift). Prerequisite: visually confirm `20250426-_R016343.jpg` and `20210313-L1001045.jpg` as genuine open/spare breath-pair candidates. See decision #55 and PAIRING_THEORY.md §Aesthetic axis redesign. |
 
 ## Commit Convention
 Use `#ID` prefix matching the decisions log:
