@@ -51,6 +51,8 @@ public enum PairScorer {
         captureDateA: Double? = nil, captureDateB: Double? = nil,
         filenameA: String = "", filenameB: String = "",
         captionA: String = "", captionB: String = "",
+        accentHueA: Double? = nil, accentSaturationA: Double? = nil,
+        accentHueB: Double? = nil, accentSaturationB: Double? = nil,
         weights: ScoringWeights = .default
     ) -> PairScore {
         let (aID, bID, vA, vB): (Int64, Int64, FeatureVector, FeatureVector) =
@@ -135,7 +137,9 @@ public enum PairScorer {
             thematic = thematicScore(vA.clipEmbeddingFloats, vB.clipEmbeddingFloats)
         }
 
-        let (aesthetic, submode) = aestheticScore(vA, vB)
+        let (aesthetic, submode) = aestheticScore(vA, vB,
+                                                   accentHueA: accentHueA, accentSaturationA: accentSaturationA,
+                                                   accentHueB: accentHueB, accentSaturationB: accentSaturationB)
         let geo = geometricScore(vA, vB)
         let geometric = geo.score
 
@@ -288,10 +292,50 @@ public enum PairScorer {
         return (dot + 1) / 2
     }
 
-    static func aestheticScore(_ vA: FeatureVector, _ vB: FeatureVector) -> (Float, String) {
+    static func aestheticScore(
+        _ vA: FeatureVector, _ vB: FeatureVector,
+        accentHueA: Double? = nil, accentSaturationA: Double? = nil,
+        accentHueB: Double? = nil, accentSaturationB: Double? = nil
+    ) -> (Float, String) {
         let harmony  = histogramIntersection(vA.hslHistogramFloats, vB.hslHistogramFloats)
         let contrast = paletteContrastScore(vA.dominantPaletteFloats, vB.dominantPaletteFloats)
+        let echo     = accentEchoScore(accentHueA: accentHueA, accentSaturationA: accentSaturationA,
+                                       accentHueB: accentHueB, accentSaturationB: accentSaturationB)
+        if echo > harmony && echo > contrast { return (echo, "accent_echo") }
         return harmony >= contrast ? (harmony, "harmony") : (contrast, "contrast")
+    }
+
+    // Accent color echo: rewards pairs sharing a specific accent hue
+    // (Mode 2 slant rhyme, PAIRING_THEORY.md §Component 2).
+    //
+    // Score: hueScore × √(satA × satB)
+    //   • hueScore ramp: ≤10° → 1.0, ≤30° → linear 1.0→0.0, >30° → 0.0
+    //   • Geometric mean saturation scales the score — pairs where both images
+    //     carry vivid accents score higher than pairs where one accent is dull.
+    //   • No hard saturation gate or hue-range exclusions: ambient color detection
+    //     (foliage green vs billboard green, sky blue vs painted blue) requires
+    //     scene context that isn't available at score time — backlog item.
+    static func accentEchoScore(
+        accentHueA: Double?, accentSaturationA: Double?,
+        accentHueB: Double?, accentSaturationB: Double?
+    ) -> Float {
+        guard let hA = accentHueA.map(Float.init),
+              let hB = accentHueB.map(Float.init),
+              let sA = accentSaturationA.map(Float.init),
+              let sB = accentSaturationB.map(Float.init) else { return 0 }
+
+        // Circular hue distance
+        let diff = abs(hA - hB)
+        let angularDist = min(diff, 360 - diff)
+
+        // Hue score ramp: tight window rewards close matches, penalises near-misses
+        let hueScore: Float
+        if angularDist <= 10      { hueScore = 1.0 }
+        else if angularDist <= 30 { hueScore = (30 - angularDist) / 20 }
+        else                      { return 0 }
+
+        // Score: hue match × geometric mean saturation
+        return hueScore * sqrt(sA * sB)
     }
 
     static func histogramIntersection(_ a: [Float], _ b: [Float]) -> Float {
@@ -418,6 +462,8 @@ public enum PairScorer {
             return "Strong semantic similarity — images share closely related subject matter."
         case thematic:
             return "Thematic connection — images share a conceptual or contextual relationship."
+        case aesthetic where submode == "accent_echo":
+            return "Colour echo — both images share a specific accent hue while diverging in overall palette."
         case aesthetic where submode == "harmony":
             return "Tonal harmony — images share a similar colour register and mood."
         case aesthetic:

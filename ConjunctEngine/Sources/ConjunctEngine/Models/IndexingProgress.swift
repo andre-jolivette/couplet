@@ -8,6 +8,7 @@ public struct IndexingProgress: Sendable {
         case thumbnails            = "Generating thumbnails"
         case extraction            = "Extracting features"
         case captioning            = "Captioning images"
+        case accentExtraction      = "Extracting accent colors"
         case scoring               = "Scoring pairs"
         case complete              = "Complete"
         case failed                = "Failed"

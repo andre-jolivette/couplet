@@ -40,6 +40,10 @@ public struct PairQueryResult: Sendable {
     public let compositeScore: Double
     public let rationale: String
     public let userDecision: String?
+    public let accentHueA: Double?
+    public let accentSaturationA: Double?
+    public let accentHueB: Double?
+    public let accentSaturationB: Double?
 }
 
 public struct FolderQueryResult: Sendable {

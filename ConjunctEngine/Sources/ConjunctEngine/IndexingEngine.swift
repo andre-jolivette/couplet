@@ -263,6 +263,56 @@ public actor IndexingEngine {
                 phase: .captioning, itemsComplete: captioned, itemsTotal: captionTotal
             ))
         }
+        // ── Phase 3.6: Accent color extraction ───────────────────────────
+        // Backfills accentHue / accentSaturation for all active images that lack it.
+        // Uses the cached 512px thumbnail when available (same pattern as Phase 3.5).
+        // Images where extraction returns nil (B&W, neutral-heavy) remain NULL and
+        // will be re-attempted on the next re-index — same trade-off as caption backfill.
+        continuation.yield(IndexingProgress(
+            phase: .accentExtraction, itemsComplete: 0, itemsTotal: 0
+        ))
+
+        let accentThumbDir = thumbnailDirectory()
+        let accentRows: [(Int64, URL)] = try db.read { db in
+            let rows = try Row.fetchAll(db, sql: """
+                SELECT id, path, thumbnailPath FROM images
+                WHERE isActive = 1 AND accentHue IS NULL
+            """)
+            return rows.compactMap { row -> (Int64, URL)? in
+                guard let id   = row["id"]   as? Int64,
+                      let path = row["path"] as? String else { return nil }
+                if let thumbName = row["thumbnailPath"] as? String {
+                    let thumbURL = accentThumbDir.appendingPathComponent(thumbName)
+                    if FileManager.default.fileExists(atPath: thumbURL.path) {
+                        return (id, thumbURL)
+                    }
+                }
+                if let match = imageIDs.first(where: { $0.0 == id }) {
+                    return (id, match.1)
+                }
+                return (id, URL(fileURLWithPath: path))
+            }
+        }
+
+        var accentDone = 0
+        let accentTotal = accentRows.count
+        for (imageID, url) in accentRows {
+            try Task.checkCancellation()
+            if let cgImage = Self.loadCGImage(url: url),
+               let accent  = try? ColourAnalyser.extractAccentColor(image: cgImage) {
+                try db.write { db in
+                    try db.execute(
+                        sql: "UPDATE images SET accentHue = ?, accentSaturation = ? WHERE id = ?",
+                        arguments: [accent.hue, accent.saturation, imageID]
+                    )
+                }
+            }
+            accentDone += 1
+            continuation.yield(IndexingProgress(
+                phase: .accentExtraction, itemsComplete: accentDone, itemsTotal: accentTotal
+            ))
+        }
+
         // ── Phase 4: Intra-folder pair scoring ───────────────────────────
         // Scores only images in the current scan batch against each other.
         // Cross-folder scoring (batch × all other) runs as phase 2 in background
@@ -279,12 +329,13 @@ public actor IndexingEngine {
         let batchVectors = allHeroVectors.filter { batchIDs.contains($0.imageID) }
 
         // Build metadata only for batch images — sufficient for intra-folder scoring.
-        typealias ImageMeta = (captureDate: Double?, filename: String, caption: String)
+        typealias ImageMeta = (captureDate: Double?, filename: String, caption: String,
+                               accentHue: Double?, accentSaturation: Double?)
         let imageMeta: [Int64: ImageMeta] = try db.read { db in
             guard !batchIDs.isEmpty else { return [:] }
             let ids = batchIDs.map { "\($0)" }.joined(separator: ",")
             let rows = try Row.fetchAll(
-                db, sql: "SELECT id, captureDate, filename, caption FROM images WHERE id IN (\(ids))"
+                db, sql: "SELECT id, captureDate, filename, caption, accentHue, accentSaturation FROM images WHERE id IN (\(ids))"
             )
             var result = [Int64: ImageMeta]()
             for row in rows {
@@ -293,7 +344,9 @@ public actor IndexingEngine {
                     captureDate: (row["captureDate"] as? Double)
                         ?? (row["captureDate"] as? Int64).map(Double.init),
                     filename: row["filename"] as? String ?? "",
-                    caption: row["caption"] as? String ?? ""
+                    caption: row["caption"] as? String ?? "",
+                    accentHue: row["accentHue"] as? Double,
+                    accentSaturation: row["accentSaturation"] as? Double
                 )
             }
             return result
@@ -318,6 +371,8 @@ public actor IndexingEngine {
                     filenameB: metaB?.filename ?? "",
                     captionA: metaA?.caption ?? "",
                     captionB: metaB?.caption ?? "",
+                    accentHueA: metaA?.accentHue, accentSaturationA: metaA?.accentSaturation,
+                    accentHueB: metaB?.accentHue, accentSaturationB: metaB?.accentSaturation,
                     weights: weights
                 )
                 if s.compositeScore > 0 {
@@ -436,10 +491,11 @@ public actor IndexingEngine {
 
         guard !batchVectors.isEmpty, !otherVectors.isEmpty else { return }
 
-        typealias ImageMeta = (captureDate: Double?, filename: String, caption: String)
+        typealias ImageMeta = (captureDate: Double?, filename: String, caption: String,
+                               accentHue: Double?, accentSaturation: Double?)
         let imageMeta: [Int64: ImageMeta] = try db.read { db in
             let rows = try Row.fetchAll(
-                db, sql: "SELECT id, captureDate, filename, caption FROM images WHERE isActive = 1"
+                db, sql: "SELECT id, captureDate, filename, caption, accentHue, accentSaturation FROM images WHERE isActive = 1"
             )
             var result = [Int64: ImageMeta]()
             for row in rows {
@@ -448,7 +504,9 @@ public actor IndexingEngine {
                     captureDate: (row["captureDate"] as? Double)
                         ?? (row["captureDate"] as? Int64).map(Double.init),
                     filename: row["filename"] as? String ?? "",
-                    caption: row["caption"] as? String ?? ""
+                    caption: row["caption"] as? String ?? "",
+                    accentHue: row["accentHue"] as? Double,
+                    accentSaturation: row["accentSaturation"] as? Double
                 )
             }
             return result
@@ -471,6 +529,8 @@ public actor IndexingEngine {
                     filenameB: metaB?.filename ?? "",
                     captionA: metaA?.caption ?? "",
                     captionB: metaB?.caption ?? "",
+                    accentHueA: metaA?.accentHue, accentSaturationA: metaA?.accentSaturation,
+                    accentHueB: metaB?.accentHue, accentSaturationB: metaB?.accentSaturation,
                     weights: weights
                 )
                 if s.compositeScore > 0 {

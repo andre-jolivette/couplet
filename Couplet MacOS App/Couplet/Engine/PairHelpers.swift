@@ -87,6 +87,8 @@ nonisolated func convertToPairFree(
         colorProfileA: r.colorProfileA, colorProfileB: r.colorProfileB,
         captionA: r.captionA, captionB: r.captionB,
         modality: modality, aestheticSubmode: r.aestheticSubmode,
+        accentHueA: r.accentHueA, accentSaturationA: r.accentSaturationA,
+        accentHueB: r.accentHueB, accentSaturationB: r.accentSaturationB,
         compositeScore: displayComposite, aestheticScore: Float(r.aestheticScore),
         geometricScore: geoScore, thematicScore: Float(r.thematicScore),
         rationale: r.rationale,

@@ -229,6 +229,19 @@ public final class DatabaseManager: Sendable {
             }
         }
 
+        // ── v9: Accent color per image ────────────────────────────────────
+        // accentHue (0–360°) and accentSaturation (0–1) store the primary accent
+        // color for each image — the hue cluster with highest mean saturation that
+        // covers 5–40% of pixels (after excluding pixels below saturation 0.25).
+        // NULL when no qualifying accent exists (B&W images, neutral-heavy images).
+        // Used by the accent color echo component of the aesthetic scorer (follow-on).
+        migrator.registerMigration("v9_accentColors") { db in
+            try db.alter(table: "images") { t in
+                t.add(column: "accentHue",        .real)
+                t.add(column: "accentSaturation", .real)
+            }
+        }
+
         try migrator.migrate(pool)
     }
 }
