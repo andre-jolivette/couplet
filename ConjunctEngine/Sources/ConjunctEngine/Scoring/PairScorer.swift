@@ -368,8 +368,16 @@ public enum PairScorer {
         }
         let varMult    = pow(normVarA  * normVarB,  kDistinctivenessExponent)
 
+        // Tonal weight differential: rewards compositional density asymmetry.
+        // Peaks when one image is grid-complex (dense layered scene) and the other is
+        // grid-uniform (plain wall, open sky). Similarity-based rawGridSim cannot surface
+        // these breath pairs — they need a complementarity signal instead.
+        // Weight 0.4 adds a third term; denominator adjusts accordingly.
+        let kBreathWeight: Float = 0.4
+        let breathScore = abs(normVarA - normVarB)
+
         return (
-            score:              (rawEdge * edgeMult + rawGrid * varMult) / 2,
+            score:              (rawEdge * edgeMult + rawGrid * varMult + breathScore * kBreathWeight) / (2 + kBreathWeight),
             rawEdgeSim:         rawEdge,
             rawGridSim:         rawGrid,
             maxEdgePeakedness:  max(peakA, peakB),
