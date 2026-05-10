@@ -68,6 +68,10 @@ struct DisplayPair: Identifiable, Hashable {
     let captionB: String
     let modality: PairingModality
     let aestheticSubmode: String
+    let accentHueA: Double?
+    let accentSaturationA: Double?
+    let accentHueB: Double?
+    let accentSaturationB: Double?
     let compositeScore: Float
     let aestheticScore: Float
     let geometricScore: Float
@@ -148,6 +152,8 @@ struct DisplayPair: Identifiable, Hashable {
         colorProfileA: String = "color", colorProfileB: String = "color",
         captionA: String = "", captionB: String = "",
         modality: PairingModality, aestheticSubmode: String,
+        accentHueA: Double? = nil, accentSaturationA: Double? = nil,
+        accentHueB: Double? = nil, accentSaturationB: Double? = nil,
         compositeScore: Float, aestheticScore: Float,
         geometricScore: Float, thematicScore: Float,
         rationale: String,
@@ -165,6 +171,8 @@ struct DisplayPair: Identifiable, Hashable {
         self.colorProfileA = colorProfileA; self.colorProfileB = colorProfileB
         self.captionA = captionA; self.captionB = captionB
         self.modality = modality; self.aestheticSubmode = aestheticSubmode
+        self.accentHueA = accentHueA; self.accentSaturationA = accentSaturationA
+        self.accentHueB = accentHueB; self.accentSaturationB = accentSaturationB
         self.compositeScore = compositeScore; self.aestheticScore = aestheticScore
         self.geometricScore = geometricScore; self.thematicScore = thematicScore
         self.rationale = rationale

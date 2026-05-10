@@ -152,20 +152,52 @@ struct LightboxInfoRail: View {
 
     // MARK: - Aesthetic detail
 
+    @ViewBuilder
     private var aestheticDetail: some View {
         let submode = pair.aestheticSubmode
-        let isHarmony = submode == "harmony"
-        let description = isHarmony
-            ? "Both images share a similar tonal register — similar hue distribution, brightness, and overall colour mood."
-            : "The images form a complementary colour relationship — their palettes contrast in a visually resonant way."
-        return VStack(alignment: .leading, spacing: 4) {
-            Text(isHarmony ? "Tonal harmony" : "Colour contrast")
+        if submode == "accent_echo" {
+            accentEchoDetail
+        } else {
+            let isHarmony = submode == "harmony"
+            let description = isHarmony
+                ? "Both images share a similar tonal register — similar hue distribution, brightness, and overall colour mood."
+                : "The images form a complementary colour relationship — their palettes contrast in a visually resonant way."
+            VStack(alignment: .leading, spacing: 4) {
+                Text(isHarmony ? "Tonal harmony" : "Colour contrast")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundColor(.white.opacity(0.60))
+                Text(description)
+                    .font(.system(size: 11))
+                    .foregroundColor(.white.opacity(0.45))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    private var accentEchoDetail: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Color echo")
                 .font(.system(size: 11, weight: .medium))
                 .foregroundColor(.white.opacity(0.60))
-            Text(description)
-                .font(.system(size: 11))
-                .foregroundColor(.white.opacity(0.45))
-                .fixedSize(horizontal: false, vertical: true)
+            HStack(alignment: .top, spacing: 8) {
+                HStack(spacing: 4) {
+                    if let hA = pair.accentHueA {
+                        RoundedRectangle(cornerRadius: 3)
+                            .fill(Color(hue: hA / 360, saturation: 1.0, brightness: 0.85))
+                            .frame(width: 12, height: 12)
+                    }
+                    if let hB = pair.accentHueB {
+                        RoundedRectangle(cornerRadius: 3)
+                            .fill(Color(hue: hB / 360, saturation: 1.0, brightness: 0.85))
+                            .frame(width: 12, height: 12)
+                    }
+                }
+                .padding(.top, 1)
+                Text("Both images share a specific accent colour while diverging in overall palette.")
+                    .font(.system(size: 11))
+                    .foregroundColor(.white.opacity(0.45))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
     }
 

@@ -329,12 +329,13 @@ public actor IndexingEngine {
         let batchVectors = allHeroVectors.filter { batchIDs.contains($0.imageID) }
 
         // Build metadata only for batch images — sufficient for intra-folder scoring.
-        typealias ImageMeta = (captureDate: Double?, filename: String, caption: String)
+        typealias ImageMeta = (captureDate: Double?, filename: String, caption: String,
+                               accentHue: Double?, accentSaturation: Double?)
         let imageMeta: [Int64: ImageMeta] = try db.read { db in
             guard !batchIDs.isEmpty else { return [:] }
             let ids = batchIDs.map { "\($0)" }.joined(separator: ",")
             let rows = try Row.fetchAll(
-                db, sql: "SELECT id, captureDate, filename, caption FROM images WHERE id IN (\(ids))"
+                db, sql: "SELECT id, captureDate, filename, caption, accentHue, accentSaturation FROM images WHERE id IN (\(ids))"
             )
             var result = [Int64: ImageMeta]()
             for row in rows {
@@ -343,7 +344,9 @@ public actor IndexingEngine {
                     captureDate: (row["captureDate"] as? Double)
                         ?? (row["captureDate"] as? Int64).map(Double.init),
                     filename: row["filename"] as? String ?? "",
-                    caption: row["caption"] as? String ?? ""
+                    caption: row["caption"] as? String ?? "",
+                    accentHue: row["accentHue"] as? Double,
+                    accentSaturation: row["accentSaturation"] as? Double
                 )
             }
             return result
@@ -368,6 +371,8 @@ public actor IndexingEngine {
                     filenameB: metaB?.filename ?? "",
                     captionA: metaA?.caption ?? "",
                     captionB: metaB?.caption ?? "",
+                    accentHueA: metaA?.accentHue, accentSaturationA: metaA?.accentSaturation,
+                    accentHueB: metaB?.accentHue, accentSaturationB: metaB?.accentSaturation,
                     weights: weights
                 )
                 if s.compositeScore > 0 {
@@ -486,10 +491,11 @@ public actor IndexingEngine {
 
         guard !batchVectors.isEmpty, !otherVectors.isEmpty else { return }
 
-        typealias ImageMeta = (captureDate: Double?, filename: String, caption: String)
+        typealias ImageMeta = (captureDate: Double?, filename: String, caption: String,
+                               accentHue: Double?, accentSaturation: Double?)
         let imageMeta: [Int64: ImageMeta] = try db.read { db in
             let rows = try Row.fetchAll(
-                db, sql: "SELECT id, captureDate, filename, caption FROM images WHERE isActive = 1"
+                db, sql: "SELECT id, captureDate, filename, caption, accentHue, accentSaturation FROM images WHERE isActive = 1"
             )
             var result = [Int64: ImageMeta]()
             for row in rows {
@@ -498,7 +504,9 @@ public actor IndexingEngine {
                     captureDate: (row["captureDate"] as? Double)
                         ?? (row["captureDate"] as? Int64).map(Double.init),
                     filename: row["filename"] as? String ?? "",
-                    caption: row["caption"] as? String ?? ""
+                    caption: row["caption"] as? String ?? "",
+                    accentHue: row["accentHue"] as? Double,
+                    accentSaturation: row["accentSaturation"] as? Double
                 )
             }
             return result
@@ -521,6 +529,8 @@ public actor IndexingEngine {
                     filenameB: metaB?.filename ?? "",
                     captionA: metaA?.caption ?? "",
                     captionB: metaB?.caption ?? "",
+                    accentHueA: metaA?.accentHue, accentSaturationA: metaA?.accentSaturation,
+                    accentHueB: metaB?.accentHue, accentSaturationB: metaB?.accentSaturation,
                     weights: weights
                 )
                 if s.compositeScore > 0 {

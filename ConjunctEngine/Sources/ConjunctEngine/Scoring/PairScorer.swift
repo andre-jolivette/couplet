@@ -51,6 +51,8 @@ public enum PairScorer {
         captureDateA: Double? = nil, captureDateB: Double? = nil,
         filenameA: String = "", filenameB: String = "",
         captionA: String = "", captionB: String = "",
+        accentHueA: Double? = nil, accentSaturationA: Double? = nil,
+        accentHueB: Double? = nil, accentSaturationB: Double? = nil,
         weights: ScoringWeights = .default
     ) -> PairScore {
         let (aID, bID, vA, vB): (Int64, Int64, FeatureVector, FeatureVector) =
@@ -135,7 +137,8 @@ public enum PairScorer {
             thematic = thematicScore(vA.clipEmbeddingFloats, vB.clipEmbeddingFloats)
         }
 
-        let (aesthetic, submode) = aestheticScore(vA, vB)
+        let (aesthetic, submode) = aestheticScore(vA, vB,
+                                                   accentHueA: accentHueA, accentHueB: accentHueB)
         let geo = geometricScore(vA, vB)
         let geometric = geo.score
 
@@ -288,10 +291,52 @@ public enum PairScorer {
         return (dot + 1) / 2
     }
 
-    static func aestheticScore(_ vA: FeatureVector, _ vB: FeatureVector) -> (Float, String) {
+    static func aestheticScore(
+        _ vA: FeatureVector, _ vB: FeatureVector,
+        accentHueA: Double? = nil, accentHueB: Double? = nil
+    ) -> (Float, String) {
         let harmony  = histogramIntersection(vA.hslHistogramFloats, vB.hslHistogramFloats)
         let contrast = paletteContrastScore(vA.dominantPaletteFloats, vB.dominantPaletteFloats)
+        let echo     = accentEchoScore(vA, vB, accentHueA: accentHueA, accentHueB: accentHueB)
+        if echo > harmony && echo > contrast { return (echo, "accent_echo") }
         return harmony >= contrast ? (harmony, "harmony") : (contrast, "contrast")
+    }
+
+    // Accent color echo: rewards pairs sharing a specific saturated hue while
+    // diverging in overall palette (Mode 2 slant rhyme, PAIRING_THEORY.md §Component 2).
+    // Returns 0 when either image lacks a qualifying accent (NULL accentHue).
+    static func accentEchoScore(
+        _ vA: FeatureVector, _ vB: FeatureVector,
+        accentHueA: Double?, accentHueB: Double?
+    ) -> Float {
+        guard let hA = accentHueA.map(Float.init),
+              let hB = accentHueB.map(Float.init) else { return 0 }
+
+        let diff = abs(hA - hB)
+        let angularDist = min(diff, 360 - diff)
+
+        let hueScore: Float
+        if angularDist <= 20      { hueScore = 1.0 }
+        else if angularDist <= 40 { hueScore = (40 - angularDist) / 20 }
+        else                      { return 0 }
+
+        // Mask the accent hue bin from both histograms, then measure context similarity.
+        // HSL histogram: 18 hue bins × 8 sat × 8 light = 1,152 floats; bin h → [h*64, h*64+64).
+        let accentBinA = Int(hA / 20.0) % 18
+        let accentBinB = Int(hB / 20.0) % 18
+
+        var maskedA = vA.hslHistogramFloats
+        var maskedB = vB.hslHistogramFloats
+        for k in (accentBinA * 64)..<(accentBinA * 64 + 64) { maskedA[k] = 0 }
+        for k in (accentBinB * 64)..<(accentBinB * 64 + 64) { maskedB[k] = 0 }
+
+        let sumA = maskedA.reduce(0, +)
+        let sumB = maskedB.reduce(0, +)
+        if sumA > 0 { maskedA = maskedA.map { $0 / sumA } }
+        if sumB > 0 { maskedB = maskedB.map { $0 / sumB } }
+
+        let contextDissim = 1 - histogramIntersection(maskedA, maskedB)
+        return hueScore * contextDissim
     }
 
     static func histogramIntersection(_ a: [Float], _ b: [Float]) -> Float {
@@ -418,6 +463,8 @@ public enum PairScorer {
             return "Strong semantic similarity — images share closely related subject matter."
         case thematic:
             return "Thematic connection — images share a conceptual or contextual relationship."
+        case aesthetic where submode == "accent_echo":
+            return "Colour echo — both images share a specific accent hue while diverging in overall palette."
         case aesthetic where submode == "harmony":
             return "Tonal harmony — images share a similar colour register and mood."
         case aesthetic:

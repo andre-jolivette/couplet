@@ -142,6 +142,10 @@ public actor QueryService {
                 b.colorProfile   AS colorProfileB,
                 COALESCE(a.caption, '') AS captionA,
                 COALESCE(b.caption, '') AS captionB,
+                a.accentHue        AS accentHueA,
+                a.accentSaturation AS accentSaturationA,
+                b.accentHue        AS accentHueB,
+                b.accentSaturation AS accentSaturationB,
                 fa.displayName   AS folderNameA,
                 fa.path          AS folderPathA,
                 fb.displayName   AS folderNameB,
@@ -202,7 +206,11 @@ public actor QueryService {
                     thematicScore: row["thematicScore"] as! Double,
                     compositeScore: row["compositeScore"] as! Double,
                     rationale: row["rationale"] as! String,
-                    userDecision: row["userDecision"] as? String
+                    userDecision: row["userDecision"] as? String,
+                    accentHueA: row["accentHueA"] as? Double,
+                    accentSaturationA: row["accentSaturationA"] as? Double,
+                    accentHueB: row["accentHueB"] as? Double,
+                    accentSaturationB: row["accentSaturationB"] as? Double
                 ))
                 if chunk.count == chunkSize {
                     try process(chunk)
@@ -333,6 +341,10 @@ public actor QueryService {
                 b.colorProfile   AS colorProfileB,
                 COALESCE(a.caption, '') AS captionA,
                 COALESCE(b.caption, '') AS captionB,
+                a.accentHue        AS accentHueA,
+                a.accentSaturation AS accentSaturationA,
+                b.accentHue        AS accentHueB,
+                b.accentSaturation AS accentSaturationB,
                 fa.displayName   AS folderNameA,
                 fa.path          AS folderPathA,
                 fb.displayName   AS folderNameB,
@@ -394,7 +406,11 @@ public actor QueryService {
                     thematicScore: row["thematicScore"] as! Double,
                     compositeScore: row["compositeScore"] as! Double,
                     rationale: row["rationale"] as! String,
-                    userDecision: row["userDecision"] as? String
+                    userDecision: row["userDecision"] as? String,
+                    accentHueA: row["accentHueA"] as? Double,
+                    accentSaturationA: row["accentSaturationA"] as? Double,
+                    accentHueB: row["accentHueB"] as? Double,
+                    accentSaturationB: row["accentSaturationB"] as? Double
                 )
             }
         }
