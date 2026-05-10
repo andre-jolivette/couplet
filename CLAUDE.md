@@ -34,7 +34,7 @@ Mid-res preview cache: `~/Library/Caches/Conjunct/previews/{imageID}.jpg`
 
 ### Three Scoring Axes (PairScorer.swift)
 - **Aesthetic (weight 0.40)** — HSL histogram intersection (harmony) + LAB palette contrast
-- **Geometric (weight 0.20)** — edge orientation cosine similarity + composition grid cosine similarity
+- **Geometric (weight 0.20)** — edge orientation cosine similarity + composition grid cosine similarity + tonal weight differential (`abs(normVarA − normVarB)`, rewards breath pairs where one image is compositionally dense and the other is open/spare); edge peakedness exception for strong asymmetry (decision #53)
 - **Thematic (weight 0.40, boosted to 0.60 when ≥0.20)** — weighted Dice coefficient on ConceptClusters matched from qwen captions; CLIP cosine fallback when no captions
 
 ### ConceptClusters
