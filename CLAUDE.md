@@ -41,9 +41,9 @@ Mid-res preview cache: `~/Library/Caches/Conjunct/previews/{imageID}.jpg`
 29 semantic clusters with three tiers:
 - **Tier 1.0 (emotional/dramatic):** grief_sorrow, vulnerability_exposure, isolation_solitude, ritual_ceremony, tension_conflict, tenderness_care, devotion_belief, power_dominance, sensory_overwhelm, transformation_change, uncanny_ordinary, economic_precarity, solitude_in_crowd, domestic_intimacy
 - **Tier 0.75 (contextual):** skilled_performance, sound_music, labor_effort, stillness_rest, waiting_anticipation, movement_energy, bodily_gesture, looking_watching, confinement_freedom, youth_age, joy_celebration, humor_absurdity
-- **Tier 0.5 → 0.2 (ambient):** urban_street, nature_landscape, community_gathering
+- **Tier 0.2 (ambient):** urban_street, nature_landscape, community_gathering, animal_presence
 
-Four clusters use two-signal gating (require ≥1 keyword from each of two vocabulary groups): `humor_absurdity`, `uncanny_ordinary`, `solitude_in_crowd`, `domestic_intimacy`.
+Five clusters use two-signal gating (require ≥1 keyword from each of two vocabulary groups): `humor_absurdity`, `uncanny_ordinary`, `solitude_in_crowd`, `domestic_intimacy`, `animal_presence`.
 
 ## Known Gotchas
 
@@ -55,7 +55,11 @@ Four clusters use two-signal gating (require ≥1 keyword from each of two vocab
 
 **Tools bar (filter controls in titlebar)** — three approaches that do NOT work: (1) SwiftUI `.toolbar { ToolbarItem }` — macOS 15 applies per-item liquid glass capsules to NSToolbarItem containers that cannot be suppressed from inside; (2) `NSTitlebarAccessoryViewController` with `.bottom` — creates a visually separate second row with dead space between it and the traffic-light band; (3) `.windowToolbarStyle(.unified(showsTitle: true))` on the scene — causes the window title to reappear during state transitions. **What works:** empty `NSToolbar` (no items) with `window.toolbarStyle = .unified` expands `NSTitlebarView` to ~50px without producing NSToolbarItem containers; a `PassthroughHostingView<AnyView>` is inserted directly into `NSTitlebarView` at `leadingAnchor + 192` and updated each render cycle via `WindowConfigurator.updateNSView`. See decision #36 for full rationale and known limitations.
 
-**weightedDice ambient floor** — `weightedDice()` in ConceptClusters requires ≥1 cluster in the shared intersection with weight ≥ 0.75; pairs sharing only ambient-tier clusters (urban_street/nature_landscape/community_gathering, all weight 0.2) return `kAmbientFloor = 0.1`. Any new ambient cluster must stay at weight ≤ 0.24 or the gate logic breaks. See decision #29.
+**weightedDice ambient floor** — `weightedDice()` in ConceptClusters requires ≥1 cluster in the shared intersection with weight ≥ 0.75; pairs sharing only ambient-tier clusters (urban_street/nature_landscape/community_gathering/animal_presence, all weight 0.2) return `kAmbientFloor = 0.1`. Any new ambient cluster must stay at weight ≤ 0.24 or the gate logic breaks. See decision #29.
+
+**Meaningful asymmetry gate requires weight ≥ 0.75 unique clusters per side** — `PairScorer.swift` filters `onlyA` and `onlyB` to clusters with weight ≥ 0.75 before checking asymmetry. A pair where one image uniquely has `urban_street` (weight 0.2) and the other has nothing unique at the meaningful tier fails the gate and returns ambient floor, even if both images have rich meaningful clusters they share. Changed in #49 from the original `!onlyA.isEmpty && !onlyB.isEmpty` which allowed ambient-only asymmetry to pass. Axis pairs are exempt from this gate — they fire via different clusters on each side by structural definition. See decision #49.
+
+**Axis bonus only fires at ambient floor** — `ConceptClusters.axisPairs` defines 9 cluster-opposition relationships that reward complementary pairs (source ↔ receiver of the same phenomenon). The bonus fires ONLY when `clusterScore ≤ 0.10` (ambient floor) — the guard `if saturated || clusterScore > 0.10 { axisBonus = 0 }` prevents +0.35 additive inflation on pairs that already score above ambient floor via Dice. A pair like musician + ears-cupping woman scores via Dice rather than the axis bonus if both captions happen to share `sound_music` or `sensory_overwhelm` vocabulary — the axis bonus won't additionally reward them. See decision #48.
 
 **Temporal penalty must be replayed in convertToPair** — `EngineController.convertToPair` must replay the temporal penalty using `captureDateA/B` (already fetched by the query). Never recompute `displayComposite` from raw component scores without the penalty — sequential pairs inflate to the top otherwise. See decision #26.
 
@@ -74,10 +78,8 @@ Four clusters use two-signal gating (require ≥1 keyword from each of two vocab
 ## Open Backlog Items
 | # | Title | Notes |
 |---|-------|-------|
-| 1 | Store selected_for flag at scoring time | Add `selectedFor` column (thematic/composite) to pairs table at INSERT time. Use for modality labeling instead of post-hoc score comparison. Fixes labeling bias where geometric dominates. See decision #1. |
 | 7 | Settings that require re-index | dHash threshold + CLIP similarity ceiling affect data written to DB; UI should distinguish these from cheap runtime settings. See decision #7. |
 | 8 | Double CLIP build on launch | Race in `engineBuildTask?.cancel()` on some launches. No crashes recently — monitor. See decision #8. |
-| 9 | ConceptClusters vocabulary audit | Audit qwen captions for language patterns clusters don't catch. Diagnostic-first; implement vocabulary additions only after patterns are clear. See decision #9. |
 | 11 | FileAccessCoordinator centralization | Centralise security-scoped bookmark management; detect invalid bookmarks; clean up stale entries on `removeFolder`; handle offline volumes. See decision #11. |
 | 14 | Continue geometric scorer tuning | Step distinctiveness multiplier exponent down from 0.4; add multiplier-strength slider; evaluate normalization anchors. See decision #14. |
 | 16 | Center-cell discount | Slider + Apply button for peripheral composition cell weighting. Requires re-score (not full re-index). See decision #16. |
@@ -85,6 +87,11 @@ Four clusters use two-signal gating (require ≥1 keyword from each of two vocab
 | 23 | Revisit dot badge on pair grid tiles | Recalibrate threshold + improve visual legibility after topK and scoring changes settle. See decision #23. |
 | 35 | "Find Pairs For…" — explore or retire | Button removed (no implementation); evaluate vs. existing anchor/filmstrip flow before building. See decision #35. |
 | 43 | Layout recursion warning | Console: "-layoutSubtreeIfNeeded on a view which is already being laid out" — once per launch, likely PassthroughHostingView insertion timing. See decision #43. |
+| 46 | Complementary role scoring — two sides of the same phenomenon | Implemented via axis pairs (#47, #48, #49). Post-implementation diagnostic: canonical test pair (musician+ears) still absent from DB — both images share `sound_music` and `sensory_overwhelm` vocabulary, so Dice > ambient floor and axis bonus guard fires. See decisions #47, #48, #49. |
+| 47 | animal_presence demoted to ambient tier (0.75 → 0.2) | Done. Dog+dog pairs reduced but not eliminated — they still score via shared 0.75-tier behavior clusters. See decision #47. |
+| 48 | Complementary axis pair bonus | Done. 9 axis pairs defined in `ConceptClusters.axisPairs`. Axis bonus fires only when `clusterScore ≤ 0.10`. See decision #48. |
+| 49 | Meaningful asymmetry gate — weight ≥ 0.75 unique clusters per side | Done. Replaced `!onlyA.isEmpty && !onlyB.isEmpty` with meaningful-tier filter in `PairScorer.swift`. See decision #49. |
+| 50 | Caption prompt redesign — emotional register over scene description | Keyword cluster system at architectural ceiling after #45, #47, #48, #49. qwen2.5vl-caption captions describe what is visible, not what is felt. Recommended first step: redesign qwen prompt to request emotional register and human condition rather than scene inventory. Define 3–5 failing test pairs before committing to a full re-caption. See decision #46 outcome note and backlog #50 in DECISIONS.md. |
 
 ## Commit Convention
 Use `#ID` prefix matching the decisions log:

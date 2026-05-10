@@ -594,7 +594,8 @@ final class EngineController: ObservableObject {
             guard !Task.isCancelled else { return }
             await MainActor.run {
                 self.indexingEngine = IndexingEngine(
-                    db: db, clipEngine: clip, captioningEngine: captioning
+                    db: db, clipEngine: clip,
+                    captioningEngine: captioning
                 )
             }
         }
@@ -604,10 +605,10 @@ final class EngineController: ObservableObject {
         let available = await OllamaCaptioningEngine.isAvailable()
         await MainActor.run { self.captioningAvailable = available }
         if available {
-            print("CAPTION: ollama + moondream available")
+            print("CAPTION: ollama + qwen2.5vl-caption available")
             return OllamaCaptioningEngine()
         }
-        print("CAPTION: ollama not available — captioning disabled. Install ollama and run: ollama pull moondream")
+        print("CAPTION: ollama not available — captioning disabled. Install ollama and run: ollama pull qwen2.5vl:7b && ollama create qwen2.5vl-caption -f ConjunctEngine/Modelfile")
         return MockCaptioningEngine()
     }
 
