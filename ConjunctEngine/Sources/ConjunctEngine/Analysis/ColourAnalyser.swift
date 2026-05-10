@@ -31,6 +31,68 @@ public enum ColourAnalyser {
         )
     }
 
+    // MARK: - Accent color extraction
+
+    /// Returns the primary accent color of the image as (hue: 0–360°, saturation: 0–1),
+    /// or nil when no qualifying accent exists (B&W images, neutral-dominant images).
+    ///
+    /// The accent color is the hue cluster with the highest prominence (area × mean saturation)
+    /// among clusters that cover ≥5% and ≤40% of the image's pixels after excluding pixels
+    /// below saturation 0.25. Prominence favours pale-but-widespread colours over
+    /// small-but-vivid ones, consistent with the theory in PAIRING_THEORY.md.
+    public static func extractAccentColor(image: CGImage) throws -> (hue: Float, saturation: Float)? {
+        let pixels = try extractRGBPixels(from: image, maxDimension: analysisMaxDimension)
+        return accentColor(from: pixels)
+    }
+
+    static func accentColor(from pixels: [(r: Float, g: Float, b: Float)]) -> (hue: Float, saturation: Float)? {
+        let total = pixels.count
+        guard total > 0 else { return nil }
+
+        let kBins     = 24          // 15° bins covering 0–360°
+        let kSatFloor = Float(0.25) // exclude neutrals, greys, near-whites, near-blacks
+        let kMinFrac  = Float(0.05) // accent must appear in ≥5% of pixels
+        let kMaxFrac  = Float(0.40) // accent must not dominate (≤40%)
+
+        var counts  = [Int](repeating: 0,     count: kBins)
+        var satSums = [Float](repeating: 0.0, count: kBins)
+
+        for px in pixels {
+            let (h, s, _) = rgbToHSL(r: px.r, g: px.g, b: px.b)
+            guard s >= kSatFloor else { continue }
+            // h is in [0, 1); map to bin 0–23
+            let bin = min(Int(h * Float(kBins)), kBins - 1)
+            counts[bin]  += 1
+            satSums[bin] += s
+        }
+
+        let totalF      = Float(total)
+        var bestBin:    Int?  = nil
+        var bestScore   = Float(0)
+        var bestMeanSat = Float(0)
+
+        for i in 0..<kBins {
+            guard counts[i] > 0 else { continue }
+            let frac = Float(counts[i]) / totalF
+            guard frac >= kMinFrac && frac <= kMaxFrac else { continue }
+            let meanSat   = satSums[i] / Float(counts[i])
+            // Prominence = area × saturation: rewards pale-but-widespread colors
+            // equally with small-but-vivid ones. A pale blue at 30% / s=0.35
+            // scores 0.105; a red at 7% / s=0.75 scores 0.053 — the pale blue wins.
+            let prominence = frac * meanSat
+            if prominence > bestScore {
+                bestScore   = prominence
+                bestMeanSat = meanSat
+                bestBin     = i
+            }
+        }
+
+        guard let bin = bestBin else { return nil }
+        // Bin center in degrees: each bin spans 15°, center is at bin×15° + 7.5°
+        let hue = (Float(bin) + 0.5) * (360.0 / Float(kBins))
+        return (hue: hue, saturation: bestMeanSat)
+    }
+
     // MARK: - HSL histogram
 
     static func hslHistogram(pixels: [(r: Float, g: Float, b: Float)]) -> [Float] {

@@ -263,6 +263,56 @@ public actor IndexingEngine {
                 phase: .captioning, itemsComplete: captioned, itemsTotal: captionTotal
             ))
         }
+        // ── Phase 3.6: Accent color extraction ───────────────────────────
+        // Backfills accentHue / accentSaturation for all active images that lack it.
+        // Uses the cached 512px thumbnail when available (same pattern as Phase 3.5).
+        // Images where extraction returns nil (B&W, neutral-heavy) remain NULL and
+        // will be re-attempted on the next re-index — same trade-off as caption backfill.
+        continuation.yield(IndexingProgress(
+            phase: .accentExtraction, itemsComplete: 0, itemsTotal: 0
+        ))
+
+        let accentThumbDir = thumbnailDirectory()
+        let accentRows: [(Int64, URL)] = try db.read { db in
+            let rows = try Row.fetchAll(db, sql: """
+                SELECT id, path, thumbnailPath FROM images
+                WHERE isActive = 1 AND accentHue IS NULL
+            """)
+            return rows.compactMap { row -> (Int64, URL)? in
+                guard let id   = row["id"]   as? Int64,
+                      let path = row["path"] as? String else { return nil }
+                if let thumbName = row["thumbnailPath"] as? String {
+                    let thumbURL = accentThumbDir.appendingPathComponent(thumbName)
+                    if FileManager.default.fileExists(atPath: thumbURL.path) {
+                        return (id, thumbURL)
+                    }
+                }
+                if let match = imageIDs.first(where: { $0.0 == id }) {
+                    return (id, match.1)
+                }
+                return (id, URL(fileURLWithPath: path))
+            }
+        }
+
+        var accentDone = 0
+        let accentTotal = accentRows.count
+        for (imageID, url) in accentRows {
+            try Task.checkCancellation()
+            if let cgImage = Self.loadCGImage(url: url),
+               let accent  = try? ColourAnalyser.extractAccentColor(image: cgImage) {
+                try db.write { db in
+                    try db.execute(
+                        sql: "UPDATE images SET accentHue = ?, accentSaturation = ? WHERE id = ?",
+                        arguments: [accent.hue, accent.saturation, imageID]
+                    )
+                }
+            }
+            accentDone += 1
+            continuation.yield(IndexingProgress(
+                phase: .accentExtraction, itemsComplete: accentDone, itemsTotal: accentTotal
+            ))
+        }
+
         // ── Phase 4: Intra-folder pair scoring ───────────────────────────
         // Scores only images in the current scan batch against each other.
         // Cross-folder scoring (batch × all other) runs as phase 2 in background
