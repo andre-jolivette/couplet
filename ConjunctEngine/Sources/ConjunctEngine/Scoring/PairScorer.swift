@@ -355,7 +355,17 @@ public enum PairScorer {
         // Increment in 0.1 steps toward 0.0 (disabled) to find the right balance.
         // Current: 0.4 — one step gentler than the sqrt default.
         let kDistinctivenessExponent: Float = 0.4
-        let edgeMult   = pow(normPeakA * normPeakB, kDistinctivenessExponent)
+        // Breath-pair exception: when one image is geometrically rich and the other is
+        // intentionally open/sparse (|normPeakA - normPeakB| > 0.5), the product form
+        // suppresses the pair to near-zero. Give partial credit based on the richer image
+        // instead. Does not fire when both images are similarly dense or similarly flat.
+        var edgeMult   = pow(normPeakA * normPeakB, kDistinctivenessExponent)
+        let kBreathThreshold: Float = 0.5
+        let kBreathFactor:    Float = 0.6
+        if abs(normPeakA - normPeakB) > kBreathThreshold {
+            let richCredit = pow(max(normPeakA, normPeakB), kDistinctivenessExponent) * kBreathFactor
+            edgeMult = max(edgeMult, richCredit)
+        }
         let varMult    = pow(normVarA  * normVarB,  kDistinctivenessExponent)
 
         return (
