@@ -58,7 +58,32 @@ public enum PairScorer {
                 ? (imageAID, imageBID, vectorA, vectorB)
                 : (imageBID, imageAID, vectorB, vectorA)
 
-        // Thematic: use concept-cluster scoring when captions are available.
+        // CLIP cosine — computed once, used for both thematic diversity multiplier
+        // and composite ceiling penalties below.
+        let clipSim = thematicScore(vA.clipEmbeddingFloats, vB.clipEmbeddingFloats)
+
+        // Thematic: weighted Dice on ConceptClusters matched from qwen captions,
+        // scaled by a visual diversity multiplier. When captions are absent, falls
+        // back to CLIP image cosine.
+        //
+        // Visual diversity multiplier rationale:
+        //   Cross-context resonance = images that look different but share a theme.
+        //   Same-event pairs (protest+protest, festival+festival) look similar AND
+        //   share many clusters → they dominate the thematic topK without this correction.
+        //   The multiplier rewards low-CLIP pairs (cross-context) and penalises
+        //   high-CLIP pairs (same-context) on the thematic axis, independently of
+        //   the existing composite ceiling penalties.
+        //
+        //   CLIP < 0.30  → ×1.35  (visually distinct → cross-context bonus)
+        //   CLIP 0.30–0.60 → ×1.00 (neutral — typical street pair)
+        //   CLIP 0.60–0.88 → ×0.75 (visually similar → same-context penalty)
+        //   CLIP > 0.88  → handled by composite ceiling below; no double-penalty here
+        let diversityMult: Float
+        if clipSim < 0.30      { diversityMult = 1.35 }
+        else if clipSim < 0.60 { diversityMult = 1.00 }
+        else if clipSim < 0.88 { diversityMult = 0.75 }
+        else                   { diversityMult = 1.00 }  // ceiling handles composite
+
         let thematic: Float
         let hasCaptions = !captionA.isEmpty && !captionB.isEmpty
         if hasCaptions {
@@ -68,31 +93,44 @@ public enum PairScorer {
             let onlyA = clustersA.subtracting(clustersB)
             let onlyB = clustersB.subtracting(clustersA)
 
-            // Require asymmetry: each image must have at least one cluster
-            // the other doesn't. Pure overlap = redundancy, not resonance.
-            let hasAsymmetry = !onlyA.isEmpty && !onlyB.isEmpty
+            // Require MEANINGFUL asymmetry: each image must have at least one
+            // non-ambient cluster (weight ≥ 0.75) that the other doesn't share.
+            // Ambient-only asymmetry (urban_street vs. community_gathering) is
+            // trivially satisfied by any two different street photos and does not
+            // signal genuine thematic difference. Dog+dog pairs pass the old gate
+            // because they differ by ambient clusters while sharing all meaningful ones.
+            let meaningfulOnlyA = onlyA.filter { (ConceptClusters.weights[$0] ?? 0) >= 0.75 }
+            let meaningfulOnlyB = onlyB.filter { (ConceptClusters.weights[$0] ?? 0) >= 0.75 }
+            let hasAsymmetry = !meaningfulOnlyA.isEmpty && !meaningfulOnlyB.isEmpty
 
             // Saturation gate: weight-based rather than raw count.
-            // With 29 clusters, genuine cross-context resonant pairs routinely
-            // share 4–6 clusters across different emotional registers (bodily
-            // gesture + isolation + tension + waiting). Raw count > 3 zeroed
-            // these out. Weight-based threshold of > 5.0 distinguishes emotional
-            // depth of overlap from count:
-            //   • 4× tier-0.75 shared = 3.0  → not saturated (genuine resonance)
-            //   • 5× tier-1.0 shared  = 5.0  → borderline (approaching same-event)
-            //   • 8× mixed same-event = 8.0+ → saturated (two wedding shots)
             let weightedSharedSum = shared.reduce(0.0 as Float) { $0 + (ConceptClusters.weights[$1] ?? 0.5) }
             let saturated = weightedSharedSum > 5.0
 
+            let clusterScore: Float
             if saturated || !hasAsymmetry {
-                thematic = 0
+                clusterScore = 0
             } else {
-                // Weighted Dice via ConceptClusters — emotionally specific clusters
-                // (weight 1.0) contribute more than ambient setting clusters (weight 0.2).
-                // Meaningful-tier gate, asymmetry gate, and saturation gate all applied
-                // above or inside weightedDice; formula lives in one place.
-                thematic = ConceptClusters.weightedDice(clustersA: clustersA, clustersB: clustersB)
+                clusterScore = ConceptClusters.weightedDice(clustersA: clustersA, clustersB: clustersB)
             }
+
+            // Complementary axis bonus: rescues pairs that have NO meaningful shared cluster
+            // (Dice at ambient floor 0.10) but are on opposite ends of the same phenomenon.
+            // Intentionally does NOT add to pairs that already score via Dice — those don't
+            // need rescuing, and adding to them inflates scores past 1.0 when combined with
+            // the diversity multiplier.
+            let axisBonus: Float
+            if saturated || clusterScore > 0.10 {
+                axisBonus = 0
+            } else {
+                axisBonus = ConceptClusters.axisPairs.reduce(0.0) { best, axis in
+                    let fires = (clustersA.contains(axis.a) && clustersB.contains(axis.b))
+                             || (clustersA.contains(axis.b) && clustersB.contains(axis.a))
+                    return fires ? max(best, axis.bonus) : best
+                }
+            }
+
+            thematic = min(1.0, (clusterScore + axisBonus) * diversityMult)
         } else {
             thematic = thematicScore(vA.clipEmbeddingFloats, vB.clipEmbeddingFloats)
         }
@@ -118,9 +156,7 @@ public enum PairScorer {
             composite = 0.25 * aesthetic + 0.15 * geometric + 0.60 * thematic
         }
 
-        // CLIP similarity ceiling: even without captions, very high CLIP
-        // cosine similarity means visually/semantically near-identical images.
-        let clipSim = thematicScore(vA.clipEmbeddingFloats, vB.clipEmbeddingFloats)
+        // CLIP similarity ceiling: very high CLIP cosine = visually near-identical.
         if clipSim > 0.88 {
             composite *= 0.40
         } else if clipSim > 0.75 && thematic < 0.20 {
@@ -167,9 +203,16 @@ public enum PairScorer {
             let cA = ConceptClusters.matchedClusters(for: captionA)
             let cB = ConceptClusters.matchedClusters(for: captionB)
             let shared = cA.intersection(cB)
-            if let theme = shared.first {
+            let meaningfulShared = shared.filter { (ConceptClusters.weights[$0] ?? 0) >= 0.75 }
+            if let theme = meaningfulShared.first {
                 let readable = theme.replacingOccurrences(of: "_", with: " ")
                 rationaleText = "Thematic resonance — both images share a sense of \(readable)."
+            } else if let axis = ConceptClusters.axisPairs.first(where: { axis in
+                (cA.contains(axis.a) && cB.contains(axis.b)) || (cA.contains(axis.b) && cB.contains(axis.a))
+            }) {
+                let aName = axis.a.replacingOccurrences(of: "_", with: " ")
+                let bName = axis.b.replacingOccurrences(of: "_", with: " ")
+                rationaleText = "Complementary resonance — \(aName) meets \(bName)."
             } else {
                 rationaleText = "Conceptual contrast — subjects from different worlds, connected by emotional register."
             }
@@ -236,7 +279,7 @@ public enum PairScorer {
         }
     }
 
-    // MARK: - Original CLIP-based thematic score (fallback)
+    // MARK: - Original CLIP-based thematic score (fallback when no captions)
 
     static func thematicScore(_ a: [Float], _ b: [Float]) -> Float {
         guard a.count == b.count, !a.isEmpty else { return 0 }

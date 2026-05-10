@@ -380,19 +380,14 @@ public enum ConceptClusters {
         // a behavioral or relational context word. Single-signal "dog" would fire on
         // nearly any street caption that incidentally mentions a dog in the background.
         //
-        // Tier 0.75: animal presence is meaningful without being as emotionally
-        // specific as grief or tenderness. When both images center on an animal
-        // subject the connection is worth surfacing, but it doesn't carry the weight
-        // of a shared human emotional experience.
+        // Tier 0.2 (demoted from 0.75 in #47, 2026-05-06): "two dogs" is ambient
+        // subject context, not resonance. Animal pairs now only score meaningfully
+        // when they share a genuine emotional cluster (tenderness_care, isolation_solitude,
+        // etc.). The two-signal gate is retained to prevent false positives.
         //
         // G1 uses exact short nouns (dog, cat, horse, bird) that the stemmer leaves
         // unchanged. G2 uses behavioral/relational words that indicate the animal is
         // the emotional anchor of the scene, not just scenery.
-        //
-        // Diagnostic basis (#9, 2026-05-05): 3,244 animal-animal pairs in DB;
-        // 87 (2.7%) score below thematic 0.20 because no current cluster fires for
-        // both images — e.g., "lone horse silhouette" + "cowboy in landscape" share
-        // no cluster despite both being equine subjects.
         Cluster(
             name: "animal_presence",
             keywords: [
@@ -462,8 +457,28 @@ public enum ConceptClusters {
         "domestic_intimacy":      1.0,
         // Tier 0.75 — meaningful; two-signal gate prevents ambient over-firing
         "humor_absurdity":        0.75,
-        // Tier 0.75 — animal presence as emotional anchor (#9, 2026-05-05)
-        "animal_presence":        0.75,
+        // Tier 0.2 — ambient subject context (#47, 2026-05-06)
+        // "Two dogs" is shared context, not resonance. Demoted from 0.75 so
+        // animal pairs must share an emotional cluster to score meaningfully.
+        "animal_presence":        0.2,
+    ]
+
+    // MARK: - Complementary axis pairs
+
+    /// Cluster pairs that are opposite ends of the same phenomenon.
+    /// A bonus is added to thematic score when imageA fires one end and imageB the other
+    /// (evaluated symmetrically — A↔B or B↔A both fire).
+    /// (#48, 2026-05-06)
+    public static let axisPairs: [(a: String, b: String, bonus: Float)] = [
+        ("sound_music",         "sensory_overwhelm",      0.35),  // source ↔ receiver of sound
+        ("power_dominance",     "vulnerability_exposure",  0.35),  // power ↔ its subject
+        ("skilled_performance", "looking_watching",        0.25),  // performer ↔ audience
+        ("tenderness_care",     "isolation_solitude",      0.25),  // connection ↔ disconnection
+        ("joy_celebration",     "grief_sorrow",            0.30),  // joy ↔ grief
+        ("power_dominance",     "confinement_freedom",     0.25),  // authority ↔ constraint
+        ("labor_effort",        "stillness_rest",          0.20),  // work ↔ rest
+        ("movement_energy",     "stillness_rest",          0.20),  // motion ↔ stillness
+        ("devotion_belief",     "tension_conflict",        0.20),  // faith ↔ discord
     ]
 
     // MARK: - Weighted Dice floor
