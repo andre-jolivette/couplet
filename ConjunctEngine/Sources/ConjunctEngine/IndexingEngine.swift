@@ -312,6 +312,47 @@ public actor IndexingEngine {
                 phase: .accentExtraction, itemsComplete: accentDone, itemsTotal: accentTotal
             ))
         }
+        // ── Phase 3.7: Weight centroid extraction ─────────────────────────
+        // Backfills weightCentroidX / weightCentroidY for all active images that lack it.
+        // Reads compositionGrid from featureVectors — no image decode required.
+        continuation.yield(IndexingProgress(
+            phase: .centroidExtraction, itemsComplete: 0, itemsTotal: 0
+        ))
+
+        let centroidRows: [(Int64, [Float])] = try db.read { db in
+            let rows = try Row.fetchAll(db, sql: """
+                SELECT i.id, fv.compositionGrid
+                FROM images i
+                JOIN featureVectors fv ON fv.imageID = i.id
+                WHERE i.isActive = 1 AND i.weightCentroidX IS NULL
+            """)
+            return rows.compactMap { row -> (Int64, [Float])? in
+                guard let id   = row["id"] as? Int64,
+                      let blob = row["compositionGrid"] as? Data else { return nil }
+                let floats = blob.withUnsafeBytes { ptr in
+                    Array(ptr.bindMemory(to: Float.self))
+                }
+                return (id, floats)
+            }
+        }
+
+        var centroidDone = 0
+        let centroidTotal = centroidRows.count
+        for (imageID, grid) in centroidRows {
+            try Task.checkCancellation()
+            if let c = GeometricAnalyser.weightCentroid(from: grid) {
+                try db.write { db in
+                    try db.execute(
+                        sql: "UPDATE images SET weightCentroidX = ?, weightCentroidY = ? WHERE id = ?",
+                        arguments: [c.x, c.y, imageID]
+                    )
+                }
+            }
+            centroidDone += 1
+            continuation.yield(IndexingProgress(
+                phase: .centroidExtraction, itemsComplete: centroidDone, itemsTotal: centroidTotal
+            ))
+        }
 
         // ── Phase 4: Intra-folder pair scoring ───────────────────────────
         // Scores only images in the current scan batch against each other.
@@ -330,12 +371,13 @@ public actor IndexingEngine {
 
         // Build metadata only for batch images — sufficient for intra-folder scoring.
         typealias ImageMeta = (captureDate: Double?, filename: String, caption: String,
-                               accentHue: Double?, accentSaturation: Double?)
+                               accentHue: Double?, accentSaturation: Double?,
+                               weightCentroidX: Double?, weightCentroidY: Double?)
         let imageMeta: [Int64: ImageMeta] = try db.read { db in
             guard !batchIDs.isEmpty else { return [:] }
             let ids = batchIDs.map { "\($0)" }.joined(separator: ",")
             let rows = try Row.fetchAll(
-                db, sql: "SELECT id, captureDate, filename, caption, accentHue, accentSaturation FROM images WHERE id IN (\(ids))"
+                db, sql: "SELECT id, captureDate, filename, caption, accentHue, accentSaturation, weightCentroidX, weightCentroidY FROM images WHERE id IN (\(ids))"
             )
             var result = [Int64: ImageMeta]()
             for row in rows {
@@ -346,7 +388,9 @@ public actor IndexingEngine {
                     filename: row["filename"] as? String ?? "",
                     caption: row["caption"] as? String ?? "",
                     accentHue: row["accentHue"] as? Double,
-                    accentSaturation: row["accentSaturation"] as? Double
+                    accentSaturation: row["accentSaturation"] as? Double,
+                    weightCentroidX: row["weightCentroidX"] as? Double,
+                    weightCentroidY: row["weightCentroidY"] as? Double
                 )
             }
             return result
@@ -373,6 +417,10 @@ public actor IndexingEngine {
                     captionB: metaB?.caption ?? "",
                     accentHueA: metaA?.accentHue, accentSaturationA: metaA?.accentSaturation,
                     accentHueB: metaB?.accentHue, accentSaturationB: metaB?.accentSaturation,
+                    weightCentroidXA: metaA?.weightCentroidX.map(Float.init),
+                    weightCentroidYA: metaA?.weightCentroidY.map(Float.init),
+                    weightCentroidXB: metaB?.weightCentroidX.map(Float.init),
+                    weightCentroidYB: metaB?.weightCentroidY.map(Float.init),
                     weights: weights
                 )
                 if s.compositeScore > 0 {
@@ -492,10 +540,11 @@ public actor IndexingEngine {
         guard !batchVectors.isEmpty, !otherVectors.isEmpty else { return }
 
         typealias ImageMeta = (captureDate: Double?, filename: String, caption: String,
-                               accentHue: Double?, accentSaturation: Double?)
+                               accentHue: Double?, accentSaturation: Double?,
+                               weightCentroidX: Double?, weightCentroidY: Double?)
         let imageMeta: [Int64: ImageMeta] = try db.read { db in
             let rows = try Row.fetchAll(
-                db, sql: "SELECT id, captureDate, filename, caption, accentHue, accentSaturation FROM images WHERE isActive = 1"
+                db, sql: "SELECT id, captureDate, filename, caption, accentHue, accentSaturation, weightCentroidX, weightCentroidY FROM images WHERE isActive = 1"
             )
             var result = [Int64: ImageMeta]()
             for row in rows {
@@ -506,7 +555,9 @@ public actor IndexingEngine {
                     filename: row["filename"] as? String ?? "",
                     caption: row["caption"] as? String ?? "",
                     accentHue: row["accentHue"] as? Double,
-                    accentSaturation: row["accentSaturation"] as? Double
+                    accentSaturation: row["accentSaturation"] as? Double,
+                    weightCentroidX: row["weightCentroidX"] as? Double,
+                    weightCentroidY: row["weightCentroidY"] as? Double
                 )
             }
             return result
@@ -531,6 +582,10 @@ public actor IndexingEngine {
                     captionB: metaB?.caption ?? "",
                     accentHueA: metaA?.accentHue, accentSaturationA: metaA?.accentSaturation,
                     accentHueB: metaB?.accentHue, accentSaturationB: metaB?.accentSaturation,
+                    weightCentroidXA: metaA?.weightCentroidX.map(Float.init),
+                    weightCentroidYA: metaA?.weightCentroidY.map(Float.init),
+                    weightCentroidXB: metaB?.weightCentroidX.map(Float.init),
+                    weightCentroidYB: metaB?.weightCentroidY.map(Float.init),
                     weights: weights
                 )
                 if s.compositeScore > 0 {
