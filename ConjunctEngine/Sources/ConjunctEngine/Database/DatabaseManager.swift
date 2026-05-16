@@ -242,6 +242,27 @@ public final class DatabaseManager: Sendable {
             }
         }
 
+        // ── v10: Edge-energy weight centroid per image ────────────────────
+        // weightCentroidX (0–1, left=0, right=1) and weightCentroidY (0–1, top=0, bottom=1)
+        // store the edge-energy-weighted visual centroid of each image's composition grid.
+        // Used by the directional complement component of the geometric scorer.
+        // NULL when not yet processed or when the image is near-featureless (total edge
+        // energy < 1e-6). Same re-attempt semantics as accentHue. See decision #59.
+        migrator.registerMigration("v10_weightCentroids") { db in
+            try db.alter(table: "images") { t in
+                t.add(column: "weightCentroidX", .real)
+                t.add(column: "weightCentroidY", .real)
+            }
+        }
+
+        // ── v11: Saliency centroids ───────────────────────────────────────
+        // Nulls out edge-energy centroids written by v10 so Phase 3.7 re-populates
+        // them using Vision attention saliency on next re-index. Column names are
+        // unchanged — only the computation source changes. See decision #64.
+        migrator.registerMigration("v11_saliencyCentroids") { db in
+            try db.execute(sql: "UPDATE images SET weightCentroidX = NULL, weightCentroidY = NULL")
+        }
+
         try migrator.migrate(pool)
     }
 }

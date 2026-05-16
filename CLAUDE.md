@@ -24,18 +24,19 @@ Mid-res preview cache: `~/Library/Caches/Conjunct/previews/{imageID}.jpg`
 
 ## Architecture
 
-### Indexing Pipeline (7 phases)
+### Indexing Pipeline (8 phases)
 1. **Scan** — FileScanner reads EXIF captureDate, colorProfile from CGImageSource
 2. **Duplicate detection** — dHash perceptual hashing, Hamming threshold=6
 3. **Thumbnails** — 512px via CGImageSourceCreateThumbnailAtIndex (prevents IOSurface exhaustion)
 4. **CLIP extraction** — CLIPCoreMLEngine, 224px input, cosine similarity embeddings
 5. **Captioning** — OllamaCaptioningEngine → `qwen2.5vl-caption` via localhost:11434; captions ALL uncaptioned active images each run
 6. **Accent color extraction** — backfills `accentHue` / `accentSaturation` for all active images WHERE accentHue IS NULL; uses 256px downsample, 24 hue bins (15°), prominence = area × mean saturation, 5–40% pixel fraction window, saturation floor 0.25; NULL for B&W/neutral images — decision #54
-7. **Pair scoring** — PairScorer, dual topK (composite top-150 + thematic top-10); two-phase: intra-folder first (blocking), cross-folder in background (cancellable) — decision #34
+7. **Saliency centroid extraction** — backfills `weightCentroidX` / `weightCentroidY` for all active images WHERE weightCentroidX IS NULL; runs `VNGenerateAttentionBasedSaliencyImageRequest` on cached 512px thumbnails; confidence-weighted centroid of salient object bounding boxes, normalized 0–1 (Vision bottom-left origin flipped to top-left); NULL when no salient objects found — decisions #59, #64
+8. **Pair scoring** — PairScorer, dual topK (composite top-150 + thematic top-10); two-phase: intra-folder first (blocking), cross-folder in background (cancellable) — decision #34
 
 ### Three Scoring Axes (PairScorer.swift)
 - **Aesthetic (weight 0.40)** — Three-way max: HSL histogram intersection (harmony), LAB palette contrast (contrast), or accent color echo (accent_echo). Echo score = `hueScore × √(satA × satB)` where hueScore ramps ≤10°→1.0, ≤30°→linear, >30°→0. Winning pathway sets `aestheticSubmode`. See decision #56.
-- **Geometric (weight 0.20)** — edge orientation cosine similarity + composition grid cosine similarity + tonal weight differential (`abs(normVarA − normVarB)`, rewards breath pairs where one image is compositionally dense and the other is open/spare); edge peakedness exception for strong asymmetry (decision #53)
+- **Geometric (weight 0.20)** — three-component formula: `structural×0.65 + directional×0.10 + breath×0.25`. Structural = (edge orientation cosine × edgeMult + grid cosine × varMult) / 2; directional = `directionalComplementScore()` using per-image `weightCentroidX/Y` (Vision attention saliency centroid from 512px thumbnails, stored in images table — decision #64); breath = `abs(normVarA − normVarB)`. When directional > structural, sets `geometricSubmode = "directional_complement"` and emits "Spatial tension — compositions in conversation." rationale. Edge peakedness exception for breath pairs remains inside edgeMult (decision #53). **Directional weight is 0.10 pending post-re-index validation** — will be raised to 0.35 once saliency centroids are confirmed non-trivially distributed. See decisions #59, #60, #64.
 - **Thematic (weight 0.40, boosted to 0.60 when ≥0.20)** — weighted Dice coefficient on ConceptClusters matched from qwen captions; CLIP cosine fallback when no captions
 
 ### ConceptClusters
@@ -45,6 +46,31 @@ Mid-res preview cache: `~/Library/Caches/Conjunct/previews/{imageID}.jpg`
 - **Tier 0.2 (ambient):** urban_street, nature_landscape, community_gathering, animal_presence
 
 Five clusters use two-signal gating (require ≥1 keyword from each of two vocabulary groups): `humor_absurdity`, `uncanny_ordinary`, `solitude_in_crowd`, `domestic_intimacy`, `animal_presence`.
+
+## Pairing Theory — Design Intent and Known Gaps
+
+Full theory in PAIRING_THEORY.md. This section is the operational summary for implementation work.
+
+### Three Pairing Modes
+- **Mode 1 — Semantic arc:** Two images occupy complementary positions in the same human experience arc. Neither image alone names it; together they make it visible. Third meaning is an idea that can be articulated. *Primary carrier: thematic axis.*
+- **Mode 2 — Slant rhyme:** Two images share one specific formal property (a color, a shape, a quality of light) while diverging on everything else. Third meaning is a perception felt before it's named. *Primary carrier: aesthetic (accent echo) and geometric axes.*
+- **Mode 3 — Ambient existential register:** Shared quality of attention to the fragile and ordinary (Soth's towels). Out of scope currently.
+
+### Third Meaning Test
+A pair passes if it creates a meaning that exists in neither image alone. It fails if the best description of the pair just restates what each image independently contains. Two dogs = fail ("there are two dogs"). Musician + ears-woman = pass (sound as a force in the city — given by one, hungered for by another).
+
+### Per-Axis Design Intent vs. Current State
+
+**Thematic** — *should measure:* complementary positions in the same human experience arc. *Currently measures:* weighted Dice on cluster vocabulary — rewards shared clusters, not relational position. *Architectural ceiling reached:* can't distinguish source from receiver of the same phenomenon. Musician and ears-woman both fire `sound_music` + `sensory_overwhelm` via the word "ear" → Dice > ambient floor → axis bonus guard fires → pair below thematic topK cutoff. Caption redesign (#50) is the correct next lever. Do not add more clusters expecting this to improve.
+
+**Aesthetic** — *should measure:* harmony (same visual world), complement (productive tonal contrast), or echo (one specific formal property rhyming across dissimilar images). *Currently measures:* three-way max of HSL histogram intersection (harmony), LAB palette contrast (complement), and accent hue echo (#56). *Missing:* light quality (deferred, hardest to compute reliably); tonal weight complementarity for breath pairs (#55, adds ~0.12 max composite lift when implemented).
+
+**Geometric** — *should measure:* structural rhyme, directional complement (figures spatially facing each other / strong lines leading from one image to the next), or breath (dense image paired with spare/open image). *Currently measures:* three-component formula `structural×0.65 + directional×0.10 + breath×0.25` — structural via edge/grid cosine similarity, directional via Vision attention saliency centroid opposition (`weightCentroidX/Y`, decision #64), breath via tonal weight differential. *Directional weight is 0.10 pending validation:* edge-energy centroid (#59) proven ineffective; replaced with Vision saliency in #64. Saliency centroid quality unverified on real library — validate stdev and spot-check asymmetric images before raising weight to 0.35. *Missing:* uniform area ratio for genuine sparseness detection; gaze direction; light quality.
+
+### Known Scoring Failures
+- **Musician + ears-woman:** Both captions share `sound_music` + `sensory_overwhelm` vocabulary → Dice > ambient floor → axis bonus guard fires. Pair scores via Dice but ranks below thematic topK cutoff. Only caption redesign (#50) fixes this.
+- **Breath pairs:** Geometric differential ~0.07 composite max is below surfacing threshold. Aesthetic tonal weight complementarity (#55) needed to close the gap.
+- **Mode 2 beyond color echo:** Light quality echo and gestural/energetic echo are unmeasured anywhere in the system.
 
 ## Known Gotchas
 
@@ -109,6 +135,12 @@ Do not report the task as complete until all 7 steps are done.
 | 50 | Caption prompt redesign — emotional register over scene description | Keyword cluster system at architectural ceiling after #45, #47, #48, #49. qwen2.5vl-caption captions describe what is visible, not what is felt. Recommended first step: redesign qwen prompt to request emotional register and human condition rather than scene inventory. Define 3–5 failing test pairs before committing to a full re-caption. See decision #46 outcome note and backlog #50 in DECISIONS.md. |
 | 55 | Breath pairs — aesthetic axis tonal weight complementarity | Geometric axis (#53) contributes `abs(normVarA − normVarB)` differential (weight 0.4/2.4) but max composite lift is ~0.07 — not enough to surface breath pairs reliably. Next step: add tonal weight complementarity as Component 3 of the aesthetic axis (weight 0.30 within aesthetic, ~0.12 max composite lift). Prerequisite: visually confirm `20250426-_R016343.jpg` and `20210313-L1001045.jpg` as genuine open/spare breath-pair candidates. See decision #55 and PAIRING_THEORY.md §Aesthetic axis redesign. |
 | 56 | Accent color echo — pair scoring + info panel | Done. `accentEchoScore = hueScore × √(satA × satB)`, hue ramp ≤10°→1.0, ≤30°→linear, >30°→0. Three-way max in `aestheticScore()` with `harmony` and `contrast`. Lightbox info rail shows "Color echo" label with two hue swatches when `aestheticSubmode == "accent_echo"`. Canonical test pair (`_R017085` + `R0024458`, both accentHue≈7.5°) confirmed in pairs table post re-index. See decision #56. |
+| 59 | Directional complement scoring — geometric axis | Superseded by #64. Edge-energy centroid proven ineffective (stdev=0.046, 96.1% of library in centX [0.40, 0.60]). Scoring infrastructure (columns, `directionalComplementScore()`, Phase 3.7) retained; computation replaced with Vision saliency in #64. Structural weight partially restored in #60. See decision #59. |
+| 60 | Restore geometric structural weight | Done. `structural×0.65 + directional×0.10 + breath×0.25`. Weight will be re-calibrated once saliency centroids are validated. See decision #60. |
+| 64 | Vision saliency centroid — replace edge-energy centroid | Done. `VNGenerateAttentionBasedSaliencyImageRequest` on cached 512px thumbnails. v11 migration nulls stale edge-energy values; Phase 3.7 re-populates with attention saliency on next re-index. **Pending validation:** re-index and confirm stdev > 0.10 and DSCF3336 centX < 0.40. Once confirmed, raise directional weight from 0.10 → 0.35. See decision #64. |
+| 61 | Directional complement — dominant orientation opposition | Use the existing 32-bin `edgeOrientation` histogram (stored per image in `featureVectors`, not read at score time). Extract dominant bin angle per image; score opposition as angular distance mapped so 180° → 1.0. No new data or re-index. Would detect opposing diagonals (DSCF3269-positive). |
+| 62 | Directional complement — regional orientation histogram | Per-cell dominant edge direction from an 8×8 grid. Would capture "subject on left facing right" as rightward edges in left cells. Requires new extraction phase + DB schema. Long-term. |
+| 63 | Gaze / body direction detection | Vision `VNDetectFaceRectanglesRequest` or `VNDetectHumanBodyPoseRequest`. Directly detects "figure facing into frame" directional complement. Long-term; requires new Phase 3.x and DB columns. |
 | 57 | Accent echo — desaturated reds under shadow | Under low-light or shadow, photographic reds maintain hue but lose saturation. `√(satA × satB)` penalises these even when the pair is a genuine echo. Would require reasoning about hue purity independent of luminance — not solvable at pixel-statistics level without scene context. Backlog until a test case justifies the complexity. |
 | 58 | Accent echo — ambient hue exclusion (foliage green, sky blue) | Distinguishing billboard green from foliage green, painted blue from sky blue, requires scene context (caption vocabulary, CLIP region features) not available at score time. `√(satA × satB)` partially compensates (dull ambient greens have low saturation), but vivid sky or foliage could still inflate scores. Cannot be solved at pixel-statistics level without knowing what a color "belongs to." Backlog. |
 

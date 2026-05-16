@@ -53,6 +53,8 @@ public enum PairScorer {
         captionA: String = "", captionB: String = "",
         accentHueA: Double? = nil, accentSaturationA: Double? = nil,
         accentHueB: Double? = nil, accentSaturationB: Double? = nil,
+        weightCentroidXA: Float? = nil, weightCentroidYA: Float? = nil,
+        weightCentroidXB: Float? = nil, weightCentroidYB: Float? = nil,
         weights: ScoringWeights = .default
     ) -> PairScore {
         let (aID, bID, vA, vB): (Int64, Int64, FeatureVector, FeatureVector) =
@@ -140,7 +142,9 @@ public enum PairScorer {
         let (aesthetic, submode) = aestheticScore(vA, vB,
                                                    accentHueA: accentHueA, accentSaturationA: accentSaturationA,
                                                    accentHueB: accentHueB, accentSaturationB: accentSaturationB)
-        let geo = geometricScore(vA, vB)
+        let geo = geometricScore(vA, vB,
+                                 centXA: weightCentroidXA, centYA: weightCentroidYA,
+                                 centXB: weightCentroidXB, centYB: weightCentroidYB)
         let geometric = geo.score
 
         var composite =
@@ -222,7 +226,8 @@ public enum PairScorer {
             }
         } else {
             rationaleText = rationale(aesthetic: aesthetic, submode: submode,
-                                      geometric: geometric, thematic: thematic)
+                                      geometric: geometric, thematic: thematic,
+                                      geometricSubmode: geo.geometricSubmode)
         }
 
         return PairScore(
@@ -266,7 +271,8 @@ public enum PairScorer {
 
     static func captionRationale(
         _ captionA: String, _ captionB: String,
-        aesthetic: Float, submode: String, geometric: Float, thematic: Float
+        aesthetic: Float, submode: String, geometric: Float, thematic: Float,
+        geometricSubmode: String = ""
     ) -> String {
         let cA = ConceptClusters.matchedClusters(for: captionA)
         let cB = ConceptClusters.matchedClusters(for: captionB)
@@ -279,7 +285,8 @@ public enum PairScorer {
             return "Conceptual contrast — the subjects inhabit different worlds but share a visual or emotional register."
         } else {
             return rationale(aesthetic: aesthetic, submode: submode,
-                             geometric: geometric, thematic: thematic)
+                             geometric: geometric, thematic: thematic,
+                             geometricSubmode: geometricSubmode)
         }
     }
 
@@ -363,6 +370,34 @@ public enum PairScorer {
 
     // MARK: - Geometric scoring
 
+    // Gate: at least one image must have meaningful visual weight concentration
+    // (normVar ≥ floor) for the directional complement score to fire.
+    // Prevents rewarding pairs where both images are equally featureless.
+    private static let kGridVarianceFloor: Float = 0.1
+
+    // Directional complement: rewards pairs where visual weight sits on opposite
+    // sides of the frame (left-heavy + right-heavy, or top + bottom).
+    // Score = (hDist × 0.70 + vDist × 0.30) × √(concA × concB)
+    //   • Horizontal opposition is the primary spatial conversation mode (0.70).
+    //   • Concentration weighting: pairs where both images are strongly weighted
+    //     score higher than one weighted + one diffuse.
+    static func directionalComplementScore(
+        centXA: Float, centYA: Float,
+        centXB: Float, centYB: Float,
+        normVarA: Float, normVarB: Float
+    ) -> Float {
+        guard max(normVarA, normVarB) >= kGridVarianceFloor else { return 0 }
+
+        let hDist = abs(centXA - centXB)
+        let vDist = abs(centYA - centYB)
+
+        let rawScore = hDist * 0.70 + vDist * 0.30
+
+        let concA = min(normVarA, 1.0)
+        let concB = min(normVarB, 1.0)
+        return rawScore * sqrt(concA * concB)
+    }
+
     // Normalization anchors for the distinctiveness multiplier.
     // Calibrated against library debug output: edgePeakedness p90≈4.0, gridVariance p90≈0.20.
     // An image at or above the anchor scores 1.0; below it scales proportionally toward 0.
@@ -370,10 +405,13 @@ public enum PairScorer {
     private static let kGridVarianceNorm: Float = 0.20
 
     static func geometricScore(
-        _ vA: FeatureVector, _ vB: FeatureVector
+        _ vA: FeatureVector, _ vB: FeatureVector,
+        centXA: Float? = nil, centYA: Float? = nil,
+        centXB: Float? = nil, centYB: Float? = nil
     ) -> (score: Float, rawEdgeSim: Float, rawGridSim: Float,
           maxEdgePeakedness: Float, maxGridVariance: Float,
-          edgePeakednessMult: Float, gridVarianceMult: Float) {
+          edgePeakednessMult: Float, gridVarianceMult: Float,
+          geometricSubmode: String) {
 
         let rawEdge = cosineSimilarity01(vA.edgeOrientationFloats, vB.edgeOrientationFloats)
         let rawGrid = cosineSimilarity01(vA.compositionGridFloats, vB.compositionGridFloats)
@@ -412,22 +450,36 @@ public enum PairScorer {
         }
         let varMult    = pow(normVarA  * normVarB,  kDistinctivenessExponent)
 
-        // Tonal weight differential: rewards compositional density asymmetry.
-        // Peaks when one image is grid-complex (dense layered scene) and the other is
-        // grid-uniform (plain wall, open sky). Similarity-based rawGridSim cannot surface
-        // these breath pairs — they need a complementarity signal instead.
-        // Weight 0.4 adds a third term; denominator adjusts accordingly.
-        let kBreathWeight: Float = 0.4
-        let breathScore = abs(normVarA - normVarB)
+        // Three-component geometric formula (decision #59, weights adjusted #60):
+        //   structural  (0.65) — edge orientation + grid cosine similarity; rhyme mode
+        //   directional (0.10) — placeholder; centroid signal ineffective (#59),
+        //                        pending replacement with Vision saliency centroid
+        //   breath      (0.25) — tonal weight differential; dense+spare pairs mode
+        let structural = (rawEdge * edgeMult + rawGrid * varMult) / 2.0
+
+        let directional: Float
+        if let cxA = centXA, let cyA = centYA, let cxB = centXB, let cyB = centYB {
+            directional = directionalComplementScore(
+                centXA: cxA, centYA: cyA, centXB: cxB, centYB: cyB,
+                normVarA: normVarA, normVarB: normVarB
+            )
+        } else {
+            directional = 0
+        }
+
+        let breath = abs(normVarA - normVarB)
+        let score = structural * 0.65 + directional * 0.10 + breath * 0.25
+        let geometricSubmode = directional > structural ? "directional_complement" : "structural"
 
         return (
-            score:              (rawEdge * edgeMult + rawGrid * varMult + breathScore * kBreathWeight) / (2 + kBreathWeight),
+            score:              score,
             rawEdgeSim:         rawEdge,
             rawGridSim:         rawGrid,
             maxEdgePeakedness:  max(peakA, peakB),
             maxGridVariance:    max(varA, varB),
             edgePeakednessMult: edgeMult,
-            gridVarianceMult:   varMult
+            gridVarianceMult:   varMult,
+            geometricSubmode:   geometricSubmode
         )
     }
 
@@ -454,7 +506,8 @@ public enum PairScorer {
 
     static func rationale(
         aesthetic: Float, submode: String,
-        geometric: Float, thematic: Float
+        geometric: Float, thematic: Float,
+        geometricSubmode: String = ""
     ) -> String {
         let maxScore = max(aesthetic, geometric, thematic)
         switch maxScore {
@@ -468,6 +521,8 @@ public enum PairScorer {
             return "Tonal harmony — images share a similar colour register and mood."
         case aesthetic:
             return "Colour contrast — images form a complementary colour relationship."
+        case geometric where geometricSubmode == "directional_complement":
+            return "Spatial tension — compositions in conversation."
         default:
             return "Compositional echo — images share similar structural lines or visual weight."
         }
