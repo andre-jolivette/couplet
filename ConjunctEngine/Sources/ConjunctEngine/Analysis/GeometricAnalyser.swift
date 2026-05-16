@@ -138,33 +138,6 @@ public enum GeometricAnalyser {
         return brightness + edgeDensity  // 32 floats total
     }
 
-    // MARK: - Weight centroid
-
-    /// Edge-energy-weighted visual centroid from a 32-float composition grid.
-    /// Uses the edge-density half (indices 16–31). Returns nil for near-featureless images.
-    /// Output is normalized 0–1: left=0/right=1 (x), top=0/bottom=1 (y).
-    public static func weightCentroid(from gridValues: [Float]) -> (x: Float, y: Float)? {
-        guard gridValues.count >= 32 else { return nil }
-        let n = gridDivisions  // 4
-        var totalEnergy: Float = 0
-        for i in 0..<(n * n) {
-            totalEnergy += gridValues[n * n + i]
-        }
-        guard totalEnergy > 1e-6 else { return nil }
-
-        var cx: Float = 0
-        var cy: Float = 0
-        for row in 0..<n {
-            for col in 0..<n {
-                let val = gridValues[n * n + row * n + col]
-                cx += val * Float(col)
-                cy += val * Float(row)
-            }
-        }
-        return (x: cx / (totalEnergy * Float(n - 1)),
-                y: cy / (totalEnergy * Float(n - 1)))
-    }
-
     // MARK: - Greyscale conversion
 
     static func toGreyscale(image: CGImage, size: Int) throws -> [Float] {

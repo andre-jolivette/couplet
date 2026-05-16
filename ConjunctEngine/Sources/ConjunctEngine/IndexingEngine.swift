@@ -312,35 +312,26 @@ public actor IndexingEngine {
                 phase: .accentExtraction, itemsComplete: accentDone, itemsTotal: accentTotal
             ))
         }
-        // ── Phase 3.7: Weight centroid extraction ─────────────────────────
-        // Backfills weightCentroidX / weightCentroidY for all active images that lack it.
-        // Reads compositionGrid from featureVectors — no image decode required.
+        // ── Phase 3.7: Saliency centroid extraction ───────────────────────
+        // Backfills weightCentroidX / weightCentroidY using Vision attention saliency.
+        // Runs on cached 512px thumbnails — no re-decode from originals required.
         continuation.yield(IndexingProgress(
             phase: .centroidExtraction, itemsComplete: 0, itemsTotal: 0
         ))
 
-        let centroidRows: [(Int64, [Float])] = try db.read { db in
+        let saliencyIDs: [Int64] = try db.read { db in
             let rows = try Row.fetchAll(db, sql: """
-                SELECT i.id, fv.compositionGrid
-                FROM images i
-                JOIN featureVectors fv ON fv.imageID = i.id
-                WHERE i.isActive = 1 AND i.weightCentroidX IS NULL
+                SELECT id FROM images WHERE isActive = 1 AND weightCentroidX IS NULL
             """)
-            return rows.compactMap { row -> (Int64, [Float])? in
-                guard let id   = row["id"] as? Int64,
-                      let blob = row["compositionGrid"] as? Data else { return nil }
-                let floats = blob.withUnsafeBytes { ptr in
-                    Array(ptr.bindMemory(to: Float.self))
-                }
-                return (id, floats)
-            }
+            return rows.compactMap { $0["id"] as? Int64 }
         }
 
-        var centroidDone = 0
-        let centroidTotal = centroidRows.count
-        for (imageID, grid) in centroidRows {
+        var saliencyDone = 0
+        let saliencyTotal = saliencyIDs.count
+        for imageID in saliencyIDs {
             try Task.checkCancellation()
-            if let c = GeometricAnalyser.weightCentroid(from: grid) {
+            let url = thumbDir.appendingPathComponent("\(imageID).jpg")
+            if let c = try? SaliencyAnalyser.attentionCentroid(thumbnailURL: url) {
                 try db.write { db in
                     try db.execute(
                         sql: "UPDATE images SET weightCentroidX = ?, weightCentroidY = ? WHERE id = ?",
@@ -348,9 +339,9 @@ public actor IndexingEngine {
                     )
                 }
             }
-            centroidDone += 1
+            saliencyDone += 1
             continuation.yield(IndexingProgress(
-                phase: .centroidExtraction, itemsComplete: centroidDone, itemsTotal: centroidTotal
+                phase: .centroidExtraction, itemsComplete: saliencyDone, itemsTotal: saliencyTotal
             ))
         }
 

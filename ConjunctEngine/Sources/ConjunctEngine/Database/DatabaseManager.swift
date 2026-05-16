@@ -255,6 +255,14 @@ public final class DatabaseManager: Sendable {
             }
         }
 
+        // ── v11: Saliency centroids ───────────────────────────────────────
+        // Nulls out edge-energy centroids written by v10 so Phase 3.7 re-populates
+        // them using Vision attention saliency on next re-index. Column names are
+        // unchanged — only the computation source changes. See decision #64.
+        migrator.registerMigration("v11_saliencyCentroids") { db in
+            try db.execute(sql: "UPDATE images SET weightCentroidX = NULL, weightCentroidY = NULL")
+        }
+
         try migrator.migrate(pool)
     }
 }

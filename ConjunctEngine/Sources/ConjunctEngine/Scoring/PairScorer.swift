@@ -450,9 +450,10 @@ public enum PairScorer {
         }
         let varMult    = pow(normVarA  * normVarB,  kDistinctivenessExponent)
 
-        // Three-component geometric formula (decision #59):
-        //   structural  (0.40) — edge orientation + grid cosine similarity; rhyme mode
-        //   directional (0.35) — edge-energy centroid opposition; conversation-pairs mode
+        // Three-component geometric formula (decision #59, weights adjusted #60):
+        //   structural  (0.65) — edge orientation + grid cosine similarity; rhyme mode
+        //   directional (0.10) — placeholder; centroid signal ineffective (#59),
+        //                        pending replacement with Vision saliency centroid
         //   breath      (0.25) — tonal weight differential; dense+spare pairs mode
         let structural = (rawEdge * edgeMult + rawGrid * varMult) / 2.0
 
@@ -467,7 +468,7 @@ public enum PairScorer {
         }
 
         let breath = abs(normVarA - normVarB)
-        let score = structural * 0.40 + directional * 0.35 + breath * 0.25
+        let score = structural * 0.65 + directional * 0.10 + breath * 0.25
         let geometricSubmode = directional > structural ? "directional_complement" : "structural"
 
         return (

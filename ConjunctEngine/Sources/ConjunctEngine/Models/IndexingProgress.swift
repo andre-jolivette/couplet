@@ -9,7 +9,7 @@ public struct IndexingProgress: Sendable {
         case extraction            = "Extracting features"
         case captioning            = "Captioning images"
         case accentExtraction      = "Extracting accent colors"
-        case centroidExtraction    = "Extracting weight centroids"
+        case centroidExtraction    = "Extracting saliency centroids"
         case scoring               = "Scoring pairs"
         case complete              = "Complete"
         case failed                = "Failed"
