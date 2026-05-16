@@ -76,6 +76,20 @@ Five clusters use two-signal gating (require ≥1 keyword from each of two vocab
 
 **streamPage0Pairs populates representativePairsCache on completion** — `EngineController.streamPage0Pairs` runs DB fetching and cap-2 in a `Task.detached`, yields accepted batches through `AsyncStream<[DisplayPair]>`, then updates `representativePairsCache` via `await MainActor.run` (with generation check) after the last batch. `PairsGridViewModel.loadPairs` consumes the stream and appends batches directly to `allPairs`. `loadMorePairs` still slices from the cache as before. Do not skip the `MainActor.run` cache update at the end of the inner detached task or `loadMorePairs` will return empty results. See decision #41.
 
+## Workflow
+
+When completing any feature or fix, follow these steps in order before considering the task done:
+
+1. **Branch** — work on a branch named `[type]/[decision-id]-[short-description]` (e.g. `feat/54-accent-color`, `fix/26-temporal-penalty`). Create it at the start, not the end.
+2. **Code complete** — implement and verify the change works.
+3. **Docs** — update `CLAUDE.md` and `DECISIONS.md` to reflect the change. Check both files deliberately: not just the obvious section, but anything touched by the change (Known Gotchas, Open Backlog, Architecture overview).
+4. **Commit** — use `#ID` prefix convention. Doc updates go in the same commit or a follow-up commit on the same branch. Do not leave doc updates uncommitted.
+5. **Merge check** — confirm all commits are on the branch and nothing is dangling or uncommitted.
+6. **PR ready** — confirm the branch is pushed. State the suggested PR title and a one-paragraph description summarising what changed and why.
+7. **Branch cleanup** — after the PR is merged, delete the remote branch.
+
+Do not report the task as complete until all 7 steps are done.
+
 ## Open Backlog Items
 | # | Title | Notes |
 |---|-------|-------|
