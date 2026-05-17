@@ -263,6 +263,17 @@ public final class DatabaseManager: Sendable {
             try db.execute(sql: "UPDATE images SET weightCentroidX = NULL, weightCentroidY = NULL")
         }
 
+        // ── v12: Gaze direction per image ─────────────────────────────────
+        // gazeDirectionX: normalized gaze direction [-1.0=left, +1.0=right].
+        // Extracted from VNDetectFaceLandmarksRequest pupil positions (primary)
+        // or head yaw from nose/eye geometry (fallback). NULL when no face detected
+        // or face too small to produce reliable landmarks. See decision #65.
+        migrator.registerMigration("v12_gazeDirection") { db in
+            try db.alter(table: "images") { t in
+                t.add(column: "gazeDirectionX", .real)
+            }
+        }
+
         try migrator.migrate(pool)
     }
 }

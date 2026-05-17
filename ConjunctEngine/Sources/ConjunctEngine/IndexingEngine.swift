@@ -321,7 +321,8 @@ public actor IndexingEngine {
 
         let saliencyIDs: [Int64] = try db.read { db in
             let rows = try Row.fetchAll(db, sql: """
-                SELECT id FROM images WHERE isActive = 1 AND weightCentroidX IS NULL
+                SELECT id FROM images
+                WHERE isActive = 1 AND (weightCentroidX IS NULL OR gazeDirectionX IS NULL)
             """)
             return rows.compactMap { $0["id"] as? Int64 }
         }
@@ -331,13 +332,20 @@ public actor IndexingEngine {
         for imageID in saliencyIDs {
             try Task.checkCancellation()
             let url = thumbDir.appendingPathComponent("\(imageID).jpg")
-            if let c = try? SaliencyAnalyser.attentionCentroid(thumbnailURL: url) {
-                try db.write { db in
-                    try db.execute(
-                        sql: "UPDATE images SET weightCentroidX = ?, weightCentroidY = ? WHERE id = ?",
-                        arguments: [c.x, c.y, imageID]
-                    )
-                }
+            let features = try? SaliencyAnalyser.analyse(thumbnailURL: url)
+            try db.write { db in
+                try db.execute(
+                    sql: """
+                        UPDATE images
+                        SET weightCentroidX = ?, weightCentroidY = ?, gazeDirectionX = ?
+                        WHERE id = ?
+                    """,
+                    arguments: [
+                        features?.centroid?.x, features?.centroid?.y,
+                        features?.gazeDirectionX,
+                        imageID
+                    ]
+                )
             }
             saliencyDone += 1
             continuation.yield(IndexingProgress(
@@ -363,12 +371,13 @@ public actor IndexingEngine {
         // Build metadata only for batch images — sufficient for intra-folder scoring.
         typealias ImageMeta = (captureDate: Double?, filename: String, caption: String,
                                accentHue: Double?, accentSaturation: Double?,
-                               weightCentroidX: Double?, weightCentroidY: Double?)
+                               weightCentroidX: Double?, weightCentroidY: Double?,
+                               gazeDirectionX: Double?)
         let imageMeta: [Int64: ImageMeta] = try db.read { db in
             guard !batchIDs.isEmpty else { return [:] }
             let ids = batchIDs.map { "\($0)" }.joined(separator: ",")
             let rows = try Row.fetchAll(
-                db, sql: "SELECT id, captureDate, filename, caption, accentHue, accentSaturation, weightCentroidX, weightCentroidY FROM images WHERE id IN (\(ids))"
+                db, sql: "SELECT id, captureDate, filename, caption, accentHue, accentSaturation, weightCentroidX, weightCentroidY, gazeDirectionX FROM images WHERE id IN (\(ids))"
             )
             var result = [Int64: ImageMeta]()
             for row in rows {
@@ -381,7 +390,8 @@ public actor IndexingEngine {
                     accentHue: row["accentHue"] as? Double,
                     accentSaturation: row["accentSaturation"] as? Double,
                     weightCentroidX: row["weightCentroidX"] as? Double,
-                    weightCentroidY: row["weightCentroidY"] as? Double
+                    weightCentroidY: row["weightCentroidY"] as? Double,
+                    gazeDirectionX: row["gazeDirectionX"] as? Double
                 )
             }
             return result
@@ -412,6 +422,8 @@ public actor IndexingEngine {
                     weightCentroidYA: metaA?.weightCentroidY.map(Float.init),
                     weightCentroidXB: metaB?.weightCentroidX.map(Float.init),
                     weightCentroidYB: metaB?.weightCentroidY.map(Float.init),
+                    gazeDirectionXA: metaA?.gazeDirectionX.map(Float.init),
+                    gazeDirectionXB: metaB?.gazeDirectionX.map(Float.init),
                     weights: weights
                 )
                 if s.compositeScore > 0 {
@@ -532,10 +544,11 @@ public actor IndexingEngine {
 
         typealias ImageMeta = (captureDate: Double?, filename: String, caption: String,
                                accentHue: Double?, accentSaturation: Double?,
-                               weightCentroidX: Double?, weightCentroidY: Double?)
+                               weightCentroidX: Double?, weightCentroidY: Double?,
+                               gazeDirectionX: Double?)
         let imageMeta: [Int64: ImageMeta] = try db.read { db in
             let rows = try Row.fetchAll(
-                db, sql: "SELECT id, captureDate, filename, caption, accentHue, accentSaturation, weightCentroidX, weightCentroidY FROM images WHERE isActive = 1"
+                db, sql: "SELECT id, captureDate, filename, caption, accentHue, accentSaturation, weightCentroidX, weightCentroidY, gazeDirectionX FROM images WHERE isActive = 1"
             )
             var result = [Int64: ImageMeta]()
             for row in rows {
@@ -548,7 +561,8 @@ public actor IndexingEngine {
                     accentHue: row["accentHue"] as? Double,
                     accentSaturation: row["accentSaturation"] as? Double,
                     weightCentroidX: row["weightCentroidX"] as? Double,
-                    weightCentroidY: row["weightCentroidY"] as? Double
+                    weightCentroidY: row["weightCentroidY"] as? Double,
+                    gazeDirectionX: row["gazeDirectionX"] as? Double
                 )
             }
             return result
@@ -577,6 +591,8 @@ public actor IndexingEngine {
                     weightCentroidYA: metaA?.weightCentroidY.map(Float.init),
                     weightCentroidXB: metaB?.weightCentroidX.map(Float.init),
                     weightCentroidYB: metaB?.weightCentroidY.map(Float.init),
+                    gazeDirectionXA: metaA?.gazeDirectionX.map(Float.init),
+                    gazeDirectionXB: metaB?.gazeDirectionX.map(Float.init),
                     weights: weights
                 )
                 if s.compositeScore > 0 {

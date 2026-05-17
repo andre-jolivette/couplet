@@ -55,6 +55,7 @@ public enum PairScorer {
         accentHueB: Double? = nil, accentSaturationB: Double? = nil,
         weightCentroidXA: Float? = nil, weightCentroidYA: Float? = nil,
         weightCentroidXB: Float? = nil, weightCentroidYB: Float? = nil,
+        gazeDirectionXA: Float? = nil, gazeDirectionXB: Float? = nil,
         weights: ScoringWeights = .default
     ) -> PairScore {
         let (aID, bID, vA, vB): (Int64, Int64, FeatureVector, FeatureVector) =
@@ -144,7 +145,8 @@ public enum PairScorer {
                                                    accentHueB: accentHueB, accentSaturationB: accentSaturationB)
         let geo = geometricScore(vA, vB,
                                  centXA: weightCentroidXA, centYA: weightCentroidYA,
-                                 centXB: weightCentroidXB, centYB: weightCentroidYB)
+                                 centXB: weightCentroidXB, centYB: weightCentroidYB,
+                                 gazeXA: gazeDirectionXA, gazeXB: gazeDirectionXB)
         let geometric = geo.score
 
         var composite =
@@ -404,10 +406,23 @@ public enum PairScorer {
     private static let kEdgePeakedNorm: Float  = 4.0
     private static let kGridVarianceNorm: Float = 0.20
 
+    /// Scores how much two images create a gaze conversation across the diptych.
+    /// Maximum (1.0) when A looks hard right (+1) and B looks hard left (-1) — facing each other.
+    /// Zero when both look the same direction or away from each other.
+    static func gazeConversationScore(gazeA: Float, gazeB: Float) -> Float {
+        // (gazeA - gazeB) / 2 maps:
+        //   +1, -1 → 1.0  (facing each other, full score)
+        //   +1,  0 → 0.5  (one looks toward the other)
+        //   +1, +1 → 0.0  (parallel gaze, no conversation)
+        //   -1, +1 → 0.0  (looking away from each other — negative clamped to zero)
+        return max(0, (gazeA - gazeB) / 2)
+    }
+
     static func geometricScore(
         _ vA: FeatureVector, _ vB: FeatureVector,
         centXA: Float? = nil, centYA: Float? = nil,
-        centXB: Float? = nil, centYB: Float? = nil
+        centXB: Float? = nil, centYB: Float? = nil,
+        gazeXA: Float? = nil, gazeXB: Float? = nil
     ) -> (score: Float, rawEdgeSim: Float, rawGridSim: Float,
           maxEdgePeakedness: Float, maxGridVariance: Float,
           edgePeakednessMult: Float, gridVarianceMult: Float,
@@ -450,26 +465,40 @@ public enum PairScorer {
         }
         let varMult    = pow(normVarA  * normVarB,  kDistinctivenessExponent)
 
-        // Three-component geometric formula (decision #59, weights adjusted #60, #64):
+        // Three-component geometric formula (decision #59, weights adjusted #60, #64, #65):
         //   structural  (0.55) — edge orientation + grid cosine similarity; rhyme mode
-        //   directional (0.20) — Vision human-detection centroid opposition; conversation-pairs mode
-        //                        Conservative restore post-validation (stdev_x=0.141). See decision #64.
+        //   directional (0.20) — max(centroidScore, gazeScore); conversation-pairs mode.
+        //                        centroidScore from Vision human-detection centroid opposition.
+        //                        gazeScore from VNDetectFaceLandmarksRequest pupil direction.
+        //                        max() lets whichever signal is stronger drive the pair.
+        //                        See decisions #64, #65.
         //   breath      (0.25) — tonal weight differential; dense+spare pairs mode
         let structural = (rawEdge * edgeMult + rawGrid * varMult) / 2.0
 
-        let directional: Float
+        let centroidScore: Float
         if let cxA = centXA, let cyA = centYA, let cxB = centXB, let cyB = centYB {
-            directional = directionalComplementScore(
+            centroidScore = directionalComplementScore(
                 centXA: cxA, centYA: cyA, centXB: cxB, centYB: cyB,
                 normVarA: normVarA, normVarB: normVarB
             )
         } else {
-            directional = 0
+            centroidScore = 0
         }
+
+        let gazeScore: Float = (gazeXA != nil && gazeXB != nil)
+            ? gazeConversationScore(gazeA: gazeXA!, gazeB: gazeXB!)
+            : 0
+
+        let directional = max(centroidScore, gazeScore)
 
         let breath = abs(normVarA - normVarB)
         let score = structural * 0.55 + directional * 0.20 + breath * 0.25
-        let geometricSubmode = directional > structural ? "directional_complement" : "structural"
+        let geometricSubmode: String
+        if directional > structural {
+            geometricSubmode = gazeScore >= centroidScore ? "gaze_conversation" : "directional_complement"
+        } else {
+            geometricSubmode = "structural"
+        }
 
         return (
             score:              score,
@@ -521,6 +550,8 @@ public enum PairScorer {
             return "Tonal harmony — images share a similar colour register and mood."
         case aesthetic:
             return "Colour contrast — images form a complementary colour relationship."
+        case geometric where geometricSubmode == "gaze_conversation":
+            return "Eyes in conversation — each image completes the other's look."
         case geometric where geometricSubmode == "directional_complement":
             return "Spatial tension — compositions in conversation."
         default:
