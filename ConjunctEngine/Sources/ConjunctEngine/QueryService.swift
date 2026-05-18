@@ -128,6 +128,7 @@ public actor QueryService {
                 p.selectedFor,
                 p.thematicScore,
                 p.compositeScore, p.rationale,
+                p.geometricSubmode,
                 a.filename       AS filenameA,
                 a.thumbnailPath  AS thumbA,
                 a.path           AS imagePathA,
@@ -210,7 +211,8 @@ public actor QueryService {
                     accentHueA: row["accentHueA"] as? Double,
                     accentSaturationA: row["accentSaturationA"] as? Double,
                     accentHueB: row["accentHueB"] as? Double,
-                    accentSaturationB: row["accentSaturationB"] as? Double
+                    accentSaturationB: row["accentSaturationB"] as? Double,
+                    geometricSubmode: row["geometricSubmode"] as? String
                 ))
                 if chunk.count == chunkSize {
                     try process(chunk)
@@ -327,6 +329,7 @@ public actor QueryService {
                 p.selectedFor,
                 p.thematicScore,
                 p.compositeScore, p.rationale,
+                p.geometricSubmode,
                 a.filename       AS filenameA,
                 a.thumbnailPath  AS thumbA,
                 a.path           AS imagePathA,
@@ -410,7 +413,8 @@ public actor QueryService {
                     accentHueA: row["accentHueA"] as? Double,
                     accentSaturationA: row["accentSaturationA"] as? Double,
                     accentHueB: row["accentHueB"] as? Double,
-                    accentSaturationB: row["accentSaturationB"] as? Double
+                    accentSaturationB: row["accentSaturationB"] as? Double,
+                    geometricSubmode: row["geometricSubmode"] as? String
                 )
             }
         }

@@ -495,7 +495,42 @@ public actor IndexingEngine {
                 }
             }
 
+            // Geometric topK: top-5 per image by geometricScore, with one bonus slot
+            // for the best non-structural pair if all top-5 are structural. Ensures
+            // gaze_conversation and directional_complement pairs surface even when their
+            // composite score is too low for the composite pool. See decision #68.
+            let geometricK = 5
+            var geometricKeys = Set<String>()
+            for (_, scores) in perImage {
+                let byGeo = scores.sorted { $0.geometricScore > $1.geometricScore }
+                var slotsUsed = 0
+                var hasNonStructural = false
+                for s in byGeo {
+                    if slotsUsed >= geometricK && hasNonStructural { break }
+                    let key = "\(s.imageAID)_\(s.imageBID)"
+                    let isNonStructural = s.geometricSubmode != "structural"
+                    if slotsUsed < geometricK {
+                        if toInsert[key] == nil {
+                            toInsert[key] = s
+                            geometricKeys.insert(key)
+                        }
+                        slotsUsed += 1
+                        if isNonStructural { hasNonStructural = true }
+                    } else if !hasNonStructural && isNonStructural {
+                        if toInsert[key] == nil {
+                            toInsert[key] = s
+                            geometricKeys.insert(key)
+                        }
+                        hasNonStructural = true
+                    }
+                }
+            }
+
             for (key, s) in toInsert {
+                let selFor: String
+                if compositeKeys.contains(key) { selFor = "composite" }
+                else if geometricKeys.contains(key) { selFor = "geometric" }
+                else { selFor = "thematic" }
                 var record = PairRecord(
                     imageAID: s.imageAID, imageBID: s.imageBID,
                     aestheticScore: Double(s.aestheticScore),
@@ -507,10 +542,11 @@ public actor IndexingEngine {
                     maxGridVariance: Double(s.maxGridVariance),
                     edgePeakednessMult: Double(s.edgePeakednessMult),
                     gridVarianceMult: Double(s.gridVarianceMult),
-                    selectedFor: compositeKeys.contains(key) ? "composite" : "thematic",
+                    selectedFor: selFor,
                     thematicScore: Double(s.thematicScore),
                     compositeScore: Double(s.compositeScore),
-                    rationale: s.rationale
+                    rationale: s.rationale,
+                    geometricSubmode: s.geometricSubmode
                 )
                 try record.insert(db)
             }
@@ -647,7 +683,40 @@ public actor IndexingEngine {
                 }
             }
 
+            // Geometric topK: top-5 per image by geometricScore, with one bonus slot
+            // for the best non-structural pair if all top-5 are structural. See decision #68.
+            let geometricK = 5
+            var geometricKeys = Set<String>()
+            for (_, scores) in perImage {
+                let byGeo = scores.sorted { $0.geometricScore > $1.geometricScore }
+                var slotsUsed = 0
+                var hasNonStructural = false
+                for s in byGeo {
+                    if slotsUsed >= geometricK && hasNonStructural { break }
+                    let key = "\(s.imageAID)_\(s.imageBID)"
+                    let isNonStructural = s.geometricSubmode != "structural"
+                    if slotsUsed < geometricK {
+                        if toInsert[key] == nil {
+                            toInsert[key] = s
+                            geometricKeys.insert(key)
+                        }
+                        slotsUsed += 1
+                        if isNonStructural { hasNonStructural = true }
+                    } else if !hasNonStructural && isNonStructural {
+                        if toInsert[key] == nil {
+                            toInsert[key] = s
+                            geometricKeys.insert(key)
+                        }
+                        hasNonStructural = true
+                    }
+                }
+            }
+
             for (key, s) in toInsert {
+                let selFor: String
+                if compositeKeys.contains(key) { selFor = "composite" }
+                else if geometricKeys.contains(key) { selFor = "geometric" }
+                else { selFor = "thematic" }
                 var record = PairRecord(
                     imageAID: s.imageAID, imageBID: s.imageBID,
                     aestheticScore: Double(s.aestheticScore),
@@ -659,10 +728,11 @@ public actor IndexingEngine {
                     maxGridVariance: Double(s.maxGridVariance),
                     edgePeakednessMult: Double(s.edgePeakednessMult),
                     gridVarianceMult: Double(s.gridVarianceMult),
-                    selectedFor: compositeKeys.contains(key) ? "composite" : "thematic",
+                    selectedFor: selFor,
                     thematicScore: Double(s.thematicScore),
                     compositeScore: Double(s.compositeScore),
-                    rationale: s.rationale
+                    rationale: s.rationale,
+                    geometricSubmode: s.geometricSubmode
                 )
                 try record.insert(db)
             }
