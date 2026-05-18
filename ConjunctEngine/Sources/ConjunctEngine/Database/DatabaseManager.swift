@@ -286,6 +286,14 @@ public final class DatabaseManager: Sendable {
             }
         }
 
+        // ── v14: Null out head-yaw gaze readings ─────────────────────────
+        // The head-yaw fallback in gazeFromLandmarks() produced false positives
+        // on tilted/recumbent faces (passed-out person, face tilted back). Fallback
+        // removed in decision #69; existing readings re-extracted on next re-index.
+        migrator.registerMigration("v14_regaze") { db in
+            try db.execute(sql: "UPDATE images SET gazeDirectionX = NULL")
+        }
+
         try migrator.migrate(pool)
     }
 }

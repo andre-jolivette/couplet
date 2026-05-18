@@ -94,50 +94,29 @@ public enum SaliencyAnalyser {
     // MARK: - Gaze extraction
 
     /// Extracts gaze direction [-1.0=left, +1.0=right] from face landmarks.
-    /// Primary: pupil offset within eye contour (requires leftPupil + rightPupil landmarks).
-    /// Fallback: head yaw estimated from nose crest vs eye midpoint geometry.
+    /// Pupil offset within eye contour. Returns nil when pupils are not detected
+    /// (face tilted, eyes closed, profile) — no head-yaw fallback, which produced
+    /// false positives on tilted/recumbent faces. See decision #69.
     private static func gazeFromLandmarks(_ obs: VNFaceObservation) -> Float? {
         guard let lm       = obs.landmarks,
               let leftEye  = lm.leftEye,
-              let rightEye = lm.rightEye else { return nil }
+              let rightEye = lm.rightEye,
+              let leftPup  = lm.leftPupil?.normalizedPoints.first,
+              let rightPup = lm.rightPupil?.normalizedPoints.first else { return nil }
 
-        // Primary path: pupil position within eye contour.
-        if let leftPup  = lm.leftPupil?.normalizedPoints.first,
-           let rightPup = lm.rightPupil?.normalizedPoints.first {
-
-            func pupilOffset(eye: VNFaceLandmarkRegion2D, pupil: CGPoint) -> Float? {
-                let xs = eye.normalizedPoints.map { $0.x }
-                guard let minX = xs.min(), let maxX = xs.max(),
-                      (maxX - minX) > 0.05 else { return nil }  // eye too small → skip
-                // 0 = pupil at leftmost edge of eye, 1 = rightmost edge
-                return Float((pupil.x - minX) / (maxX - minX))
-            }
-
-            if let lo = pupilOffset(eye: leftEye,  pupil: leftPup),
-               let ro = pupilOffset(eye: rightEye, pupil: rightPup) {
-                // Average offset [0,1] → [-1,+1].
-                // High value = pupils toward right of their respective eyes = looking right.
-                return (lo + ro) - 1.0
-            }
+        func pupilOffset(eye: VNFaceLandmarkRegion2D, pupil: CGPoint) -> Float? {
+            let xs = eye.normalizedPoints.map { $0.x }
+            guard let minX = xs.min(), let maxX = xs.max(),
+                  (maxX - minX) > 0.05 else { return nil }  // eye too small → skip
+            // 0 = pupil at leftmost edge of eye, 1 = rightmost edge
+            return Float((pupil.x - minX) / (maxX - minX))
         }
 
-        // Fallback: head yaw from nose-crest vs eye-midpoint geometry.
-        return headYawFallback(lm: lm, leftEye: leftEye, rightEye: rightEye)
-    }
+        guard let lo = pupilOffset(eye: leftEye,  pupil: leftPup),
+              let ro = pupilOffset(eye: rightEye, pupil: rightPup) else { return nil }
 
-    private static func headYawFallback(
-        lm: VNFaceLandmarks2D,
-        leftEye: VNFaceLandmarkRegion2D,
-        rightEye: VNFaceLandmarkRegion2D
-    ) -> Float? {
-        guard let noseTip = lm.noseCrest?.normalizedPoints.last,
-              !leftEye.normalizedPoints.isEmpty,
-              !rightEye.normalizedPoints.isEmpty else { return nil }
-
-        let leftCX  = Float(leftEye.normalizedPoints.map  { $0.x }.reduce(0, +)) / Float(leftEye.normalizedPoints.count)
-        let rightCX = Float(rightEye.normalizedPoints.map { $0.x }.reduce(0, +)) / Float(rightEye.normalizedPoints.count)
-        let eyeMidX = (leftCX + rightCX) / 2
-        // Nose right of eye midpoint → head turned right; scale to ~[-1, 1].
-        return min(max((Float(noseTip.x) - eyeMidX) * 4, -1), 1)
+        // Average offset [0,1] → [-1,+1].
+        // High value = pupils toward right of their respective eyes = looking right.
+        return (lo + ro) - 1.0
     }
 }
