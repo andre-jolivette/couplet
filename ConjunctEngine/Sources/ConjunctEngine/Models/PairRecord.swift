@@ -20,11 +20,13 @@ public struct PairRecord: Codable, FetchableRecord, MutablePersistableRecord, Se
     public var edgePeakednessMult: Double?
     /// √(normVar_A × normVar_B). Nil for pairs scored before v6.
     public var gridVarianceMult: Double?
-    /// Which topK path inserted this pair: 'thematic' or 'composite'. Nil for pre-v8 rows.
+    /// Which topK path inserted this pair: 'composite', 'thematic', or 'geometric'. Nil for pre-v8 rows.
     public var selectedFor: String?
     public var thematicScore: Double
     public var compositeScore: Double
     public var rationale: String
+    /// Geometric sub-mode that produced the score. Nil for pre-v13 rows.
+    public var geometricSubmode: String?
     public var scoredAt: Date
 
     public static var databaseTableName = "pairs"
@@ -49,6 +51,7 @@ public struct PairRecord: Codable, FetchableRecord, MutablePersistableRecord, Se
         thematicScore: Double,
         compositeScore: Double,
         rationale: String,
+        geometricSubmode: String? = nil,
         scoredAt: Date = Date()
     ) {
         self.imageAID = min(rawA, rawB)
@@ -66,6 +69,7 @@ public struct PairRecord: Codable, FetchableRecord, MutablePersistableRecord, Se
         self.thematicScore = thematicScore
         self.compositeScore = compositeScore
         self.rationale = String(rationale.prefix(120))
+        self.geometricSubmode = geometricSubmode
         self.scoredAt = scoredAt
     }
 }

@@ -44,6 +44,8 @@ public struct PairQueryResult: Sendable {
     public let accentSaturationA: Double?
     public let accentHueB: Double?
     public let accentSaturationB: Double?
+    /// Nil for pairs scored before v13_geometricSubmode migration.
+    public let geometricSubmode: String?
 }
 
 public struct FolderQueryResult: Sendable {

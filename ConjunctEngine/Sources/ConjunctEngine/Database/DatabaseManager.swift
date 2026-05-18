@@ -274,6 +274,18 @@ public final class DatabaseManager: Sendable {
             }
         }
 
+        // ── v13: Geometric submode per pair ───────────────────────────────
+        // geometricSubmode: which geometric sub-mode produced the score —
+        // "structural", "directional_complement", "gaze_conversation", or
+        // "opposing_diagonals". NULL for pre-v13 pairs. Used at topK selection
+        // time to ensure variety across submodes in the geometric topK pool.
+        // See decisions #67, #68.
+        migrator.registerMigration("v13_geometricSubmode") { db in
+            try db.alter(table: "pairs") { t in
+                t.add(column: "geometricSubmode", .text)
+            }
+        }
+
         try migrator.migrate(pool)
     }
 }

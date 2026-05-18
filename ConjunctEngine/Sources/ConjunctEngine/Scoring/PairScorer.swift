@@ -41,6 +41,9 @@ public struct PairScore: Sendable {
     public let thematicScore: Float
     public let compositeScore: Float
     public let rationale: String
+    /// Which geometric sub-mode determined the score: "structural", "directional_complement",
+    /// "gaze_conversation", or "opposing_diagonals". Stored per pair for topK variety selection.
+    public let geometricSubmode: String
 }
 
 public enum PairScorer {
@@ -244,7 +247,8 @@ public enum PairScorer {
             gridVarianceMult: geo.gridVarianceMult,
             thematicScore: thematic,
             compositeScore: composite,
-            rationale: rationaleText
+            rationale: rationaleText,
+            geometricSubmode: geo.geometricSubmode
         )
     }
 
@@ -465,9 +469,9 @@ public enum PairScorer {
         }
         let varMult    = pow(normVarA  * normVarB,  kDistinctivenessExponent)
 
-        // Three-component geometric formula (decision #59, weights adjusted #60, #64, #65):
-        //   structural  (0.55) — edge orientation + grid cosine similarity; rhyme mode
-        //   directional (0.20) — max(centroidScore, gazeScore); conversation-pairs mode.
+        // Three-component geometric formula (decision #59, weights adjusted #60, #64, #65, #67):
+        //   structural  (0.50) — edge orientation + grid cosine similarity; rhyme mode
+        //   directional (0.25) — max(centroidScore, gazeScore); conversation-pairs mode.
         //                        centroidScore from Vision human-detection centroid opposition.
         //                        gazeScore from VNDetectFaceLandmarksRequest pupil direction.
         //                        max() lets whichever signal is stronger drive the pair.
@@ -492,7 +496,7 @@ public enum PairScorer {
         let directional = max(centroidScore, gazeScore)
 
         let breath = abs(normVarA - normVarB)
-        let score = structural * 0.55 + directional * 0.20 + breath * 0.25
+        let score = structural * 0.50 + directional * 0.25 + breath * 0.25
         let geometricSubmode: String
         if directional > structural {
             geometricSubmode = gazeScore >= centroidScore ? "gaze_conversation" : "directional_complement"
