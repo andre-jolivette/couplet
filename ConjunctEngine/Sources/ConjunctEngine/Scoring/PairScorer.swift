@@ -414,12 +414,19 @@ public enum PairScorer {
     /// Maximum (1.0) when A looks hard right (+1) and B looks hard left (-1) — facing each other.
     /// Zero when both look the same direction or away from each other.
     static func gazeConversationScore(gazeA: Float, gazeB: Float) -> Float {
-        // (gazeA - gazeB) / 2 maps:
+        // Raw pupil-offset gaze values cluster near 0 — p90 of abs(gazeDirectionX) ≈ 0.30.
+        // Normalize by dividing by 0.30 so the real distribution fills [-1, +1] before scoring.
+        // Without this, even a clearly lateral gaze (±0.24) contributes only half its true signal.
+        // See decision #70.
+        let kGazeScale: Float = 1.0 / 0.30
+        let nA = min(max(gazeA * kGazeScale, -1), 1)
+        let nB = min(max(gazeB * kGazeScale, -1), 1)
+        // (nA - nB) / 2 maps:
         //   +1, -1 → 1.0  (facing each other, full score)
         //   +1,  0 → 0.5  (one looks toward the other)
         //   +1, +1 → 0.0  (parallel gaze, no conversation)
         //   -1, +1 → 0.0  (looking away from each other — negative clamped to zero)
-        return max(0, (gazeA - gazeB) / 2)
+        return max(0, (nA - nB) / 2)
     }
 
     static func geometricScore(
