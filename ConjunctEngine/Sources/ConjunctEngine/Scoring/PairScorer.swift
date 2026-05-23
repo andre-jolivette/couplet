@@ -61,10 +61,22 @@ public enum PairScorer {
         gazeDirectionXA: Float? = nil, gazeDirectionXB: Float? = nil,
         weights: ScoringWeights = .default
     ) -> PairScore {
+        // Canonicalize so aID < bID. Also reorder gaze and centroid params to match,
+        // so geometricScore() always receives gazeXA for aID and gazeXB for bID.
+        // Without this reorder, gaze values correspond to the caller's (arbitrary)
+        // imageAID/imageBID ordering, not the canonical ordering — making gazeFlipped
+        // logic below unreliable. See decision #71.
+        let swap = imageAID > imageBID
         let (aID, bID, vA, vB): (Int64, Int64, FeatureVector, FeatureVector) =
-            imageAID <= imageBID
+            !swap
                 ? (imageAID, imageBID, vectorA, vectorB)
                 : (imageBID, imageAID, vectorB, vectorA)
+        let (gazeA, gazeB) = !swap
+            ? (gazeDirectionXA, gazeDirectionXB)
+            : (gazeDirectionXB, gazeDirectionXA)
+        let (cxA, cyA, cxB, cyB) = !swap
+            ? (weightCentroidXA, weightCentroidYA, weightCentroidXB, weightCentroidYB)
+            : (weightCentroidXB, weightCentroidYB, weightCentroidXA, weightCentroidYA)
 
         // CLIP cosine — computed once, used for both thematic diversity multiplier
         // and composite ceiling penalties below.
@@ -147,9 +159,9 @@ public enum PairScorer {
                                                    accentHueA: accentHueA, accentSaturationA: accentSaturationA,
                                                    accentHueB: accentHueB, accentSaturationB: accentSaturationB)
         let geo = geometricScore(vA, vB,
-                                 centXA: weightCentroidXA, centYA: weightCentroidYA,
-                                 centXB: weightCentroidXB, centYB: weightCentroidYB,
-                                 gazeXA: gazeDirectionXA, gazeXB: gazeDirectionXB)
+                                 centXA: cxA, centYA: cyA,
+                                 centXB: cxB, centYB: cyB,
+                                 gazeXA: gazeA, gazeXB: gazeB)
         let geometric = geo.score
 
         var composite =
@@ -235,8 +247,15 @@ public enum PairScorer {
                                       geometricSubmode: geo.geometricSubmode)
         }
 
+        // For gaze_conversation pairs: ensure the rightward-gazing image is imageA
+        // (displayed on the left) so the visual effect reads correctly across the diptych.
+        // gazeFlipped means the reversed direction scored higher — swap the canonical
+        // ID ordering so the rightward-gazer becomes imageAID. See decision #71.
+        let finalAID = geo.gazeFlipped && geo.geometricSubmode == "gaze_conversation" ? bID : aID
+        let finalBID = geo.gazeFlipped && geo.geometricSubmode == "gaze_conversation" ? aID : bID
+
         return PairScore(
-            imageAID: aID, imageBID: bID,
+            imageAID: finalAID, imageBID: finalBID,
             aestheticScore: aesthetic, aestheticSubmode: submode,
             geometricScore: geometric,
             rawEdgeSim: geo.rawEdgeSim,
@@ -437,7 +456,7 @@ public enum PairScorer {
     ) -> (score: Float, rawEdgeSim: Float, rawGridSim: Float,
           maxEdgePeakedness: Float, maxGridVariance: Float,
           edgePeakednessMult: Float, gridVarianceMult: Float,
-          geometricSubmode: String) {
+          geometricSubmode: String, gazeFlipped: Bool) {
 
         let rawEdge = cosineSimilarity01(vA.edgeOrientationFloats, vB.edgeOrientationFloats)
         let rawGrid = cosineSimilarity01(vA.compositionGridFloats, vB.compositionGridFloats)
@@ -496,9 +515,24 @@ public enum PairScorer {
             centroidScore = 0
         }
 
-        let gazeScore: Float = (gazeXA != nil && gazeXB != nil)
-            ? gazeConversationScore(gazeA: gazeXA!, gazeB: gazeXB!)
-            : 0
+        // Symmetrize gaze: score both directions and take the max so the pair
+        // is found regardless of which image happens to be gazeXA vs gazeXB.
+        // gazeFlipped = true means the reversed order (B looks right, A looks left)
+        // was stronger — caller uses this to swap imageAID/imageBID so the
+        // rightward-gazer becomes imageA (left display). See decision #71.
+        let gazeScore: Float
+        let gazeFlipped: Bool
+        if let gA = gazeXA, let gB = gazeXB {
+            let fwd = gazeConversationScore(gazeA: gA, gazeB: gB)
+            let rev = gazeConversationScore(gazeA: gB, gazeB: gA)
+            if rev > fwd {
+                gazeScore = rev; gazeFlipped = true
+            } else {
+                gazeScore = fwd; gazeFlipped = false
+            }
+        } else {
+            gazeScore = 0; gazeFlipped = false
+        }
 
         let directional = max(centroidScore, gazeScore)
 
@@ -519,7 +553,8 @@ public enum PairScorer {
             maxGridVariance:    max(varA, varB),
             edgePeakednessMult: edgeMult,
             gridVarianceMult:   varMult,
-            geometricSubmode:   geometricSubmode
+            geometricSubmode:   geometricSubmode,
+            gazeFlipped:        gazeFlipped
         )
     }
 
