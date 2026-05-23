@@ -54,8 +54,12 @@ public struct PairRecord: Codable, FetchableRecord, MutablePersistableRecord, Se
         geometricSubmode: String? = nil,
         scoredAt: Date = Date()
     ) {
-        self.imageAID = min(rawA, rawB)
-        self.imageBID = max(rawA, rawB)
+        // PairScorer.score() owns canonical ordering — for most pairs this means
+        // smaller ID first, but for gaze_conversation pairs the rightward-gazing
+        // image is stored as imageAID (left display) regardless of numeric ID order.
+        // Do NOT re-apply min/max here; trust what the scorer computed. See decision #71.
+        self.imageAID = rawA
+        self.imageBID = rawB
         self.aestheticScore = aestheticScore
         self.aestheticSubmode = aestheticSubmode
         self.geometricScore = geometricScore
