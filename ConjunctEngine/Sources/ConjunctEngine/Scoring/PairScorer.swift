@@ -456,10 +456,12 @@ public enum PairScorer {
     /// direction). Folded to undirected [0, 180°) by taking bin % 16 — bins 0 and 16
     /// represent the same undirected line direction.
     ///
-    /// Score = sin(dist × π/16) where dist ∈ [0, 8] bins = [0°, 90°], scaled by
-    /// √(normPeakA × normPeakB) so pairs need genuinely strong lines to score.
+    /// Score = sin(dist × π/16) × √(diagA × diagB) × √(normPeakA × normPeakB)
+    /// where dist ∈ [0, 8] bins = [0°, 90°] angular opposition between dominant directions,
+    /// and diagonalness = |sin(undirBin × π/8)| — rewards lines near 45°/135°,
+    /// penalises near-horizontal (0°) and near-vertical (90°) which are not "diagonals."
     /// Returns 0 when either image is below kMinPeakedness (no clear dominant direction).
-    /// See decision #73.
+    /// See decisions #73, #74.
     static func orientationOppositionScore(
         vA: FeatureVector, vB: FeatureVector,
         normPeakA: Float, normPeakB: Float
@@ -485,11 +487,17 @@ public enum PairScorer {
         let diff = abs(undirA - undirB)
         let dist = min(diff, 16 - diff)   // wraps around the 16-bin circle; max = 8
 
-        // sin ramp: 0 bins → 0.0, 4 bins (45°) → 0.71, 8 bins (90°) → 1.0
+        // Opposition: sin ramp — 0 bins → 0.0, 4 bins (45°) → 0.71, 8 bins (90°) → 1.0
         let scoreBase = sin(Float(dist) * .pi / 16)
 
-        // Scale by geometric mean of peakedness so weak-lined images earn less credit.
-        return scoreBase * sqrt(normPeakA * normPeakB)
+        // Diagonalness: |sin(undirBin × π/8)| — 1.0 at 45°/135°, 0.0 at horizontal/vertical.
+        // "Opposing diagonals" requires both lines to actually be diagonal, not just perpendicular.
+        // A horizontal + vertical pair gets 0; two 45° lines at right angles get 1.0.
+        let diagA = abs(sin(Float(undirA) * .pi / 8))
+        let diagB = abs(sin(Float(undirB) * .pi / 8))
+
+        // Combined: geometric mean of peakedness and diagonalness so all factors contribute.
+        return scoreBase * sqrt(normPeakA * normPeakB) * sqrt(diagA * diagB)
     }
 
     static func geometricScore(
