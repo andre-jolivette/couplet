@@ -448,6 +448,50 @@ public enum PairScorer {
         return max(0, (nA - nB) / 2)
     }
 
+    /// Scores how strongly two images have opposing dominant line directions.
+    /// Maximum (1.0) when dominant orientations are perpendicular (90° apart).
+    /// Zero when both images share the same dominant line direction.
+    ///
+    /// Uses the stored 32-bin directional edge histogram (full 360°, atan2 gradient
+    /// direction). Folded to undirected [0, 180°) by taking bin % 16 — bins 0 and 16
+    /// represent the same undirected line direction.
+    ///
+    /// Score = sin(dist × π/16) where dist ∈ [0, 8] bins = [0°, 90°], scaled by
+    /// √(normPeakA × normPeakB) so pairs need genuinely strong lines to score.
+    /// Returns 0 when either image is below kMinPeakedness (no clear dominant direction).
+    /// See decision #73.
+    static func orientationOppositionScore(
+        vA: FeatureVector, vB: FeatureVector,
+        normPeakA: Float, normPeakB: Float
+    ) -> Float {
+        // Gate: both images need a reasonably clear dominant line direction.
+        // normPeak = edgePeakedness / 4.0; kMinPeakedness = 0.25 → raw peakedness ≥ 1.0
+        let kMinPeakedness: Float = 0.25
+        guard normPeakA >= kMinPeakedness, normPeakB >= kMinPeakedness else { return 0 }
+
+        let hA = vA.edgeOrientationFloats
+        let hB = vB.edgeOrientationFloats
+        guard hA.count >= 32, hB.count >= 32 else { return 0 }
+
+        // Dominant directed bin [0, 32)
+        let domA = hA.indices.max(by: { hA[$0] < hA[$1] }) ?? 0
+        let domB = hB.indices.max(by: { hB[$0] < hB[$1] }) ?? 0
+
+        // Fold to undirected [0, 16) — bins 180° apart = same line direction
+        let undirA = domA % 16
+        let undirB = domB % 16
+
+        // Undirected angular distance in [0, 8] bins = [0°, 90°]
+        let diff = abs(undirA - undirB)
+        let dist = min(diff, 16 - diff)   // wraps around the 16-bin circle; max = 8
+
+        // sin ramp: 0 bins → 0.0, 4 bins (45°) → 0.71, 8 bins (90°) → 1.0
+        let scoreBase = sin(Float(dist) * .pi / 16)
+
+        // Scale by geometric mean of peakedness so weak-lined images earn less credit.
+        return scoreBase * sqrt(normPeakA * normPeakB)
+    }
+
     static func geometricScore(
         _ vA: FeatureVector, _ vB: FeatureVector,
         centXA: Float? = nil, centYA: Float? = nil,
@@ -500,8 +544,9 @@ public enum PairScorer {
         //   directional (0.25) — max(centroidScore, gazeScore); conversation-pairs mode.
         //                        centroidScore from Vision human-detection centroid opposition.
         //                        gazeScore from VNDetectFaceLandmarksRequest pupil direction.
+        //                        orientationScore from dominant edge-line opposition (decision #73).
         //                        max() lets whichever signal is stronger drive the pair.
-        //                        See decisions #64, #65.
+        //                        See decisions #64, #65, #73.
         //   breath      (0.25) — tonal weight differential; dense+spare pairs mode
         let structural = (rawEdge * edgeMult + rawGrid * varMult) / 2.0
 
@@ -534,13 +579,24 @@ public enum PairScorer {
             gazeScore = 0; gazeFlipped = false
         }
 
-        let directional = max(centroidScore, gazeScore)
+        let orientationScore = orientationOppositionScore(
+            vA: vA, vB: vB,
+            normPeakA: normPeakA, normPeakB: normPeakB
+        )
+
+        let directional = max(centroidScore, gazeScore, orientationScore)
 
         let breath = abs(normVarA - normVarB)
         let score = structural * 0.50 + directional * 0.25 + breath * 0.25
         let geometricSubmode: String
         if directional > structural {
-            geometricSubmode = gazeScore >= centroidScore ? "gaze_conversation" : "directional_complement"
+            if gazeScore >= centroidScore && gazeScore >= orientationScore {
+                geometricSubmode = "gaze_conversation"
+            } else if orientationScore >= centroidScore && orientationScore >= gazeScore {
+                geometricSubmode = "opposing_diagonals"
+            } else {
+                geometricSubmode = "directional_complement"
+            }
         } else {
             geometricSubmode = "structural"
         }
@@ -598,6 +654,8 @@ public enum PairScorer {
             return "Colour contrast — images form a complementary colour relationship."
         case geometric where geometricSubmode == "gaze_conversation":
             return "Eyes in conversation — each image completes the other's look."
+        case geometric where geometricSubmode == "opposing_diagonals":
+            return "Diagonal tension — lines cut across each other through the diptych."
         case geometric where geometricSubmode == "directional_complement":
             return "Spatial tension — compositions in conversation."
         default:
