@@ -456,11 +456,13 @@ public enum PairScorer {
     /// direction). Folded to undirected [0, 180°) by taking bin % 16 — bins 0 and 16
     /// represent the same undirected line direction.
     ///
-    /// Score = sin(dist × π/16) × √(diagA × diagB) × √(normPeakA × normPeakB)
-    /// where dist ∈ [0, 8] bins = [0°, 90°] angular opposition between dominant directions,
-    /// and diagonalness = |sin(undirBin × π/8)| — rewards lines near 45°/135°,
-    /// penalises near-horizontal (0°) and near-vertical (90°) which are not "diagonals."
-    /// Returns 0 when either image is below kMinPeakedness (no clear dominant direction).
+    /// Score = sin(dist × π/16) × √(normPeakA × normPeakB)
+    /// where dist ∈ [0, 8] bins = [0°, 90°] angular opposition between dominant directions.
+    /// Diagonalness gate: both images must have a dominant direction in the ~22.5°–67.5°
+    /// diagonal zone (|sin(undirBin × π/8)| ≥ 0.50). Filters bins 0–1 and 7–9 (near
+    /// horizontal or vertical) — those are not compositional diagonals. Full credit for
+    /// anything in the genuine diagonal range; no continuous penalty within the passing zone.
+    /// Returns 0 when either image is below kMinPeakedness or fails the diagonalness gate.
     /// See decisions #73, #74.
     static func orientationOppositionScore(
         vA: FeatureVector, vB: FeatureVector,
@@ -483,21 +485,23 @@ public enum PairScorer {
         let undirA = domA % 16
         let undirB = domB % 16
 
+        // Diagonalness gate: |sin(undirBin × π/8)| — 1.0 at 45°, 0.0 at 0° and 90°.
+        // Threshold 0.50 passes bins 2–6 and 10–14 (22.5°–67.5° and its mirror).
+        // Filters bins 0, 1, 7, 8, 9, 15 (within ~22.5° of horizontal or vertical).
+        let kMinDiagonal: Float = 0.50
+        let diagA = abs(sin(Float(undirA) * .pi / 8))
+        let diagB = abs(sin(Float(undirB) * .pi / 8))
+        guard diagA >= kMinDiagonal, diagB >= kMinDiagonal else { return 0 }
+
         // Undirected angular distance in [0, 8] bins = [0°, 90°]
         let diff = abs(undirA - undirB)
         let dist = min(diff, 16 - diff)   // wraps around the 16-bin circle; max = 8
 
-        // Opposition: sin ramp — 0 bins → 0.0, 4 bins (45°) → 0.71, 8 bins (90°) → 1.0
+        // sin ramp: 0 bins → 0.0, 4 bins (45°) → 0.71, 8 bins (90°) → 1.0
         let scoreBase = sin(Float(dist) * .pi / 16)
 
-        // Diagonalness: |sin(undirBin × π/8)| — 1.0 at 45°/135°, 0.0 at horizontal/vertical.
-        // "Opposing diagonals" requires both lines to actually be diagonal, not just perpendicular.
-        // A horizontal + vertical pair gets 0; two 45° lines at right angles get 1.0.
-        let diagA = abs(sin(Float(undirA) * .pi / 8))
-        let diagB = abs(sin(Float(undirB) * .pi / 8))
-
-        // Combined: geometric mean of peakedness and diagonalness so all factors contribute.
-        return scoreBase * sqrt(normPeakA * normPeakB) * sqrt(diagA * diagB)
+        // Scale by geometric mean of peakedness so weak-lined images earn less credit.
+        return scoreBase * sqrt(normPeakA * normPeakB)
     }
 
     static func geometricScore(
