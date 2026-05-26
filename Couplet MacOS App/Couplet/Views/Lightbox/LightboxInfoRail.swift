@@ -204,11 +204,27 @@ struct LightboxInfoRail: View {
     // MARK: - Geometric detail
 
     private var geometricDetail: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("Compositional structure")
+        let (label, description): (String, String) = {
+            switch pair.geometricSubmode {
+            case "gaze_conversation":
+                return ("Eyes in conversation",
+                        "Each image completes the other's look — figures gazing toward each other across the diptych.")
+            case "directional_complement":
+                return ("Spatial tension",
+                        "Compositions in conversation — visual weight sits on opposing sides, pulling the two images toward each other.")
+            case "opposing_diagonals":
+                return ("Diagonal tension",
+                        "Dominant lines cut across each other through the diptych — each image carries a diagonal that angles toward its partner.")
+            default:
+                return ("Compositional structure",
+                        "Edge orientation and composition grid similarity. High scores indicate similar framing, subject placement, and visual weight distribution.")
+            }
+        }()
+        return VStack(alignment: .leading, spacing: 4) {
+            Text(label)
                 .font(.system(size: 11, weight: .medium))
                 .foregroundColor(.white.opacity(0.60))
-            Text("Edge orientation and composition grid similarity. High scores indicate similar framing, subject placement, and visual weight distribution.")
+            Text(description)
                 .font(.system(size: 11))
                 .foregroundColor(.white.opacity(0.45))
                 .fixedSize(horizontal: false, vertical: true)
