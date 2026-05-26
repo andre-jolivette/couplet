@@ -680,6 +680,8 @@ final class EngineController: ObservableObject {
         // when available. NULL (pre-v8 rows) fall back to post-hoc score comparison.
         if r.selectedFor == "thematic" {
             modality = .thematic
+        } else if r.selectedFor == "aesthetic" {
+            modality = .aesthetic
         } else if r.thematicScore >= 0.25 && r.thematicScore > Double(geoScore) {
             modality = .thematic
         } else if Double(geoScore) >= r.aestheticScore {
@@ -716,6 +718,11 @@ final class EngineController: ObservableObject {
                               + geoScore               * w.geometric
                               + Float(r.thematicScore) * w.thematic)
                               * temporalPenalty
+        let axisScore = max(
+            Float(r.aestheticScore),
+            geoScore * 0.8,
+            Float(r.thematicScore)
+        ) * temporalPenalty
 
         return DisplayPair(
             id: Int(r.pairID), imageAID: Int(r.imageAID), imageBID: Int(r.imageBID),
@@ -729,7 +736,8 @@ final class EngineController: ObservableObject {
             geometricSubmode: r.geometricSubmode,
             accentHueA: r.accentHueA, accentSaturationA: r.accentSaturationA,
             accentHueB: r.accentHueB, accentSaturationB: r.accentSaturationB,
-            compositeScore: displayComposite, aestheticScore: Float(r.aestheticScore),
+            compositeScore: displayComposite, axisScore: axisScore,
+            aestheticScore: Float(r.aestheticScore),
             geometricScore: geoScore, thematicScore: Float(r.thematicScore),
             rationale: r.rationale,
             pairCountA: imagePairCounts[Int(r.imageAID), default: 0],
