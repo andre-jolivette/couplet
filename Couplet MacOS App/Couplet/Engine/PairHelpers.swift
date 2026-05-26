@@ -41,6 +41,8 @@ nonisolated func convertToPairFree(
     let modality: PairingModality
     if r.selectedFor == "thematic" {
         modality = .thematic
+    } else if r.selectedFor == "aesthetic" {
+        modality = .aesthetic
     } else if r.thematicScore >= 0.25 && r.thematicScore > Double(geoScore) {
         modality = .thematic
     } else if Double(geoScore) >= r.aestheticScore {

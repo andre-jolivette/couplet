@@ -175,9 +175,15 @@ public enum PairScorer {
             composite *= 0.45
         }
 
-        // When captions produce a meaningful thematic score, boost thematic weight
-        // so these pairs can compete with high-aesthetic/geometric pairs.
-        if hasCaptions && thematic >= 0.20 {
+        // Thematic boost: reweight toward thematic ONLY when thematic is the dominant
+        // axis. Firing at thematic >= 0.20 unconditionally penalises strong two-axis
+        // pairs (e.g. aesthetic=0.74 + geometric=0.71 + thematic=0.37) by giving 0.60
+        // weight to the weakest component and dragging composite below mediocre-everywhere
+        // pairs. The boost now requires thematic to beat or match both other axes
+        // (geometric scaled to 0.8 to account for the lower composite weight). This
+        // preserves the intent — genuine thematic pairs rank highly — without treating
+        // two-axis pairs as if they were thematic. See decision #75.
+        if hasCaptions && thematic >= 0.20 && thematic >= max(aesthetic, geometric * 0.8) {
             composite = 0.25 * aesthetic + 0.15 * geometric + 0.60 * thematic
         }
 

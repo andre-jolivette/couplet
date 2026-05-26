@@ -526,10 +526,31 @@ public actor IndexingEngine {
                 }
             }
 
+            // Aesthetic topK: top-5 per image by aestheticScore (minimum 0.55).
+            // Escape hatch for strong aesthetic pairs — accent-echo and strong harmony/
+            // contrast pairs — that are dragged below the composite topK ceiling by weak
+            // thematic scores. Symmetric to the geometric escape hatch (#68).
+            // See decision #75.
+            let aestheticK = 5
+            var aestheticKeys = Set<String>()
+            for (_, scores) in perImage {
+                let byAesthetic = scores
+                    .filter { $0.aestheticScore >= 0.55 }
+                    .sorted { $0.aestheticScore > $1.aestheticScore }
+                for s in byAesthetic.prefix(aestheticK) {
+                    let key = "\(s.imageAID)_\(s.imageBID)"
+                    if toInsert[key] == nil {
+                        toInsert[key] = s
+                        aestheticKeys.insert(key)
+                    }
+                }
+            }
+
             for (key, s) in toInsert {
                 let selFor: String
                 if compositeKeys.contains(key) { selFor = "composite" }
                 else if geometricKeys.contains(key) { selFor = "geometric" }
+                else if aestheticKeys.contains(key) { selFor = "aesthetic" }
                 else { selFor = "thematic" }
                 var record = PairRecord(
                     imageAID: s.imageAID, imageBID: s.imageBID,
@@ -712,10 +733,28 @@ public actor IndexingEngine {
                 }
             }
 
+            // Aesthetic topK: top-5 per image by aestheticScore (minimum 0.55).
+            // See decision #75.
+            let aestheticK = 5
+            var aestheticKeys = Set<String>()
+            for (_, scores) in perImage {
+                let byAesthetic = scores
+                    .filter { $0.aestheticScore >= 0.55 }
+                    .sorted { $0.aestheticScore > $1.aestheticScore }
+                for s in byAesthetic.prefix(aestheticK) {
+                    let key = "\(s.imageAID)_\(s.imageBID)"
+                    if toInsert[key] == nil {
+                        toInsert[key] = s
+                        aestheticKeys.insert(key)
+                    }
+                }
+            }
+
             for (key, s) in toInsert {
                 let selFor: String
                 if compositeKeys.contains(key) { selFor = "composite" }
                 else if geometricKeys.contains(key) { selFor = "geometric" }
+                else if aestheticKeys.contains(key) { selFor = "aesthetic" }
                 else { selFor = "thematic" }
                 var record = PairRecord(
                     imageAID: s.imageAID, imageBID: s.imageBID,
