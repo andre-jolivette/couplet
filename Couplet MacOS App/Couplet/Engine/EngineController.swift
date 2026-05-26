@@ -718,11 +718,15 @@ final class EngineController: ObservableObject {
                               + geoScore               * w.geometric
                               + Float(r.thematicScore) * w.thematic)
                               * temporalPenalty
-        let axisScore = max(
+        let peakScore = max(
             Float(r.aestheticScore),
             geoScore * 0.8,
             Float(r.thematicScore)
         ) * temporalPenalty
+        // Blend peak with composite so multi-axis pairs rank above single-axis.
+        // 0.6/0.4 split: single-axis excellence still surfaces, but doesn't monopolize.
+        // See decision #78.
+        let axisScore = 0.6 * peakScore + 0.4 * displayComposite
 
         return DisplayPair(
             id: Int(r.pairID), imageAID: Int(r.imageAID), imageBID: Int(r.imageBID),

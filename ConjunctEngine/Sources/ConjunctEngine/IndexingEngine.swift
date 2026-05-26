@@ -372,12 +372,12 @@ public actor IndexingEngine {
         typealias ImageMeta = (captureDate: Double?, filename: String, caption: String,
                                accentHue: Double?, accentSaturation: Double?,
                                weightCentroidX: Double?, weightCentroidY: Double?,
-                               gazeDirectionX: Double?)
+                               gazeDirectionX: Double?, colorProfile: String)
         let imageMeta: [Int64: ImageMeta] = try db.read { db in
             guard !batchIDs.isEmpty else { return [:] }
             let ids = batchIDs.map { "\($0)" }.joined(separator: ",")
             let rows = try Row.fetchAll(
-                db, sql: "SELECT id, captureDate, filename, caption, accentHue, accentSaturation, weightCentroidX, weightCentroidY, gazeDirectionX FROM images WHERE id IN (\(ids))"
+                db, sql: "SELECT id, captureDate, filename, caption, accentHue, accentSaturation, weightCentroidX, weightCentroidY, gazeDirectionX, colorProfile FROM images WHERE id IN (\(ids))"
             )
             var result = [Int64: ImageMeta]()
             for row in rows {
@@ -391,7 +391,8 @@ public actor IndexingEngine {
                     accentSaturation: row["accentSaturation"] as? Double,
                     weightCentroidX: row["weightCentroidX"] as? Double,
                     weightCentroidY: row["weightCentroidY"] as? Double,
-                    gazeDirectionX: row["gazeDirectionX"] as? Double
+                    gazeDirectionX: row["gazeDirectionX"] as? Double,
+                    colorProfile: row["colorProfile"] as? String ?? "color"
                 )
             }
             return result
@@ -424,6 +425,8 @@ public actor IndexingEngine {
                     weightCentroidYB: metaB?.weightCentroidY.map(Float.init),
                     gazeDirectionXA: metaA?.gazeDirectionX.map(Float.init),
                     gazeDirectionXB: metaB?.gazeDirectionX.map(Float.init),
+                    colorProfileA: metaA?.colorProfile ?? "color",
+                    colorProfileB: metaB?.colorProfile ?? "color",
                     weights: weights
                 )
                 if s.compositeScore > 0 {
@@ -602,10 +605,10 @@ public actor IndexingEngine {
         typealias ImageMeta = (captureDate: Double?, filename: String, caption: String,
                                accentHue: Double?, accentSaturation: Double?,
                                weightCentroidX: Double?, weightCentroidY: Double?,
-                               gazeDirectionX: Double?)
+                               gazeDirectionX: Double?, colorProfile: String)
         let imageMeta: [Int64: ImageMeta] = try db.read { db in
             let rows = try Row.fetchAll(
-                db, sql: "SELECT id, captureDate, filename, caption, accentHue, accentSaturation, weightCentroidX, weightCentroidY, gazeDirectionX FROM images WHERE isActive = 1"
+                db, sql: "SELECT id, captureDate, filename, caption, accentHue, accentSaturation, weightCentroidX, weightCentroidY, gazeDirectionX, colorProfile FROM images WHERE isActive = 1"
             )
             var result = [Int64: ImageMeta]()
             for row in rows {
@@ -619,7 +622,8 @@ public actor IndexingEngine {
                     accentSaturation: row["accentSaturation"] as? Double,
                     weightCentroidX: row["weightCentroidX"] as? Double,
                     weightCentroidY: row["weightCentroidY"] as? Double,
-                    gazeDirectionX: row["gazeDirectionX"] as? Double
+                    gazeDirectionX: row["gazeDirectionX"] as? Double,
+                    colorProfile: row["colorProfile"] as? String ?? "color"
                 )
             }
             return result
@@ -650,6 +654,8 @@ public actor IndexingEngine {
                     weightCentroidYB: metaB?.weightCentroidY.map(Float.init),
                     gazeDirectionXA: metaA?.gazeDirectionX.map(Float.init),
                     gazeDirectionXB: metaB?.gazeDirectionX.map(Float.init),
+                    colorProfileA: metaA?.colorProfile ?? "color",
+                    colorProfileB: metaB?.colorProfile ?? "color",
                     weights: weights
                 )
                 if s.compositeScore > 0 {

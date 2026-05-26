@@ -59,6 +59,7 @@ public enum PairScorer {
         weightCentroidXA: Float? = nil, weightCentroidYA: Float? = nil,
         weightCentroidXB: Float? = nil, weightCentroidYB: Float? = nil,
         gazeDirectionXA: Float? = nil, gazeDirectionXB: Float? = nil,
+        colorProfileA: String = "color", colorProfileB: String = "color",
         weights: ScoringWeights = .default
     ) -> PairScore {
         // Canonicalize so aID < bID. Also reorder gaze and centroid params to match,
@@ -157,7 +158,8 @@ public enum PairScorer {
 
         let (aesthetic, submode) = aestheticScore(vA, vB,
                                                    accentHueA: accentHueA, accentSaturationA: accentSaturationA,
-                                                   accentHueB: accentHueB, accentSaturationB: accentSaturationB)
+                                                   accentHueB: accentHueB, accentSaturationB: accentSaturationB,
+                                                   colorProfileA: colorProfileA, colorProfileB: colorProfileB)
         let geo = geometricScore(vA, vB,
                                  centXA: cxA, centYA: cyA,
                                  centXB: cxB, centYB: cyB,
@@ -333,14 +335,24 @@ public enum PairScorer {
     static func aestheticScore(
         _ vA: FeatureVector, _ vB: FeatureVector,
         accentHueA: Double? = nil, accentSaturationA: Double? = nil,
-        accentHueB: Double? = nil, accentSaturationB: Double? = nil
+        accentHueB: Double? = nil, accentSaturationB: Double? = nil,
+        colorProfileA: String = "color", colorProfileB: String = "color"
     ) -> (Float, String) {
         let harmony  = histogramIntersection(vA.hslHistogramFloats, vB.hslHistogramFloats)
         let contrast = paletteContrastScore(vA.dominantPaletteFloats, vB.dominantPaletteFloats)
         let echo     = accentEchoScore(accentHueA: accentHueA, accentSaturationA: accentSaturationA,
                                        accentHueB: accentHueB, accentSaturationB: accentSaturationB)
-        if echo > harmony && echo > contrast { return (echo, "accent_echo") }
-        return harmony >= contrast ? (harmony, "harmony") : (contrast, "contrast")
+
+        // B&W pairs: suppress harmony and contrast — histogram bin-concentration
+        // similarity and LAB L-channel distance are structural artifacts of monochrome,
+        // not meaningful aesthetic resonance. Echo is unaffected (accentHue is nil for
+        // B&W images, so echo already returns 0 for all-B&W pairs). See decision #77.
+        let bothBW = colorProfileA == "bw" && colorProfileB == "bw"
+        let adjHarmony  = bothBW ? harmony  * 0.35 : harmony
+        let adjContrast = bothBW ? contrast * 0.35 : contrast
+
+        if echo > adjHarmony && echo > adjContrast { return (echo, "accent_echo") }
+        return adjHarmony >= adjContrast ? (adjHarmony, "harmony") : (adjContrast, "contrast")
     }
 
     // Accent color echo: rewards pairs sharing a specific accent hue
@@ -396,7 +408,10 @@ public enum PairScorer {
                 count += 1
             }
         }
-        return count > 0 ? min(total / Float(count) / 80, 1) : 0
+        // Normalization: /100 (was /80). At /80, extreme colour-palette pairs reached 0.94+
+        // and monopolised the grid. /100 calibrates the ceiling so average LAB distance ~100
+        // scores 1.0 — a tighter bound on "maximum meaningful contrast." See decision #77.
+        return count > 0 ? min(total / Float(count) / 100, 1) : 0
     }
 
     // MARK: - Geometric scoring

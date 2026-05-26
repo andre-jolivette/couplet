@@ -78,11 +78,17 @@ nonisolated func convertToPairFree(
     // The × 0.8 geometric scalar accounts for geometric's lower composite weight (0.20
     // vs 0.40 for aesthetic/thematic) so all three axes compete on equal footing.
     // temporalPenalty reused — never recomputed separately (decision #26).
-    let axisScore = max(
+    //
+    // Blended with displayComposite (0.6/0.4) so multi-axis pairs rank above
+    // single-axis pairs while both beat mediocre-everywhere. Pure max() was too
+    // aggressive — a single strong axis with nothing else dominated the top.
+    // See decision #78.
+    let peakScore = max(
         Float(r.aestheticScore),
         geoScore * 0.8,
         Float(r.thematicScore)
     ) * temporalPenalty
+    let axisScore = 0.6 * peakScore + 0.4 * displayComposite
 
     func thumbURL(_ path: String?) -> URL? {
         guard let path, !path.isEmpty else { return nil }
