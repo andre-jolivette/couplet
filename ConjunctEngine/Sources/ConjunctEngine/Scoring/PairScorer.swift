@@ -343,13 +343,16 @@ public enum PairScorer {
         let echo     = accentEchoScore(accentHueA: accentHueA, accentSaturationA: accentSaturationA,
                                        accentHueB: accentHueB, accentSaturationB: accentSaturationB)
 
-        // B&W pairs: suppress harmony and contrast — histogram bin-concentration
-        // similarity and LAB L-channel distance are structural artifacts of monochrome,
-        // not meaningful aesthetic resonance. Echo is unaffected (accentHue is nil for
-        // B&W images, so echo already returns 0 for all-B&W pairs). See decision #77.
+        // B&W pairs: discount harmony and contrast — both metrics have less discriminative
+        // power for monochrome images. Harmony measures lightness-only similarity (8 bins vs
+        // 1,152 for colour), so even moderately different B&W images score high; contrast
+        // measures L-channel distance only. The ×0.65 discount brings B&W scores into a
+        // comparable range to colour scores rather than suppressing them entirely — a genuinely
+        // tonal-resonant B&W pair (both high-key, both moody) should still score ~0.55–0.70.
+        // Echo is unaffected (accentHue is nil for B&W images). See decision #77.
         let bothBW = colorProfileA == "bw" && colorProfileB == "bw"
-        let adjHarmony  = bothBW ? harmony  * 0.35 : harmony
-        let adjContrast = bothBW ? contrast * 0.35 : contrast
+        let adjHarmony  = bothBW ? harmony  * 0.65 : harmony
+        let adjContrast = bothBW ? contrast * 0.65 : contrast
 
         if echo > adjHarmony && echo > adjContrast { return (echo, "accent_echo") }
         return adjHarmony >= adjContrast ? (adjHarmony, "harmony") : (adjContrast, "contrast")
