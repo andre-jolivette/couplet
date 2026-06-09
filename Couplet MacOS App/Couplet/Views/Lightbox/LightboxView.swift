@@ -239,11 +239,11 @@ struct LightboxView: View {
         let resting = !vm.controlsVisible
         let metaOpacity: Double = resting ? 0.20 : 0.50
 
-        return Button {
-            vm.toggleAnchor(imageID: imageID, filename: filename,
-                            color: color, onFetch: onAnchor, allPairs: allPairs)
-        } label: {
-            VStack(spacing: 0) {
+        return VStack(spacing: 0) {
+            Button {
+                vm.toggleAnchor(imageID: imageID, filename: filename,
+                                color: color, onFetch: onAnchor, allPairs: allPairs)
+            } label: {
                 ZStack(alignment: .topTrailing) {
                     // .fit ensures the full image is always visible — no cropping.
                     // Negative space appears above/below for portrait images,
@@ -273,39 +273,36 @@ struct LightboxView: View {
                     }
                 }
                 .frame(width: width, height: height)
-
-                // Metadata below image
-                HStack(spacing: 0) {
-                    if let date {
-                        Text(dateFormatter.string(from: date))
-                            .foregroundColor(.white.opacity(metaOpacity))
-                        Text("  |  ")
-                            .foregroundColor(.white.opacity(metaOpacity * 0.5))
-                    }
-                    Text(filename)
-                        .foregroundColor(.white.opacity(metaOpacity))
-                        .lineLimit(1).truncationMode(.middle)
-                    Spacer(minLength: 0)
-                    // Pair count badge — shows total pairs for this image in the
-                    // current folder context. Updates when imagePairCounts refreshes.
-                    if pairCount > 0 {
-                        Text("\(pairCount)")
-                            .font(.system(size: 10, design: .monospaced))
-                            .foregroundColor(.white.opacity(metaOpacity * 0.8))
-                    }
-                }
-                .font(.system(size: 11))
-                .frame(width: width)
-                .padding(.top, 5)
+                .contentShape(Rectangle())
             }
-            .contentShape(Rectangle())
-            .opacity(vm.isAnchored && !isAnchor ? 0.65 : 1.0)
-            .animation(.easeOut(duration: 0.2), value: isAnchor)
-            .animation(.easeOut(duration: 0.2), value: vm.isAnchored)
-            .animation(.easeOut(duration: 0.25), value: resting)
+            .buttonStyle(.plain)
+            .cursor(.pointingHand)
+
+            // Metadata below image — outside the Button so text is selectable.
+            // MetaLabel uses a single NSTextField for unified selection and a
+            // tall frame so the user does not need to click precisely on the glyphs.
+            HStack(alignment: .center, spacing: 8) {
+                MetaLabel(
+                    dateString: date.map { dateFormatter.string(from: $0) },
+                    filename: filename,
+                    baseOpacity: metaOpacity
+                )
+                .frame(maxWidth: .infinity, minHeight: 30)
+                // Pair count badge — shows total pairs for this image in the
+                // current folder context. Updates when imagePairCounts refreshes.
+                if pairCount > 0 {
+                    Text("\(pairCount)")
+                        .font(.system(size: 10, design: .monospaced))
+                        .foregroundColor(.white.opacity(metaOpacity * 0.8))
+                }
+            }
+            .frame(width: width)
+            .padding(.top, 2)
         }
-        .buttonStyle(.plain)
-        .cursor(.pointingHand)
+        .opacity(vm.isAnchored && !isAnchor ? 0.65 : 1.0)
+        .animation(.easeOut(duration: 0.2), value: isAnchor)
+        .animation(.easeOut(duration: 0.2), value: vm.isAnchored)
+        .animation(.easeOut(duration: 0.25), value: resting)
     }
 
     // MARK: - Action bar
@@ -548,6 +545,62 @@ private extension View {
         self.onHover { hovering in
             if hovering { cursor.push() } else { NSCursor.pop() }
         }
+    }
+}
+
+// MARK: - Selectable metadata label
+
+/// Date + separator + filename rendered in a single NSTextView so:
+/// - the whole line is selectable as one unit
+/// - selectedTextAttributes only sets a subtle background tint, leaving
+///   text color unchanged (NSTextField promotes selected text to full opacity)
+/// - the frame is tall enough (~30pt) that the user does not need to click
+///   precisely on the text glyphs to start a drag
+private struct MetaLabel: NSViewRepresentable {
+    let dateString: String?
+    let filename: String
+    let baseOpacity: Double
+
+    func makeNSView(context: Context) -> NSTextView {
+        let tv = NSTextView()
+        tv.isEditable = false
+        tv.isSelectable = true
+        tv.drawsBackground = false
+        tv.backgroundColor = .clear
+        tv.textContainer?.lineFragmentPadding = 0
+        tv.textContainerInset = .zero
+        tv.isVerticallyResizable = false
+        tv.isHorizontallyResizable = false
+        tv.textContainer?.widthTracksTextView = true
+        tv.selectedTextAttributes = [.backgroundColor: NSColor.white.withAlphaComponent(0.18)]
+        tv.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        tv.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        apply(to: tv)
+        return tv
+    }
+
+    func updateNSView(_ tv: NSTextView, context: Context) { apply(to: tv) }
+
+    private func apply(to tv: NSTextView) {
+        let font = NSFont.systemFont(ofSize: 11)
+        let para = NSMutableParagraphStyle()
+        para.lineBreakMode = .byTruncatingMiddle
+        let s = NSMutableAttributedString()
+        if let d = dateString {
+            s.append(NSAttributedString(string: d, attributes: [
+                .foregroundColor: NSColor.white.withAlphaComponent(baseOpacity),
+                .font: font, .paragraphStyle: para
+            ]))
+            s.append(NSAttributedString(string: "  |  ", attributes: [
+                .foregroundColor: NSColor.white.withAlphaComponent(baseOpacity * 0.5),
+                .font: font, .paragraphStyle: para
+            ]))
+        }
+        s.append(NSAttributedString(string: filename, attributes: [
+            .foregroundColor: NSColor.white.withAlphaComponent(baseOpacity),
+            .font: font, .paragraphStyle: para
+        ]))
+        tv.textStorage?.setAttributedString(s)
     }
 }
 
