@@ -12,7 +12,7 @@ final class PairsGridViewModel: ObservableObject {
     @Published var hideSequential: Bool = false
     @Published var colorToneFilter: DisplayPair.ColorTone? = nil
     @Published var searchText: String = ""
-    @Published var sortOrder: PairSortOrder = .composite
+    @Published var sortOrder: PairSortOrder = .axis
     @Published var minimumConfidence: Float = 0.0
     @Published var anchorImageID: Int? = nil
     @Published var anchorFilename: String? = nil
@@ -111,6 +111,7 @@ final class PairsGridViewModel: ObservableObject {
             $0.folderA.lowercased().contains(q) || $0.folderB.lowercased().contains(q)
         }}
         switch sortOrder {
+        case .axis:      result.sort { $0.axisScore      > $1.axisScore      }
         case .composite: result.sort { $0.compositeScore > $1.compositeScore }
         case .thematic:  result.sort { $0.thematicScore  > $1.thematicScore  }
         case .geometric: result.sort { $0.geometricScore > $1.geometricScore }
@@ -146,7 +147,7 @@ final class PairsGridViewModel: ObservableObject {
 
     func clearFilters() {
         selectedModality = nil; showRejected = false
-        colorToneFilter = nil; searchText = ""; sortOrder = .composite; minimumConfidence = 0.0
+        colorToneFilter = nil; searchText = ""; sortOrder = .axis; minimumConfidence = 0.0
     }
 
     var hasActiveFilters: Bool {

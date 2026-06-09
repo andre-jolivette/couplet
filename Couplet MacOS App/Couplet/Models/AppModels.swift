@@ -24,16 +24,25 @@ public enum PairingModality: String, CaseIterable, Identifiable {
 // MARK: - Sort Order
 
 enum PairSortOrder: String, CaseIterable, Identifiable {
-    case composite = "Composite"
+    /// Peak-axis ranking: max(aesthetic, geometric×0.8, thematic) × temporalPenalty.
+    /// Default sort. Rewards pairs exceptional on any single axis rather than
+    /// averaging weakness across all three. See decision #66.
+    case axis      = "Best"
+    /// Weighted-average composite: aesthetic×w + geometric×w + thematic×w.
+    /// Rewards pairs that score well across all axes simultaneously.
+    case composite = "Balanced"
     case thematic  = "Thematic"
     case geometric = "Geometric"
     case aesthetic = "Aesthetic"
     var id: String { rawValue }
 
-    /// The DB column name used for SQL ORDER BY and window-function ranking.
+    /// The DB column name used for SQL ORDER BY.
     /// These are hardcoded strings, not user input, so no injection risk.
+    /// `.axis` uses compositeScore as a proxy — axisScore is computed display-side
+    /// and has no DB column. The greedy cap-2 then re-sorts by axisScore in memory.
     var dbColumn: String {
         switch self {
+        case .axis:      return "compositeScore"
         case .composite: return "compositeScore"
         case .thematic:  return "thematicScore"
         case .geometric: return "geometricScore"
@@ -73,7 +82,13 @@ struct DisplayPair: Identifiable, Hashable {
     let accentSaturationA: Double?
     let accentHueB: Double?
     let accentSaturationB: Double?
+    /// Weighted-average display composite: (A×wA + G×wG + T×wT) × temporalPenalty.
+    /// Used for the "Balanced" sort and the minimum-confidence filter.
     let compositeScore: Float
+    /// Peak-axis score: max(aesthetic, geometric×0.8, thematic) × temporalPenalty.
+    /// Used for the "Best" (default) sort. Rewards specialization — a pair exceptional
+    /// on any single axis ranks above a pair mediocre on all three. See decision #66.
+    let axisScore: Float
     let aestheticScore: Float
     let geometricScore: Float
     let thematicScore: Float
@@ -156,7 +171,8 @@ struct DisplayPair: Identifiable, Hashable {
         geometricSubmode: String? = nil,
         accentHueA: Double? = nil, accentSaturationA: Double? = nil,
         accentHueB: Double? = nil, accentSaturationB: Double? = nil,
-        compositeScore: Float, aestheticScore: Float,
+        compositeScore: Float, axisScore: Float = 0,
+        aestheticScore: Float,
         geometricScore: Float, thematicScore: Float,
         rationale: String,
         pairCountA: Int = 0, pairCountB: Int = 0,
@@ -176,7 +192,8 @@ struct DisplayPair: Identifiable, Hashable {
         self.geometricSubmode = geometricSubmode
         self.accentHueA = accentHueA; self.accentSaturationA = accentSaturationA
         self.accentHueB = accentHueB; self.accentSaturationB = accentSaturationB
-        self.compositeScore = compositeScore; self.aestheticScore = aestheticScore
+        self.compositeScore = compositeScore; self.axisScore = axisScore
+        self.aestheticScore = aestheticScore
         self.geometricScore = geometricScore; self.thematicScore = thematicScore
         self.rationale = rationale
         self.pairCountA = pairCountA; self.pairCountB = pairCountB

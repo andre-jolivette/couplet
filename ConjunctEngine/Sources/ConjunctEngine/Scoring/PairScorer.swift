@@ -59,6 +59,7 @@ public enum PairScorer {
         weightCentroidXA: Float? = nil, weightCentroidYA: Float? = nil,
         weightCentroidXB: Float? = nil, weightCentroidYB: Float? = nil,
         gazeDirectionXA: Float? = nil, gazeDirectionXB: Float? = nil,
+        colorProfileA: String = "color", colorProfileB: String = "color",
         weights: ScoringWeights = .default
     ) -> PairScore {
         // Canonicalize so aID < bID. Also reorder gaze and centroid params to match,
@@ -157,7 +158,8 @@ public enum PairScorer {
 
         let (aesthetic, submode) = aestheticScore(vA, vB,
                                                    accentHueA: accentHueA, accentSaturationA: accentSaturationA,
-                                                   accentHueB: accentHueB, accentSaturationB: accentSaturationB)
+                                                   accentHueB: accentHueB, accentSaturationB: accentSaturationB,
+                                                   colorProfileA: colorProfileA, colorProfileB: colorProfileB)
         let geo = geometricScore(vA, vB,
                                  centXA: cxA, centYA: cyA,
                                  centXB: cxB, centYB: cyB,
@@ -175,9 +177,15 @@ public enum PairScorer {
             composite *= 0.45
         }
 
-        // When captions produce a meaningful thematic score, boost thematic weight
-        // so these pairs can compete with high-aesthetic/geometric pairs.
-        if hasCaptions && thematic >= 0.20 {
+        // Thematic boost: reweight toward thematic ONLY when thematic is the dominant
+        // axis. Firing at thematic >= 0.20 unconditionally penalises strong two-axis
+        // pairs (e.g. aesthetic=0.74 + geometric=0.71 + thematic=0.37) by giving 0.60
+        // weight to the weakest component and dragging composite below mediocre-everywhere
+        // pairs. The boost now requires thematic to beat or match both other axes
+        // (geometric scaled to 0.8 to account for the lower composite weight). This
+        // preserves the intent — genuine thematic pairs rank highly — without treating
+        // two-axis pairs as if they were thematic. See decision #75.
+        if hasCaptions && thematic >= 0.20 && thematic >= max(aesthetic, geometric * 0.8) {
             composite = 0.25 * aesthetic + 0.15 * geometric + 0.60 * thematic
         }
 
@@ -327,14 +335,27 @@ public enum PairScorer {
     static func aestheticScore(
         _ vA: FeatureVector, _ vB: FeatureVector,
         accentHueA: Double? = nil, accentSaturationA: Double? = nil,
-        accentHueB: Double? = nil, accentSaturationB: Double? = nil
+        accentHueB: Double? = nil, accentSaturationB: Double? = nil,
+        colorProfileA: String = "color", colorProfileB: String = "color"
     ) -> (Float, String) {
         let harmony  = histogramIntersection(vA.hslHistogramFloats, vB.hslHistogramFloats)
         let contrast = paletteContrastScore(vA.dominantPaletteFloats, vB.dominantPaletteFloats)
         let echo     = accentEchoScore(accentHueA: accentHueA, accentSaturationA: accentSaturationA,
                                        accentHueB: accentHueB, accentSaturationB: accentSaturationB)
-        if echo > harmony && echo > contrast { return (echo, "accent_echo") }
-        return harmony >= contrast ? (harmony, "harmony") : (contrast, "contrast")
+
+        // B&W pairs: discount harmony and contrast — both metrics have less discriminative
+        // power for monochrome images. Harmony measures lightness-only similarity (8 bins vs
+        // 1,152 for colour), so even moderately different B&W images score high; contrast
+        // measures L-channel distance only. The ×0.65 discount brings B&W scores into a
+        // comparable range to colour scores rather than suppressing them entirely — a genuinely
+        // tonal-resonant B&W pair (both high-key, both moody) should still score ~0.55–0.70.
+        // Echo is unaffected (accentHue is nil for B&W images). See decision #77.
+        let bothBW = colorProfileA == "bw" && colorProfileB == "bw"
+        let adjHarmony  = bothBW ? harmony  * 0.65 : harmony
+        let adjContrast = bothBW ? contrast * 0.65 : contrast
+
+        if echo > adjHarmony && echo > adjContrast { return (echo, "accent_echo") }
+        return adjHarmony >= adjContrast ? (adjHarmony, "harmony") : (adjContrast, "contrast")
     }
 
     // Accent color echo: rewards pairs sharing a specific accent hue
@@ -390,7 +411,10 @@ public enum PairScorer {
                 count += 1
             }
         }
-        return count > 0 ? min(total / Float(count) / 80, 1) : 0
+        // Normalization: /100 (was /80). At /80, extreme colour-palette pairs reached 0.94+
+        // and monopolised the grid. /100 calibrates the ceiling so average LAB distance ~100
+        // scores 1.0 — a tighter bound on "maximum meaningful contrast." See decision #77.
+        return count > 0 ? min(total / Float(count) / 100, 1) : 0
     }
 
     // MARK: - Geometric scoring

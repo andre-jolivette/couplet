@@ -41,6 +41,8 @@ nonisolated func convertToPairFree(
     let modality: PairingModality
     if r.selectedFor == "thematic" {
         modality = .thematic
+    } else if r.selectedFor == "aesthetic" {
+        modality = .aesthetic
     } else if r.thematicScore >= 0.25 && r.thematicScore > Double(geoScore) {
         modality = .thematic
     } else if Double(geoScore) >= r.aestheticScore {
@@ -72,6 +74,22 @@ nonisolated func convertToPairFree(
                           + Float(r.thematicScore) * weights.thematic)
                           * temporalPenalty
 
+    // Peak-axis score: rewards pairs exceptional on any single axis.
+    // The × 0.8 geometric scalar accounts for geometric's lower composite weight (0.20
+    // vs 0.40 for aesthetic/thematic) so all three axes compete on equal footing.
+    // temporalPenalty reused — never recomputed separately (decision #26).
+    //
+    // Blended with displayComposite (0.6/0.4) so multi-axis pairs rank above
+    // single-axis pairs while both beat mediocre-everywhere. Pure max() was too
+    // aggressive — a single strong axis with nothing else dominated the top.
+    // See decision #78.
+    let peakScore = max(
+        Float(r.aestheticScore),
+        geoScore * 0.8,
+        Float(r.thematicScore)
+    ) * temporalPenalty
+    let axisScore = 0.6 * peakScore + 0.4 * displayComposite
+
     func thumbURL(_ path: String?) -> URL? {
         guard let path, !path.isEmpty else { return nil }
         if path.hasPrefix("/") { return URL(fileURLWithPath: path) }
@@ -90,7 +108,8 @@ nonisolated func convertToPairFree(
         geometricSubmode: r.geometricSubmode,
         accentHueA: r.accentHueA, accentSaturationA: r.accentSaturationA,
         accentHueB: r.accentHueB, accentSaturationB: r.accentSaturationB,
-        compositeScore: displayComposite, aestheticScore: Float(r.aestheticScore),
+        compositeScore: displayComposite, axisScore: axisScore,
+        aestheticScore: Float(r.aestheticScore),
         geometricScore: geoScore, thematicScore: Float(r.thematicScore),
         rationale: r.rationale,
         pairCountA: pairCounts[Int(r.imageAID), default: 0],
@@ -105,6 +124,7 @@ nonisolated func convertToPairFree(
 
 nonisolated func pairSortComparator(for order: PairSortOrder) -> (DisplayPair, DisplayPair) -> Bool {
     switch order {
+    case .axis:      return { $0.axisScore      > $1.axisScore      }
     case .composite: return { $0.compositeScore > $1.compositeScore }
     case .thematic:  return { $0.thematicScore  > $1.thematicScore  }
     case .geometric: return { $0.geometricScore > $1.geometricScore }
