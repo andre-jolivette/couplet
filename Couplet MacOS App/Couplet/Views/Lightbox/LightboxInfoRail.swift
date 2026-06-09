@@ -85,6 +85,7 @@ struct LightboxInfoRail: View {
                     .foregroundColor(.white.opacity(0.70))
                     .lineLimit(isExpanded.wrappedValue ? nil : 7)
                     .textSelection(.enabled)
+                    .allowsHitTesting(isExpanded.wrappedValue || !needsToggle)
                     .overlay(alignment: .bottom) {
                         if !isExpanded.wrappedValue && needsToggle {
                             LinearGradient(
