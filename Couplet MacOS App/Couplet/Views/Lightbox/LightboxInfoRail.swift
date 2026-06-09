@@ -109,6 +109,13 @@ struct LightboxInfoRail: View {
         }
         .padding(10)
         .background(RoundedRectangle(cornerRadius: 6).fill(Color.white.opacity(0.05)))
+        .contentShape(Rectangle())
+        .onTapGesture {
+            guard needsToggle else { return }
+            withAnimation(.easeInOut(duration: 0.2)) {
+                isExpanded.wrappedValue.toggle()
+            }
+        }
     }
 
     // MARK: - Score sections
