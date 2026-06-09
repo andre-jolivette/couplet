@@ -56,6 +56,10 @@ struct LightboxInfoRail: View {
             captionBlock(filename: pair.filenameB, caption: pair.captionB,
                          isExpanded: $captionBExpanded)
         }
+        // Animation at the container level so layout changes (card grows, next card
+        // slides down) animate correctly regardless of what triggered the state change.
+        .animation(.easeInOut(duration: 0.2), value: captionAExpanded)
+        .animation(.easeInOut(duration: 0.2), value: captionBExpanded)
     }
 
     private func captionBlock(filename: String, caption: String,
@@ -80,7 +84,8 @@ struct LightboxInfoRail: View {
                     .font(.system(size: 11))
                     .foregroundColor(.white.opacity(0.70))
                     .lineLimit(isExpanded.wrappedValue ? nil : 7)
-                    .fixedSize(horizontal: false, vertical: true)
+                    .textSelection(.enabled)
+                    .allowsHitTesting(isExpanded.wrappedValue || !needsToggle)
                     .overlay(alignment: .bottom) {
                         if !isExpanded.wrappedValue && needsToggle {
                             LinearGradient(
@@ -94,9 +99,7 @@ struct LightboxInfoRail: View {
                     }
                 if needsToggle {
                     Button {
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            isExpanded.wrappedValue.toggle()
-                        }
+                        isExpanded.wrappedValue.toggle()
                     } label: {
                         Text(isExpanded.wrappedValue ? "Show less" : "Show more")
                             .font(.system(size: 10, weight: .medium))
