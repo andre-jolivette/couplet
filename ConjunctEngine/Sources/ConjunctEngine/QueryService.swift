@@ -129,6 +129,9 @@ public actor QueryService {
                 p.thematicScore,
                 p.compositeScore, p.rationale,
                 p.geometricSubmode,
+                p.thematicV2Score,
+                p.thematicV2RelationshipType,
+                p.thematicV2Rationale,
                 a.filename       AS filenameA,
                 a.thumbnailPath  AS thumbA,
                 a.path           AS imagePathA,
@@ -212,7 +215,10 @@ public actor QueryService {
                     accentSaturationA: row["accentSaturationA"] as? Double,
                     accentHueB: row["accentHueB"] as? Double,
                     accentSaturationB: row["accentSaturationB"] as? Double,
-                    geometricSubmode: row["geometricSubmode"] as? String
+                    geometricSubmode: row["geometricSubmode"] as? String,
+                    thematicV2Score: row["thematicV2Score"] as? Double,
+                    thematicV2RelationshipType: row["thematicV2RelationshipType"] as? String,
+                    thematicV2Rationale: row["thematicV2Rationale"] as? String
                 ))
                 if chunk.count == chunkSize {
                     try process(chunk)
@@ -330,6 +336,9 @@ public actor QueryService {
                 p.thematicScore,
                 p.compositeScore, p.rationale,
                 p.geometricSubmode,
+                p.thematicV2Score,
+                p.thematicV2RelationshipType,
+                p.thematicV2Rationale,
                 a.filename       AS filenameA,
                 a.thumbnailPath  AS thumbA,
                 a.path           AS imagePathA,
@@ -414,7 +423,10 @@ public actor QueryService {
                     accentSaturationA: row["accentSaturationA"] as? Double,
                     accentHueB: row["accentHueB"] as? Double,
                     accentSaturationB: row["accentSaturationB"] as? Double,
-                    geometricSubmode: row["geometricSubmode"] as? String
+                    geometricSubmode: row["geometricSubmode"] as? String,
+                    thematicV2Score: row["thematicV2Score"] as? Double,
+                    thematicV2RelationshipType: row["thematicV2RelationshipType"] as? String,
+                    thematicV2Rationale: row["thematicV2Rationale"] as? String
                 )
             }
         }

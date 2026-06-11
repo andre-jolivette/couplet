@@ -33,6 +33,8 @@ final class EngineController: ObservableObject {
     private var engineBuildTask: Task<Void, Never>?
     /// Stream-listening task for the active indexing run — cancelled when re-indexing starts.
     private var indexStreamTask: Task<Void, Never>?
+    /// Background LLM scoring pass — cancelled when a new index starts, restarted after page-0 load.
+    private var thematicV2PassTask: Task<Void, Never>?
 
     /// Full cap-2-filtered representative pair list for the current folder/sort context.
     /// Populated on page-0 fetch; subsequent pages slice from this cache.
@@ -119,6 +121,8 @@ final class EngineController: ObservableObject {
         isBackgroundScoring = false
         indexingProgress = IndexingProgress(phase: .scanning, itemsComplete: 0, itemsTotal: 0)
 
+        thematicV2PassTask?.cancel()
+        thematicV2PassTask = nil
         indexStreamTask?.cancel()
         indexStreamTask = Task {
             _ = url.startAccessingSecurityScopedResource()
@@ -451,6 +455,7 @@ final class EngineController: ObservableObject {
                             self.imagePairCounts = pairCounts
                             self.representativePairsCache = finalSorted
                             self.representativePairsCacheKey = (folderID, collectionID, sortColumn)
+                            self.startThematicV2Pass()
                         }
                     }
                 } catch is CancellationError {
@@ -675,6 +680,9 @@ final class EngineController: ObservableObject {
 
     private func convertToPair(_ r: PairQueryResult, adjustedGeometricScore: Float) -> DisplayPair {
         let geoScore = adjustedGeometricScore
+        // Use thematicV2Score when available (LLM-based pair scorer), falling back to
+        // the cluster-based thematicScore. See decision #82.
+        let effectiveThematic = Float(r.thematicV2Score ?? r.thematicScore)
         let modality: PairingModality
         // selectedFor records the actual topK path at scoring time; use it directly
         // when available. NULL (pre-v8 rows) fall back to post-hoc score comparison.
@@ -682,7 +690,7 @@ final class EngineController: ObservableObject {
             modality = .thematic
         } else if r.selectedFor == "aesthetic" {
             modality = .aesthetic
-        } else if r.thematicScore >= 0.25 && r.thematicScore > Double(geoScore) {
+        } else if Double(effectiveThematic) >= 0.25 && Double(effectiveThematic) > Double(geoScore) {
             modality = .thematic
         } else if Double(geoScore) >= r.aestheticScore {
             modality = .geometric
@@ -716,12 +724,12 @@ final class EngineController: ObservableObject {
         }()
         let displayComposite = (Float(r.aestheticScore) * w.aesthetic
                               + geoScore               * w.geometric
-                              + Float(r.thematicScore) * w.thematic)
+                              + effectiveThematic       * w.thematic)
                               * temporalPenalty
         let peakScore = max(
             Float(r.aestheticScore),
             geoScore * 0.8,
-            Float(r.thematicScore)
+            effectiveThematic
         ) * temporalPenalty
         // Blend peak with composite so multi-axis pairs rank above single-axis.
         // 0.6/0.4 split: single-axis excellence still surfaces, but doesn't monopolize.
@@ -742,7 +750,7 @@ final class EngineController: ObservableObject {
             accentHueB: r.accentHueB, accentSaturationB: r.accentSaturationB,
             compositeScore: displayComposite, axisScore: axisScore,
             aestheticScore: Float(r.aestheticScore),
-            geometricScore: geoScore, thematicScore: Float(r.thematicScore),
+            geometricScore: geoScore, thematicScore: effectiveThematic,
             rationale: r.rationale,
             pairCountA: imagePairCounts[Int(r.imageAID), default: 0],
             pairCountB: imagePairCounts[Int(r.imageBID), default: 0],
@@ -779,6 +787,18 @@ final class EngineController: ObservableObject {
             print("CLIP: model not found — using MockCLIPEngine")
             return MockCLIPEngine(simulatedLatencyMs: 0) as any CLIPInferenceEngine
         }.value
+    }
+
+    /// Cancels any running ThematicV2 pass and starts a fresh one.
+    /// Called after page-0 pairs load so the pass runs against the same pair set the user is viewing.
+    /// Always runs at background priority — never blocks the main thread.
+    private func startThematicV2Pass() {
+        guard let db else { return }
+        thematicV2PassTask?.cancel()
+        thematicV2PassTask = Task.detached(priority: .background) {
+            let pass = ThematicV2BackgroundPass(db: db)
+            await pass.run()
+        }
     }
 
     private func detectDriveType(_ url: URL) -> FolderItem.DriveType {

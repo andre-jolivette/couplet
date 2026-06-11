@@ -46,6 +46,13 @@ public struct PairQueryResult: Sendable {
     public let accentSaturationB: Double?
     /// Nil for pairs scored before v13_geometricSubmode migration.
     public let geometricSubmode: String?
+    /// Derived score from ThematicScorerV2 (confidence when connected, 0 when not).
+    /// Nil for pairs not yet scored by the LLM background pass (v15+).
+    public let thematicV2Score: Double?
+    /// Relationship type returned by ThematicScorerV2. Nil when thematicV2Score is nil.
+    public let thematicV2RelationshipType: String?
+    /// One-sentence LLM rationale for the connection. Nil when thematicV2Score is nil.
+    public let thematicV2Rationale: String?
 }
 
 public struct FolderQueryResult: Sendable {
