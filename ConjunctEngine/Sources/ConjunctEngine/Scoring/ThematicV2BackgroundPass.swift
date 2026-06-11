@@ -52,7 +52,9 @@ public actor ThematicV2BackgroundPass {
                 captionA: candidate.captionA,
                 captionB: candidate.captionB
             ) else {
-                // Nil = Ollama not reachable or JSON parse failure. Abort rather than
+                // Nil from task cancellation (URLError.cancelled) — stop quietly.
+                if Task.isCancelled { return }
+                // Nil from connection failure or bad JSON — abort rather than
                 // burning through all candidates when the server is down.
                 print("ThematicV2BackgroundPass: scorer returned nil — aborting pass")
                 return

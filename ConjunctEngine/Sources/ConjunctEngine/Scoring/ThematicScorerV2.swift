@@ -67,7 +67,7 @@ one image that the other responds to or subverts
     }()
 
     public init(
-        host: String = "http://localhost:11434",
+        host: String = "http://127.0.0.1:11434",  // IPv4 explicit — localhost resolves IPv6 first on macOS
         model: String = "llama3.2",
         timeoutSeconds: Double = 60
     ) {
@@ -105,6 +105,9 @@ one image that the other responds to or subverts
         let response: URLResponse
         do {
             (data, response) = try await session.data(for: request)
+        } catch let urlError as URLError where urlError.code == .cancelled {
+            // Swift task cancellation propagates as URLError.cancelled — not an Ollama problem.
+            return nil
         } catch {
             print("ThematicScorerV2: connection error (is ollama running?) — \(error.localizedDescription)")
             return nil
