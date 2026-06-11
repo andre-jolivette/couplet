@@ -245,6 +245,12 @@ struct LightboxInfoRail: View {
         let eitherHasCaption = !pair.captionA.isEmpty || !pair.captionB.isEmpty
 
         return VStack(alignment: .leading, spacing: 8) {
+            // V2 LLM rationale — shown above cluster breakdown when available
+            if let rationale = pair.thematicV2Rationale {
+                v2RationaleBlock(rationale: rationale,
+                                 relationshipType: pair.thematicV2RelationshipType)
+            }
+
             if !eitherHasCaption {
                 Text("No captions available — re-index with moondream to enable thematic analysis.")
                     .font(.system(size: 11))
@@ -284,6 +290,29 @@ struct LightboxInfoRail: View {
                 }
             }
         }
+    }
+
+    private func v2RationaleBlock(rationale: String, relationshipType: String?) -> some View {
+        let color = PairingModality.thematic.swiftColor
+        return VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                label("LLM analysis")
+                if let type = relationshipType, type != "none" {
+                    Text(type)
+                        .font(.system(size: 9, weight: .medium))
+                        .foregroundColor(color)
+                        .padding(.horizontal, 5).padding(.vertical, 2)
+                        .background(Capsule().fill(color.opacity(0.15)))
+                }
+            }
+            Text(rationale)
+                .font(.system(size: 11))
+                .foregroundColor(.white.opacity(0.60))
+                .fixedSize(horizontal: false, vertical: true)
+                .textSelection(.enabled)
+        }
+        .padding(10)
+        .background(RoundedRectangle(cornerRadius: 6).fill(color.opacity(0.07)))
     }
 
     private func clusterRow(label: String, clusters: Set<String>, color: Color) -> some View {

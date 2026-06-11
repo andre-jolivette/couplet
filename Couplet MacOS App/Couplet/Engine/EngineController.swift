@@ -41,6 +41,9 @@ final class EngineController: ObservableObject {
     private var indexStreamTask: Task<Void, Never>?
     /// Background LLM scoring pass — cancelled when a new index starts, restarted after page-0 load.
     private var thematicV2PassTask: Task<Void, Never>?
+    /// Set true by PairsGridView before the completion-triggered reload so the reload itself
+    /// doesn't immediately restart the pass. Cleared on the next startThematicV2Pass() call.
+    var suppressNextThematicV2Pass = false
 
     /// Full cap-2-filtered representative pair list for the current folder/sort context.
     /// Populated on page-0 fetch; subsequent pages slice from this cache.
@@ -758,6 +761,8 @@ final class EngineController: ObservableObject {
             aestheticScore: Float(r.aestheticScore),
             geometricScore: geoScore, thematicScore: effectiveThematic,
             rationale: r.rationale,
+            thematicV2Rationale: r.thematicV2Rationale,
+            thematicV2RelationshipType: r.thematicV2RelationshipType,
             pairCountA: imagePairCounts[Int(r.imageAID), default: 0],
             pairCountB: imagePairCounts[Int(r.imageBID), default: 0],
             thumbnailURLA: thumbnailURL(for: r.thumbnailPathA),
@@ -799,6 +804,10 @@ final class EngineController: ObservableObject {
     /// Called after page-0 pairs load so the pass runs against the same pair set the user is viewing.
     /// Always runs at background priority — never blocks the main thread.
     private func startThematicV2Pass() {
+        if suppressNextThematicV2Pass {
+            suppressNextThematicV2Pass = false
+            return
+        }
         guard let db else { return }
         thematicV2PassTask?.cancel()
         thematicV2PassTask = Task.detached(priority: .background) { [weak self] in

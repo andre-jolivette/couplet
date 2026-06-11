@@ -165,7 +165,7 @@ public actor QueryService {
             JOIN folders fa ON fa.id = a.folderID
             JOIN folders fb ON fb.id = b.folderID
             \(where_)
-            ORDER BY p.\(sortColumn) DESC
+            ORDER BY \(sortColumn) DESC
         """
 
         try db.read { db in

@@ -115,6 +115,8 @@ nonisolated func convertToPairFree(
         aestheticScore: Float(r.aestheticScore),
         geometricScore: geoScore, thematicScore: effectiveThematic,
         rationale: r.rationale,
+        thematicV2Rationale: r.thematicV2Rationale,
+        thematicV2RelationshipType: r.thematicV2RelationshipType,
         pairCountA: pairCounts[Int(r.imageAID), default: 0],
         pairCountB: pairCounts[Int(r.imageBID), default: 0],
         thumbnailURLA: thumbURL(r.thumbnailPathA),

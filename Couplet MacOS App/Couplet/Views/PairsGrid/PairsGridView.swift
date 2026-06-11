@@ -33,6 +33,7 @@ struct PairsGridView: View {
             }
             .onChange(of: engine.isThematicV2Running) { _, running in
                 guard !running else { return }
+                engine.suppressNextThematicV2Pass = true
                 reloadPairs()
             }
             .onAppear {

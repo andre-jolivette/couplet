@@ -36,17 +36,25 @@ enum PairSortOrder: String, CaseIterable, Identifiable {
     case aesthetic = "Aesthetic"
     var id: String { rawValue }
 
-    /// The DB column name used for SQL ORDER BY.
-    /// These are hardcoded strings, not user input, so no injection risk.
-    /// `.axis` uses compositeScore as a proxy — axisScore is computed display-side
-    /// and has no DB column. The greedy cap-2 then re-sorts by axisScore in memory.
+    /// SQL ORDER BY expression (may be a column name or a full expression).
+    /// All are hardcoded strings — no injection risk.
+    /// `.axis` / `.composite` proxy through the stored compositeScore OR a V2-aware
+    /// recomputation — whichever is higher — so pairs with high thematicV2Score float
+    /// up in the DB query before cap-2 runs. Cap-2 then re-sorts by axisScore in memory.
+    /// NOTE: used verbatim in ORDER BY; do NOT prefix with a table alias in the SQL.
     var dbColumn: String {
         switch self {
-        case .axis:      return "compositeScore"
-        case .composite: return "compositeScore"
-        case .thematic:  return "thematicScore"
-        case .geometric: return "geometricScore"
-        case .aesthetic: return "aestheticScore"
+        case .axis:
+            // Proxy for axisScore = 0.6×peakScore + 0.4×displayComposite with V2 thematic.
+            return "MAX(p.compositeScore, 0.6 * MAX(p.aestheticScore, p.geometricScore * 0.8, COALESCE(p.thematicV2Score, p.thematicScore)) + 0.4 * (p.aestheticScore * 0.4 + p.geometricScore * 0.2 + COALESCE(p.thematicV2Score, p.thematicScore) * 0.4))"
+        case .composite:
+            return "MAX(p.compositeScore, p.aestheticScore * 0.4 + p.geometricScore * 0.2 + COALESCE(p.thematicV2Score, p.thematicScore) * 0.4)"
+        case .thematic:
+            return "COALESCE(p.thematicV2Score, p.thematicScore)"
+        case .geometric:
+            return "p.geometricScore"
+        case .aesthetic:
+            return "p.aestheticScore"
         }
     }
 }
@@ -93,6 +101,10 @@ struct DisplayPair: Identifiable, Hashable {
     let geometricScore: Float
     let thematicScore: Float
     let rationale: String
+    /// One-sentence LLM explanation of the thematic connection. Nil when not yet scored by ThematicScorerV2.
+    let thematicV2Rationale: String?
+    /// Relationship type from ThematicScorerV2: complementary/contrastive/echo/ironic/tonal/none.
+    let thematicV2RelationshipType: String?
     /// Total number of pairs for each image in the current folder context.
     /// Used for the dot badge in the grid (threshold: 100) and count labels in the lightbox.
     let pairCountA: Int
@@ -175,6 +187,8 @@ struct DisplayPair: Identifiable, Hashable {
         aestheticScore: Float,
         geometricScore: Float, thematicScore: Float,
         rationale: String,
+        thematicV2Rationale: String? = nil,
+        thematicV2RelationshipType: String? = nil,
         pairCountA: Int = 0, pairCountB: Int = 0,
         thumbnailURLA: URL? = nil, thumbnailURLB: URL? = nil,
         pathA: String = "", pathB: String = "",
@@ -196,6 +210,8 @@ struct DisplayPair: Identifiable, Hashable {
         self.aestheticScore = aestheticScore
         self.geometricScore = geometricScore; self.thematicScore = thematicScore
         self.rationale = rationale
+        self.thematicV2Rationale = thematicV2Rationale
+        self.thematicV2RelationshipType = thematicV2RelationshipType
         self.pairCountA = pairCountA; self.pairCountB = pairCountB
         self.thumbnailURLA = thumbnailURLA; self.thumbnailURLB = thumbnailURLB
         self.pathA = pathA; self.pathB = pathB
