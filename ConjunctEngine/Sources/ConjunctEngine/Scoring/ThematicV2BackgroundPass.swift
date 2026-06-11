@@ -8,6 +8,15 @@ private struct V2Candidate: Sendable {
     let captionB: String
 }
 
+/// Strips leading numeric prefix ("63-foo.jpg" → "foo.jpg") and trailing numeric
+/// suffix ("foo-2.jpg" → "foo.jpg"), then lowercases. Mirrors PairScorer.sharesBaseName.
+private func normalizedBaseName(_ filename: String) -> String {
+    var s = filename
+    s = s.replacingOccurrences(of: #"^\d+-"#, with: "", options: .regularExpression)
+    s = s.replacingOccurrences(of: #"-\d+(\.\w+)$"#, with: "$1", options: .regularExpression)
+    return s.lowercased()
+}
+
 /// Runs ThematicScorerV2 sequentially over a candidate subset of existing pairs,
 /// writing scores progressively to the DB. Respects Swift structured concurrency
 /// cancellation — checking `Task.isCancelled` between each pair.
@@ -83,10 +92,14 @@ public actor ThematicV2BackgroundPass {
 
     private func fetchCandidates() throws -> [V2Candidate] {
         try db.read { db in
+            // captureDate filter in SQL: identical captureDates mean burst/sequential shots.
+            // Filename base-name dedup is applied in Swift below (SQLite has no REGEXP by default).
             let sql = """
                 SELECT p.id AS pairID,
                        COALESCE(a.caption, '') AS captionA,
-                       COALESCE(b.caption, '') AS captionB
+                       COALESCE(b.caption, '') AS captionB,
+                       COALESCE(a.filename, '') AS filenameA,
+                       COALESCE(b.filename, '') AS filenameB
                 FROM pairs p
                 JOIN images a ON a.id = p.imageAID
                 JOIN images b ON b.id = p.imageBID
@@ -96,6 +109,7 @@ public actor ThematicV2BackgroundPass {
                   AND COALESCE(b.caption, '') != ''
                   AND a.isActive = 1
                   AND b.isActive = 1
+                  AND (a.captureDate IS NULL OR b.captureDate IS NULL OR a.captureDate != b.captureDate)
                 ORDER BY MAX(p.aestheticScore, p.geometricScore) DESC
                 LIMIT 500
             """
@@ -104,6 +118,10 @@ public actor ThematicV2BackgroundPass {
                 guard let pairID = row["pairID"] as? Int64 else { return nil }
                 let captionA = (row["captionA"] as? String) ?? ""
                 let captionB = (row["captionB"] as? String) ?? ""
+                let filenameA = (row["filenameA"] as? String) ?? ""
+                let filenameB = (row["filenameB"] as? String) ?? ""
+                // Skip numeric-prefix variants (e.g. "63-foo.jpg" paired with "foo.jpg").
+                guard normalizedBaseName(filenameA) != normalizedBaseName(filenameB) else { return nil }
                 return V2Candidate(pairID: pairID, captionA: captionA, captionB: captionB)
             }
         }

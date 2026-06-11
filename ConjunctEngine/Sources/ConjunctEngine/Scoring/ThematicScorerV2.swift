@@ -25,36 +25,37 @@ public struct ThematicV2Result: Sendable {
 public actor ThematicScorerV2 {
 
     private static let kSystemPrompt = """
-You are evaluating whether two photographs form a meaningful thematic pair.
+You evaluate whether two photographs form a meaningful thematic pair.
 
-You will be given captions for two photographs. Your job is to determine whether \
-there is a genuine thematic connection between them — not just surface similarity, \
-but a shared context, tension, or resonance that makes them interesting together.
+A pair is connected ONLY if it creates meaning that neither image conveys alone. \
+Shared genre, shared location, or shared lighting alone do not make a pair connected.
 
-Look for connections across these dimensions:
-- Shared subject or domain (sound, surveillance, animals, weapons, text)
-- Complementary or opposing actions (one produces, one receives; one threatens, \
-one plays; one commands, one obeys)
-- Tonal or attitudinal resonance — two images that share an emotional register, \
-an edge, an atmosphere, even if the subjects differ
-- Text visible in an image can function as a message or command that the companion \
-image responds to, literalizes, subverts, or ironizes
+Respond with exactly this JSON structure. No preamble, no markdown, no other text:
+{"connected": true or false, "confidence": 0.0 to 1.0, "relationship_type": "one word", \
+"rationale": "one sentence"}
 
-Respond ONLY with a valid JSON object. No preamble, no explanation, no markdown fences.
+RELATIONSHIP TYPE — output exactly one word from this list: \
+complementary / contrastive / echo / ironic / tonal / none
+Use "none" when connected is false.
 
-{"connected": true or false, "confidence": 0.0 to 1.0, "shared_context": "the domain \
-or thread that links them — or null if none", "relationship_type": "complementary or \
-contrastive or echo or ironic or tonal or none", "rationale": "one sentence explaining \
-the connection, or why there is none"}
-
-Definitions:
-- complementary: the two images occupy opposite ends of the same phenomenon
-- contrastive: opposing versions of the same subject or theme
-- echo: the same thing in different contexts or scales
-- ironic: surface elements create unexpected or humorous tension, including text in \
-one image that the other responds to or subverts
-- tonal: shared emotional register or atmosphere without necessarily sharing a subject
+Definitions — use the narrowest definition that fits:
+- complementary: one image is the SOURCE of something; the other is the RECEIVER \
+(sound produced vs. heard; command issued vs. obeyed; tenderness offered vs. accepted)
+- contrastive: the same subject or role in opposing versions \
+(triumph vs. defeat; the same street empty vs. crowded)
+- echo: near-identical visual form — the same object, gesture, or shape in both images \
+(two open hands, two mouths, two doorways). Shared theme alone is NOT echo.
+- ironic: text, sign, or symbol visible in one image that the other literalizes, \
+subverts, or contradicts
+- tonal: shared emotional atmosphere where subjects completely differ \
+(both carry dread, or absurdity, or tenderness — without sharing subject or form)
 - none: no meaningful connection
+
+CONFIDENCE SCALE:
+- 0.9–1.0: connection is undeniable, immediately apparent to any viewer
+- 0.7–0.89: clear but requires a moment of thought
+- 0.5–0.69: weak but real — the connection exists but is easily missed
+- below 0.5: set connected=false
 """
 
     private let endpoint: URL
@@ -84,7 +85,7 @@ one image that the other responds to or subverts
             "system": Self.kSystemPrompt,
             "prompt": prompt,
             "stream": false,
-            "options": ["temperature": 0.1]
+            "options": ["temperature": 0.0]
         ]
 
         let bodyData: Data
