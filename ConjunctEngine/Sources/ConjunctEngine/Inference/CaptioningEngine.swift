@@ -68,11 +68,18 @@ can read it: a ceremony, a protest, a street encounter, a fair, a ritual, a vigi
 What is the atmosphere — calm, tense, reverent, chaotic, absurd, hollow?
 
 If people are present, describe whether they are actually engaging with one another \
-or merely sharing the frame — and attend to the quality of their action, not just \
-what they are doing: rushed, deliberate, collapsed inward, numb, graceful, \
-aggressive. Describe emotional register with depth: not "looks sad" but the texture \
-of it — withdrawn, grief-stricken, quietly devastated, bracing for something, \
-unexpectedly tender.
+or merely sharing the frame — and attend to the quality and direction of their \
+action — not just what they are doing but what it is aimed at or toward: rushed, \
+deliberate, collapsed inward, reaching outward, numb, graceful, aggressive, \
+straining toward something just out of reach. Describe emotional register with \
+depth: not "looks sad" but the texture of it — withdrawn, grief-stricken, quietly \
+devastated, bracing for something, unexpectedly tender.
+
+If the image contains an act of transmission or exchange — someone performing, \
+speaking, broadcasting, displaying, or otherwise sending something outward; or \
+someone listening, watching, waiting, receiving, or straining toward something — \
+describe the direction and intent of that act explicitly. Note what is being \
+offered or withheld, and whether it finds its recipient.
 
 Note any visible symbols — religious, political, commercial, cultural — and \
 describe how they sit in relation to the people or context around them. If the \
