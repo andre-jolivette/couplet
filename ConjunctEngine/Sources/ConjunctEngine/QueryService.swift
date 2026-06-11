@@ -372,7 +372,7 @@ public actor QueryService {
             JOIN folders fa ON fa.id = a.folderID
             JOIN folders fb ON fb.id = b.folderID
             \(where_)
-            ORDER BY p.compositeScore DESC
+            ORDER BY MAX(p.compositeScore, 0.6 * MAX(p.aestheticScore, p.geometricScore * 0.8, COALESCE(p.thematicV2Score, p.thematicScore)) + 0.4 * (p.aestheticScore * 0.4 + p.geometricScore * 0.2 + COALESCE(p.thematicV2Score, p.thematicScore) * 0.4)) DESC
             LIMIT \(limit)
         """
 

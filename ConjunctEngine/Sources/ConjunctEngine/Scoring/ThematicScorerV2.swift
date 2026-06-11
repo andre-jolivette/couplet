@@ -30,6 +30,11 @@ You evaluate whether two photographs form a meaningful thematic pair.
 A pair is connected ONLY if it creates meaning that neither image conveys alone. \
 Shared genre, shared location, or shared lighting alone do not make a pair connected.
 
+Visual properties — color palette, vibrancy, light quality, compositional style — \
+are evaluated by a separate system. Do not use them as the basis for a thematic \
+connection. Test: if both images were converted to black and white and you could \
+only read their captions, would the connection still hold? If not, set connected=false.
+
 Respond with exactly this JSON structure. No preamble, no markdown, no other text:
 {"connected": true or false, "confidence": 0.0 to 1.0, "relationship_type": "one word", \
 "rationale": "one sentence"}
@@ -132,15 +137,36 @@ CONFIDENCE SCALE:
     // MARK: - Private
 
     private func parseResult(from raw: String) -> ThematicV2Result? {
-        // The model may append trailing whitespace or a stray character after the closing
-        // brace. Find the last `}` and truncate there before parsing.
         var text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // Attempt 1: find the last `}` and truncate there (handles trailing whitespace
+        // or stray characters after the closing brace).
         if let lastBrace = text.lastIndex(of: "}") {
             text = String(text[...lastBrace])
         }
 
-        guard let jsonData = text.data(using: .utf8),
-              let parsed = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any] else {
+        // Attempt 2: if the object is still unclosed (model emitted a stray `)` or
+        // similar after the last field — e.g. when the rationale contains "(IMAGE B)"
+        // and the model "matches" it at the JSON level), strip back to the last `"`
+        // and append a closing brace. This recovers the rationale value intact.
+        func tryParse(_ s: String) -> [String: Any]? {
+            guard let data = s.data(using: .utf8),
+                  let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+            else { return nil }
+            return obj
+        }
+
+        var parsed: [String: Any]?
+        parsed = tryParse(text)
+        if parsed == nil, text.hasPrefix("{"), let lastQuote = text.lastIndex(of: "\"") {
+            let recovered = String(text[...lastQuote]) + "}"
+            parsed = tryParse(recovered)
+            if parsed != nil {
+                print("ThematicScorerV2: recovered unclosed JSON for pair")
+            }
+        }
+
+        guard let parsed else {
             print("ThematicScorerV2: failed to parse JSON — raw response: \(raw)")
             return nil
         }

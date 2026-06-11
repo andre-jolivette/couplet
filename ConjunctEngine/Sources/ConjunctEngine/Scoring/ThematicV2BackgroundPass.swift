@@ -57,6 +57,8 @@ public actor ThematicV2BackgroundPass {
 
         print("ThematicV2BackgroundPass: scoring \(candidates.count) candidate pairs")
         var scored = 0
+        var consecutiveFailures = 0
+        let maxConsecutiveFailures = 3  // abort only if the server appears to be down
 
         for candidate in candidates {
             guard !Task.isCancelled else {
@@ -70,11 +72,21 @@ public actor ThematicV2BackgroundPass {
             ) else {
                 // Nil from task cancellation (URLError.cancelled) — stop quietly.
                 if Task.isCancelled { return }
-                // Nil from connection failure or bad JSON — abort rather than
-                // burning through all candidates when the server is down.
-                print("ThematicV2BackgroundPass: scorer returned nil — aborting pass")
-                return
+                // Nil from connection failure or bad JSON — skip this pair and
+                // continue. Only abort if we see N consecutive failures, which
+                // reliably indicates the server is down rather than a one-off
+                // bad response for a specific pair.
+                consecutiveFailures += 1
+                print("ThematicV2BackgroundPass: scorer returned nil for pair \(candidate.pairID) " +
+                      "(\(consecutiveFailures)/\(maxConsecutiveFailures) consecutive failures)")
+                if consecutiveFailures >= maxConsecutiveFailures {
+                    print("ThematicV2BackgroundPass: aborting — server appears to be down")
+                    return
+                }
+                continue
             }
+
+            consecutiveFailures = 0  // reset on success
 
             do {
                 try writeResult(pairID: candidate.pairID, result: result)
@@ -109,7 +121,7 @@ public actor ThematicV2BackgroundPass {
                   AND COALESCE(b.caption, '') != ''
                   AND a.isActive = 1
                   AND b.isActive = 1
-                  AND (a.captureDate IS NULL OR b.captureDate IS NULL OR a.captureDate != b.captureDate)
+                  AND (a.captureDate IS NULL OR b.captureDate IS NULL OR ABS(a.captureDate - b.captureDate) > 300)
                 ORDER BY MAX(p.aestheticScore, p.geometricScore) DESC
                 LIMIT 500
             """
@@ -140,7 +152,7 @@ public actor ThematicV2BackgroundPass {
                 arguments: [
                     Double(result.score),
                     result.relationshipType,
-                    String(result.rationale.prefix(200)),
+                    String(result.rationale.prefix(300)),
                     pairID
                 ]
             )

@@ -223,7 +223,10 @@ final class EngineController: ObservableObject {
             // Fetch a larger pool so the per-image cap has enough to work with.
             // The cap and re-weighting together can shrink 750 down significantly,
             // so we fetch 2000 from the DB and trim after capping.
-            let dbLimit = anchorImageID != nil ? 200 : 2000
+            // Anchor queries use the same 2000 limit — the displayLimit trim below
+            // is inside `if anchorImageID == nil`, so the DB limit IS the display
+            // limit for anchor; 200 was too small for hub images (400+ pairs). #86
+            let dbLimit = 2000
             let displayLimit = anchorImageID != nil ? 200 : 750
             let results: [PairQueryResult] = try await qs.fetchPairs(
                 folderID: folderID, collectionID: collectionID,
@@ -728,7 +731,8 @@ final class EngineController: ObservableObject {
             let gap = abs(a.timeIntervalSince(b))
             if gap <= 30  { return 0.40 }
             if gap <= 60  { return 0.55 }
-            if gap <= 300 { return 0.85 }
+            if gap <= 120 { return 0.75 }
+            if gap <= 300 { return 0.90 }
             return 1.0
         }()
         let displayComposite = (Float(r.aestheticScore) * w.aesthetic
@@ -808,6 +812,13 @@ final class EngineController: ObservableObject {
             suppressNextThematicV2Pass = false
             return
         }
+        // If a pass is already in progress, don't cancel and restart it — sort/filter
+        // changes trigger streamPage0Pairs which calls here, and we don't want each
+        // navigation event to kill the running pass and start over from pair #1.
+        // A new pass will start automatically the next time the grid loads after
+        // the current one finishes. Explicit cancellation (e.g. on reindex) goes
+        // through thematicV2PassTask?.cancel() at line ~133, which bypasses this guard.
+        guard !isThematicV2Running else { return }
         guard let db else { return }
         thematicV2PassTask?.cancel()
         thematicV2PassTask = Task.detached(priority: .background) { [weak self] in
