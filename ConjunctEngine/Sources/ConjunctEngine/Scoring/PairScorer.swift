@@ -211,7 +211,8 @@ public enum PairScorer {
             let gap = abs(a - b)
             if gap <= 30   { return 0.40 }
             if gap <= 60   { return 0.55 }
-            if gap <= 300  { return 0.85 }
+            if gap <= 120  { return 0.75 }
+            if gap <= 300  { return 0.90 }
             return 1.0
         }()
 
