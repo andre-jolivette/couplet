@@ -31,6 +31,10 @@ struct PairsGridView: View {
                 guard !scoring else { return }
                 reloadPairs()
             }
+            .onChange(of: engine.isThematicV2Running) { _, running in
+                guard !running else { return }
+                reloadPairs()
+            }
             .onAppear {
                 Task { @MainActor in
                     if !engine.folders.isEmpty { reloadPairs() }
@@ -78,6 +82,27 @@ struct PairsGridView: View {
         .background(Color.appBackground)
         .overlay(alignment: .bottomTrailing) {
             VStack(alignment: .trailing, spacing: 8) {
+                if engine.isThematicV2Running {
+                    HStack(spacing: 6) {
+                        ProgressView()
+                            .scaleEffect(0.6)
+                            .frame(width: 12, height: 12)
+                        let total = engine.thematicV2Total
+                        let label = total > 0
+                            ? "Scoring thematic pairs — \(engine.thematicV2Scored) / \(total)"
+                            : "Scoring thematic pairs…"
+                        Text(label)
+                            .font(.system(size: 11))
+                            .foregroundColor(Color.appMutedForeground)
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 7)
+                    .background(Color.appCard)
+                    .clipShape(Capsule())
+                    .overlay(Capsule().stroke(Color.appBorder, lineWidth: 1))
+                    .transition(.opacity.animation(.easeInOut(duration: 0.3)))
+                }
+
                 if engine.isBackgroundScoring {
                     HStack(spacing: 6) {
                         ProgressView()

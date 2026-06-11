@@ -19,6 +19,12 @@ final class EngineController: ObservableObject {
     /// Total pair count per image (both sides), in the current folder context.
     /// Refreshed on every page-0 load of representative pairs.
     @Published private(set) var imagePairCounts: [Int: Int] = [:]
+    /// True while ThematicV2BackgroundPass is running. Transitions false→true on start, true→false on finish.
+    @Published private(set) var isThematicV2Running: Bool = false
+    /// Pairs scored so far in the current ThematicV2 pass. Reset to 0 on each new pass.
+    @Published private(set) var thematicV2Scored: Int = 0
+    /// Total candidates in the current ThematicV2 pass. Set when candidates are fetched.
+    @Published private(set) var thematicV2Total: Int = 0
 
     // MARK: - Settings
 
@@ -795,9 +801,22 @@ final class EngineController: ObservableObject {
     private func startThematicV2Pass() {
         guard let db else { return }
         thematicV2PassTask?.cancel()
-        thematicV2PassTask = Task.detached(priority: .background) {
+        thematicV2PassTask = Task.detached(priority: .background) { [weak self] in
+            await MainActor.run { [weak self] in
+                self?.isThematicV2Running = true
+                self?.thematicV2Scored = 0
+                self?.thematicV2Total = 0
+            }
             let pass = ThematicV2BackgroundPass(db: db)
-            await pass.run()
+            await pass.run { scored, total in
+                await MainActor.run { [weak self] in
+                    self?.thematicV2Scored = scored
+                    self?.thematicV2Total = total
+                }
+            }
+            await MainActor.run { [weak self] in
+                self?.isThematicV2Running = false
+            }
         }
     }
 

@@ -30,12 +30,19 @@ public actor ThematicV2BackgroundPass {
 
     // MARK: - Public
 
-    public func run() async {
+    /// Runs the scoring pass, calling `onProgress(scored, total)` after each pair is written.
+    /// The callback is awaited so callers can update UI on @MainActor without capturing self.
+    public func run(onProgress: (@Sendable (Int, Int) async -> Void)? = nil) async {
         let candidates: [V2Candidate]
         do {
             candidates = try fetchCandidates()
         } catch {
             print("ThematicV2BackgroundPass: failed to fetch candidates — \(error)")
+            return
+        }
+
+        guard !candidates.isEmpty else {
+            print("ThematicV2BackgroundPass: no unscored candidates")
             return
         }
 
@@ -63,6 +70,7 @@ public actor ThematicV2BackgroundPass {
             do {
                 try writeResult(pairID: candidate.pairID, result: result)
                 scored += 1
+                await onProgress?(scored, candidates.count)
             } catch {
                 print("ThematicV2BackgroundPass: DB write failed for pair \(candidate.pairID) — \(error)")
             }
