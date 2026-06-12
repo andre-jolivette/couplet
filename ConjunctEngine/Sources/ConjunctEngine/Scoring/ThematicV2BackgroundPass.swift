@@ -8,15 +8,6 @@ private struct V2Candidate: Sendable {
     let captionB: String
 }
 
-/// Strips leading numeric prefix ("63-foo.jpg" → "foo.jpg") and trailing numeric
-/// suffix ("foo-2.jpg" → "foo.jpg"), then lowercases. Mirrors PairScorer.sharesBaseName.
-private func normalizedBaseName(_ filename: String) -> String {
-    var s = filename
-    s = s.replacingOccurrences(of: #"^\d+-"#, with: "", options: .regularExpression)
-    s = s.replacingOccurrences(of: #"-\d+(\.\w+)$"#, with: "$1", options: .regularExpression)
-    return s.lowercased()
-}
-
 /// Runs ThematicScorerV2 sequentially over a candidate subset of existing pairs,
 /// writing scores progressively to the DB. Respects Swift structured concurrency
 /// cancellation — checking `Task.isCancelled` between each pair.
@@ -147,7 +138,7 @@ public actor ThematicV2BackgroundPass {
                 let filenameA = (row["filenameA"] as? String) ?? ""
                 let filenameB = (row["filenameB"] as? String) ?? ""
                 // Skip numeric-prefix variants (e.g. "63-foo.jpg" paired with "foo.jpg").
-                guard normalizedBaseName(filenameA) != normalizedBaseName(filenameB) else { return nil }
+                guard !FilenameVariants.areVariants(filenameA, filenameB) else { return nil }
                 return V2Candidate(pairID: pairID, captionA: captionA, captionB: captionB)
             }
         }
