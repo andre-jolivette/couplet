@@ -38,12 +38,15 @@ nonisolated func convertToPairFree(
     thumbnailBase: URL
 ) -> DisplayPair {
     let geoScore = adjustedGeometricScore
+    // Use thematicV2Score when available (LLM-based pair scorer), falling back to
+    // the cluster-based thematicScore. See decision #82.
+    let effectiveThematic = Float(r.thematicV2Score ?? r.thematicScore)
     let modality: PairingModality
     if r.selectedFor == "thematic" {
         modality = .thematic
     } else if r.selectedFor == "aesthetic" {
         modality = .aesthetic
-    } else if r.thematicScore >= 0.25 && r.thematicScore > Double(geoScore) {
+    } else if Double(effectiveThematic) >= 0.25 && Double(effectiveThematic) > Double(geoScore) {
         modality = .thematic
     } else if Double(geoScore) >= r.aestheticScore {
         modality = .geometric
@@ -66,12 +69,13 @@ nonisolated func convertToPairFree(
         let gap = abs(a.timeIntervalSince(b))
         if gap <= 30  { return 0.40 }
         if gap <= 60  { return 0.55 }
-        if gap <= 300 { return 0.85 }
+        if gap <= 120 { return 0.75 }
+        if gap <= 300 { return 0.90 }
         return 1.0
     }()
     let displayComposite = (Float(r.aestheticScore) * weights.aesthetic
                           + geoScore               * weights.geometric
-                          + Float(r.thematicScore) * weights.thematic)
+                          + effectiveThematic       * weights.thematic)
                           * temporalPenalty
 
     // Peak-axis score: rewards pairs exceptional on any single axis.
@@ -86,7 +90,7 @@ nonisolated func convertToPairFree(
     let peakScore = max(
         Float(r.aestheticScore),
         geoScore * 0.8,
-        Float(r.thematicScore)
+        effectiveThematic
     ) * temporalPenalty
     let axisScore = 0.6 * peakScore + 0.4 * displayComposite
 
@@ -110,8 +114,10 @@ nonisolated func convertToPairFree(
         accentHueB: r.accentHueB, accentSaturationB: r.accentSaturationB,
         compositeScore: displayComposite, axisScore: axisScore,
         aestheticScore: Float(r.aestheticScore),
-        geometricScore: geoScore, thematicScore: Float(r.thematicScore),
+        geometricScore: geoScore, thematicScore: effectiveThematic,
         rationale: r.rationale,
+        thematicV2Rationale: r.thematicV2Rationale,
+        thematicV2RelationshipType: r.thematicV2RelationshipType,
         pairCountA: pairCounts[Int(r.imageAID), default: 0],
         pairCountB: pairCounts[Int(r.imageBID), default: 0],
         thumbnailURLA: thumbURL(r.thumbnailPathA),

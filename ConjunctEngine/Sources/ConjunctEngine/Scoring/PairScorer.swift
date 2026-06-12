@@ -211,18 +211,25 @@ public enum PairScorer {
             let gap = abs(a - b)
             if gap <= 30   { return 0.40 }
             if gap <= 60   { return 0.55 }
-            if gap <= 300  { return 0.85 }
+            if gap <= 120  { return 0.75 }
+            if gap <= 300  { return 0.90 }
             return 1.0
         }()
 
-        // Filename-base duplicate check
+        // Filename-base duplicate check — strips both leading numeric prefix ("63-name.jpg"
+        // → "name.jpg") and trailing numeric suffix ("name-2.jpg" → "name.jpg").
+        // Leading prefix pattern: e.g. exports/crops named "63-20250507-_DSF0572.jpg"
+        // alongside the original "20250507-_DSF0572.jpg". dHash won't catch crops because
+        // the composition changes enough that Hamming distance > 6.
         let sharesBaseName: Bool = {
             guard !filenameA.isEmpty, !filenameB.isEmpty else { return false }
-            let baseA = filenameA.replacingOccurrences(of: #"-\d+(\.\w+)$"#,
-                with: "$1", options: .regularExpression)
-            let baseB = filenameB.replacingOccurrences(of: #"-\d+(\.\w+)$"#,
-                with: "$1", options: .regularExpression)
-            return baseA.lowercased() == baseB.lowercased()
+            func base(_ s: String) -> String {
+                var r = s
+                r = r.replacingOccurrences(of: #"^\d+-"#, with: "", options: .regularExpression)
+                r = r.replacingOccurrences(of: #"-\d+(\.\w+)$"#, with: "$1", options: .regularExpression)
+                return r.lowercased()
+            }
+            return base(filenameA) == base(filenameB)
         }()
 
         if sharesBaseName    { composite = 0 }

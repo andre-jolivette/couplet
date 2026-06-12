@@ -294,6 +294,20 @@ public final class DatabaseManager: Sendable {
             try db.execute(sql: "UPDATE images SET gazeDirectionX = NULL")
         }
 
+        // ── v15: ThematicScorerV2 columns ─────────────────────────────────
+        // Three columns store the result of the LLM-based pair-level thematic scorer.
+        // NULL = not yet scored by ThematicScorerV2.
+        // thematicV2Score: derived score (confidence when connected, 0 when not).
+        // thematicV2RelationshipType: one of complementary/contrastive/echo/ironic/tonal/none.
+        // thematicV2Rationale: one-sentence LLM explanation of the connection.
+        migrator.registerMigration("v15_thematicV2") { db in
+            try db.alter(table: "pairs") { t in
+                t.add(column: "thematicV2Score",            .real)
+                t.add(column: "thematicV2RelationshipType", .text)
+                t.add(column: "thematicV2Rationale",        .text)
+            }
+        }
+
         try migrator.migrate(pool)
     }
 }

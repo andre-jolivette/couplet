@@ -10,6 +10,7 @@ struct LightboxInfoRail: View {
 
     @State private var captionAExpanded = false
     @State private var captionBExpanded = false
+    @State private var rationaleExpanded = false
 
     var body: some View {
         ScrollView(.vertical, showsIndicators: false) {
@@ -245,6 +246,14 @@ struct LightboxInfoRail: View {
         let eitherHasCaption = !pair.captionA.isEmpty || !pair.captionB.isEmpty
 
         return VStack(alignment: .leading, spacing: 8) {
+            // V2 LLM rationale — shown above cluster breakdown when available
+            if let rationale = pair.thematicV2Rationale {
+                v2RationaleBlock(rationale: rationale,
+                                 relationshipType: pair.thematicV2RelationshipType)
+                    .padding(.top, 3)
+                    .padding(.bottom, 3)
+            }
+
             if !eitherHasCaption {
                 Text("No captions available — re-index with moondream to enable thematic analysis.")
                     .font(.system(size: 11))
@@ -284,6 +293,55 @@ struct LightboxInfoRail: View {
                 }
             }
         }
+    }
+
+    private func v2RationaleBlock(rationale: String, relationshipType: String?) -> some View {
+        let color = PairingModality.thematic.swiftColor
+        let needsToggle = rationale.count > 240
+
+        return VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                label("LLM analysis")
+                if let type = relationshipType, type != "none" {
+                    Text(type)
+                        .font(.system(size: 9, weight: .medium))
+                        .foregroundColor(color)
+                        .padding(.horizontal, 5).padding(.vertical, 2)
+                        .background(Capsule().fill(color.opacity(0.15)))
+                }
+            }
+            Text(rationale)
+                .font(.system(size: 11))
+                .foregroundColor(.white.opacity(0.60))
+                .lineLimit(!needsToggle || rationaleExpanded ? nil : 3)
+                .textSelection(.enabled)
+                .allowsHitTesting(rationaleExpanded || !needsToggle)
+                .overlay(alignment: .bottom) {
+                    if !rationaleExpanded && needsToggle {
+                        LinearGradient(
+                            colors: [.clear, Color(red: 0.145, green: 0.125, blue: 0.114)],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                        .frame(height: 18)
+                        .allowsHitTesting(false)
+                    }
+                }
+            if needsToggle {
+                Button {
+                    rationaleExpanded.toggle()
+                } label: {
+                    Text(rationaleExpanded ? "Show less" : "Show more")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundColor(color.opacity(0.75))
+                }
+                .buttonStyle(.plain)
+                .padding(.top, 2)
+            }
+        }
+        .padding(10)
+        .background(RoundedRectangle(cornerRadius: 6).fill(color.opacity(0.07)))
+        .animation(.easeInOut(duration: 0.2), value: rationaleExpanded)
     }
 
     private func clusterRow(label: String, clusters: Set<String>, color: Color) -> some View {

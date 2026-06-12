@@ -11,8 +11,6 @@ import Foundation
 /// folder gets exactly one entry that is refreshed whenever it goes stale.
 enum FolderBookmarks {
 
-    nonisolated(unsafe) private static let key = "com.toastbrigade.Couplet.folderBookmarks"
-
     // MARK: - Store
 
     /// Persist a security-scoped bookmark for `url`.
@@ -25,7 +23,7 @@ enum FolderBookmarks {
         ) else { return }
         var dict = allBookmarks()
         dict[url.path] = data
-        UserDefaults.standard.set(dict, forKey: key)
+        UserDefaults.standard.set(dict, forKey: "com.toastbrigade.Couplet.folderBookmarks")
     }
 
     // MARK: - Resolve
@@ -55,6 +53,6 @@ enum FolderBookmarks {
     // MARK: - Private
 
     nonisolated private static func allBookmarks() -> [String: Data] {
-        (UserDefaults.standard.dictionary(forKey: key) as? [String: Data]) ?? [:]
+        (UserDefaults.standard.dictionary(forKey: "com.toastbrigade.Couplet.folderBookmarks") as? [String: Data]) ?? [:]
     }
 }
