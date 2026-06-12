@@ -812,8 +812,10 @@ final class EngineController: ObservableObject {
 
     /// Cancels any running ThematicV2 pass and starts a fresh one.
     /// Called after page-0 pairs load so the pass runs against the same pair set the user is viewing.
-    /// Runs at .utility priority — low enough not to compete with interactive work, high
-    /// enough not to invert against .userInitiated grid reads (decision #87).
+    /// Runs at .userInitiated priority to match the grid read tasks — any QoS mismatch
+    /// causes a priority inversion at GRDB's Pool.swift semaphore (decision #87).
+    /// Main-thread responsiveness is controlled by @MainActor, not task priority, so
+    /// .userInitiated here does not compete with UI work.
     private func startThematicV2Pass() {
         if suppressNextThematicV2Pass {
             suppressNextThematicV2Pass = false
@@ -828,7 +830,7 @@ final class EngineController: ObservableObject {
         guard !isThematicV2Running else { return }
         guard let db else { return }
         thematicV2PassTask?.cancel()
-        thematicV2PassTask = Task.detached(priority: .utility) { [weak self] in
+        thematicV2PassTask = Task.detached(priority: .userInitiated) { [weak self] in
             await MainActor.run { [weak self] in
                 self?.isThematicV2Running = true
                 self?.thematicV2Scored = 0
