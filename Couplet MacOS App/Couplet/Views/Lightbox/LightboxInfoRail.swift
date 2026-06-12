@@ -297,8 +297,7 @@ struct LightboxInfoRail: View {
 
     private func v2RationaleBlock(rationale: String, relationshipType: String?) -> some View {
         let color = PairingModality.thematic.swiftColor
-        // ~40 chars/line × 3 lines in the 230px card interior
-        let needsToggle = rationale.count > 120
+        let needsToggle = rationale.count > 240
 
         return VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
