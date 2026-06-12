@@ -380,17 +380,19 @@ final class EngineController: ObservableObject {
     /// All @MainActor-isolated values are captured as locals before the detached
     /// task starts; self is never accessed inside the closure.
     func streamPage0Pairs(
-        folderID: Int64?, collectionID: Int64?, sortOrder: PairSortOrder
+        folderID: Int64?, collectionID: Int64?, sortOrder: PairSortOrder,
+        triggerThematicPass: Bool = true
     ) -> AsyncStream<[DisplayPair]> {
         guard let qs = queryService else { return AsyncStream { $0.finish() } }
 
         loadGeneration += 1
         let myGeneration = loadGeneration
-        let capturedWeights     = settings.weights
-        let capturedPeakFloor   = settings.edgePeakednessFloor
-        let capturedVarFloor    = settings.gridVarianceFloor
-        let capturedMinThematic = settings.minThematicScore
-        let capturedThumbnailBase = thumbnailBaseURL
+        let capturedWeights         = settings.weights
+        let capturedPeakFloor       = settings.edgePeakednessFloor
+        let capturedVarFloor        = settings.gridVarianceFloor
+        let capturedMinThematic     = settings.minThematicScore
+        let capturedThumbnailBase   = thumbnailBaseURL
+        let capturedTriggerThematic = triggerThematicPass
         let sortColumn = sortOrder.dbColumn
 
         return AsyncStream { continuation in
@@ -473,7 +475,7 @@ final class EngineController: ObservableObject {
                             self.imagePairCounts = pairCounts
                             self.representativePairsCache = finalSorted
                             self.representativePairsCacheKey = (folderID, collectionID, sortColumn)
-                            self.startThematicV2Pass()
+                            if capturedTriggerThematic { self.startThematicV2Pass() }
                         }
                     }
                 } catch is CancellationError {

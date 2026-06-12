@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import SwiftUI
 
 @MainActor
 final class PairsGridViewModel: ObservableObject {
@@ -21,6 +22,7 @@ final class PairsGridViewModel: ObservableObject {
     private(set) var canLoadMore: Bool = true
     private let pageSize = 150
     private var loadTask: Task<Void, Never>?
+    private var silentRefreshTask: Task<Void, Never>?
 
     // Lightbox trigger — owned here so ContentView can observe it
     @Published var lightboxPairID: Int? = nil
@@ -67,6 +69,44 @@ final class PairsGridViewModel: ObservableObject {
             }
             guard !Task.isCancelled else { return }
             self.isLoading = false
+        }
+    }
+
+    /// Refreshes the grid in the background without clearing `allPairs` or showing a spinner.
+    /// Used for incremental ThematicV2 batch updates — pairs rearrange in place rather than
+    /// the whole screen wiping. Cancels any pending silent refresh but never touches `loadTask`.
+    func silentRefresh(from engine: EngineController, folderID: Int64? = nil, collectionID: Int64? = nil) {
+        // Don't run a silent refresh while a full load is already streaming — the full
+        // load will land shortly and already reflects the latest V2 scores.
+        guard !isLoading else { return }
+        silentRefreshTask?.cancel()
+        silentRefreshTask = Task {
+            // Short debounce so rapid batch ticks (e.g. two pairs scored within the same
+            // frame) collapse into a single DB round-trip.
+            try? await Task.sleep(for: .milliseconds(100))
+            guard !Task.isCancelled else { return }
+            var buffer: [DisplayPair] = []
+            let stream = engine.streamPage0Pairs(
+                folderID: folderID, collectionID: collectionID, sortOrder: sortOrder,
+                triggerThematicPass: false
+            )
+            for await batch in stream {
+                guard !Task.isCancelled else { return }
+                buffer.append(contentsOf: batch)
+            }
+            guard !Task.isCancelled else { return }
+            // Preserve any in-flight decision mutations the user made during this session.
+            // Decisions are also persisted to DB immediately, so the next full load would
+            // read them correctly — this just prevents a brief visual reset mid-session.
+            let decisionsByID = Dictionary(uniqueKeysWithValues: allPairs.compactMap { p -> (Int, PairDecision)? in
+                p.decision != .none ? (p.id, p.decision) : nil
+            })
+            for i in buffer.indices {
+                if let d = decisionsByID[buffer[i].id] { buffer[i].decision = d }
+            }
+            withAnimation(.easeInOut(duration: 0.25)) {
+                self.allPairs = buffer
+            }
         }
     }
 
