@@ -823,13 +823,17 @@ final class EngineController: ObservableObject {
         // through thematicV2PassTask?.cancel() at line ~133, which bypasses this guard.
         guard !isThematicV2Running else { return }
         guard let db else { return }
+        // Set synchronously on @MainActor before creating the task. If isThematicV2Running
+        // were set inside the detached task's first await MainActor.run instead, a second
+        // call could arrive before the task body executes (due to .background scheduling
+        // latency), pass the guard above, cancel the first task, and create a replacement —
+        // leaving the cancelled task's cleanup to set isThematicV2Running = false while
+        // the replacement is still initialising. See decision #87.
+        isThematicV2Running = true
+        thematicV2Scored = 0
+        thematicV2Total = 0
         thematicV2PassTask?.cancel()
         thematicV2PassTask = Task.detached(priority: .background) { [weak self] in
-            await MainActor.run { [weak self] in
-                self?.isThematicV2Running = true
-                self?.thematicV2Scored = 0
-                self?.thematicV2Total = 0
-            }
             let pass = ThematicV2BackgroundPass(db: db)
             await pass.run { scored, total in
                 await MainActor.run { [weak self] in

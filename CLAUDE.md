@@ -116,6 +116,8 @@ A pair passes if it creates a meaning that exists in neither image alone. It fai
 
 **streamPage0Pairs populates representativePairsCache on completion** — `EngineController.streamPage0Pairs` runs DB fetching and cap-2 in a `Task.detached`, yields accepted batches through `AsyncStream<[DisplayPair]>`, then updates `representativePairsCache` via `await MainActor.run` (with generation check) after the last batch. `PairsGridViewModel.loadPairs` consumes the stream and appends batches directly to `allPairs`. `loadMorePairs` still slices from the cache as before. Do not skip the `MainActor.run` cache update at the end of the inner detached task or `loadMorePairs` will return empty results. See decision #41.
 
+**startThematicV2Pass must set isThematicV2Running = true synchronously** — `isThematicV2Running = true` is assigned directly in `startThematicV2Pass()` (which runs on `@MainActor`) before `Task.detached` is called, NOT inside the task body. If the assignment were moved into the task's first `await MainActor.run`, a race opens: the `.background`-priority task may not execute before the next `onChange` handler fires and calls `startThematicV2Pass()` again. Both calls would see `isThematicV2Running == false`, the second cancels the first, and the first task's deferred cleanup sets the flag back to `false` while the second task is still initialising — silently killing the pass. Keep `isThematicV2Running = true` (and the `thematicV2Scored`/`thematicV2Total` resets) as synchronous assignments. See decision #88.
+
 ## Workflow
 
 When completing any feature or fix, follow these steps in order before considering the task done:
