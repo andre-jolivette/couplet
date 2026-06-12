@@ -825,12 +825,15 @@ final class EngineController: ObservableObject {
         guard !isThematicV2Running else { return }
         guard let db else { return }
         thematicV2PassTask?.cancel()
+        // Set flag synchronously on @MainActor before creating the task.
+        // If we set it inside the task via await MainActor.run, there is a window
+        // between task creation and flag set where a second startThematicV2Pass()
+        // call can slip through the guard, cancel the first task, and start a new
+        // one — causing the pass to be cancelled silently during scorer.score().
+        isThematicV2Running = true
+        thematicV2Scored = 0
+        thematicV2Total = 0
         thematicV2PassTask = Task.detached(priority: .userInitiated) { [weak self] in
-            await MainActor.run { [weak self] in
-                self?.isThematicV2Running = true
-                self?.thematicV2Scored = 0
-                self?.thematicV2Total = 0
-            }
             let pass = ThematicV2BackgroundPass(db: db)
             await pass.run { [weak self] scored, total in
                 // guard let creates a strong non-var binding — required in Swift 6 to
