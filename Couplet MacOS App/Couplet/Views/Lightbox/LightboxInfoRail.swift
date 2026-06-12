@@ -10,6 +10,7 @@ struct LightboxInfoRail: View {
 
     @State private var captionAExpanded = false
     @State private var captionBExpanded = false
+    @State private var rationaleExpanded = false
 
     var body: some View {
         ScrollView(.vertical, showsIndicators: false) {
@@ -294,6 +295,9 @@ struct LightboxInfoRail: View {
 
     private func v2RationaleBlock(rationale: String, relationshipType: String?) -> some View {
         let color = PairingModality.thematic.swiftColor
+        let needsToggle = rationale.count > 120
+        let truncated = needsToggle ? truncateRationale(rationale, limit: 120) : rationale
+
         return VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
                 label("LLM analysis")
@@ -305,14 +309,38 @@ struct LightboxInfoRail: View {
                         .background(Capsule().fill(color.opacity(0.15)))
                 }
             }
-            Text(rationale)
-                .font(.system(size: 11))
-                .foregroundColor(.white.opacity(0.60))
-                .fixedSize(horizontal: false, vertical: true)
-                .textSelection(.enabled)
+            if rationaleExpanded || !needsToggle {
+                Text(rationale)
+                    .font(.system(size: 11))
+                    .foregroundColor(.white.opacity(0.60))
+                    .fixedSize(horizontal: false, vertical: true)
+                    .textSelection(.enabled)
+                if needsToggle {
+                    Button { rationaleExpanded = false } label: {
+                        Text("less")
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundColor(color.opacity(0.60))
+                    }
+                    .buttonStyle(.plain)
+                }
+            } else {
+                (Text(truncated).foregroundColor(.white.opacity(0.60))
+                 + Text(" … more").foregroundColor(color.opacity(0.75)))
+                    .font(.system(size: 11))
+                    .fixedSize(horizontal: false, vertical: true)
+                    .onTapGesture { rationaleExpanded = true }
+            }
         }
         .padding(10)
         .background(RoundedRectangle(cornerRadius: 6).fill(color.opacity(0.07)))
+        .animation(.easeInOut(duration: 0.2), value: rationaleExpanded)
+    }
+
+    private func truncateRationale(_ text: String, limit: Int) -> String {
+        guard text.count > limit else { return text }
+        let prefix = String(text.prefix(limit))
+        guard let lastSpace = prefix.lastIndex(of: " ") else { return prefix }
+        return String(prefix[..<lastSpace])
     }
 
     private func clusterRow(label: String, clusters: Set<String>, color: Color) -> some View {
