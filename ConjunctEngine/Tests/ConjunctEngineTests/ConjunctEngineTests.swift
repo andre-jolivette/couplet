@@ -119,6 +119,59 @@ final class PairScorerTests: XCTestCase {
         XCTAssertLessThanOrEqual(score.rationale.count, 120)
     }
 
+    // ── Accent echo warm-band saturation ramp (#92) ──────────────────────────
+
+    func testAccentEchoCanonicalRedPairUnaffectedByWarmBand() {
+        // Canonical pair _R017085 + R0024458: both accentHue 7.5° — outside the
+        // warm band [15°, 35°), so the ramp must not fire.
+        let score = PairScorer.accentEchoScore(
+            accentHueA: 7.5, accentSaturationA: 0.71,
+            accentHueB: 7.5, accentSaturationB: 0.61)
+        XCTAssertEqual(score, sqrt(0.71 * 0.61), accuracy: 0.01)
+    }
+
+    func testAccentEchoSkinBandLowSaturationSuppressed() {
+        // Lowrider (sat 0.82) + festival crowd (sat 0.37, skin-driven accent):
+        // min sat ≤ 0.45 → ramp 0 → echo fully suppressed.
+        let score = PairScorer.accentEchoScore(
+            accentHueA: 22.5, accentSaturationA: 0.82,
+            accentHueB: 22.5, accentSaturationB: 0.37)
+        XCTAssertEqual(score, 0)
+    }
+
+    func testAccentEchoWarmBandHighSaturationPreserved() {
+        // Lowrider + upholstery: both vivid warm accents, min sat ≥ 0.65 → ramp 1.
+        let score = PairScorer.accentEchoScore(
+            accentHueA: 22.5, accentSaturationA: 0.82,
+            accentHueB: 22.5, accentSaturationB: 0.84)
+        XCTAssertEqual(score, sqrt(0.82 * 0.84), accuracy: 0.01)
+    }
+
+    func testAccentEchoWarmBandMidSaturationRamped() {
+        // min sat 0.55 → ramp (0.55 − 0.45) / 0.20 = 0.5.
+        let score = PairScorer.accentEchoScore(
+            accentHueA: 22.5, accentSaturationA: 0.80,
+            accentHueB: 22.5, accentSaturationB: 0.55)
+        XCTAssertEqual(score, sqrt(0.80 * 0.55) * 0.5, accuracy: 0.01)
+    }
+
+    func testAccentEchoSkyBandNotGated() {
+        // Sky-blue bin (202.5°) with mixed saturation: no warm-band ramp applies.
+        let score = PairScorer.accentEchoScore(
+            accentHueA: 202.5, accentSaturationA: 0.90,
+            accentHueB: 202.5, accentSaturationB: 0.40)
+        XCTAssertEqual(score, sqrt(0.90 * 0.40), accuracy: 0.01)
+    }
+
+    func testAccentEchoWarmBandFiresWhenEitherImageInBand() {
+        // Cross-bin pair 22.5° × 7.5°: one image in the warm band is enough.
+        // hueScore = (30 − 15) / 20 = 0.75; min sat 0.40 → ramp 0.
+        let score = PairScorer.accentEchoScore(
+            accentHueA: 22.5, accentSaturationA: 0.40,
+            accentHueB: 7.5, accentSaturationB: 0.90)
+        XCTAssertEqual(score, 0)
+    }
+
     private func makeFeatureVector(imageID: Int64, embedding: [Float]? = nil) -> FeatureVector {
         let raw: [Float]
         if let e = embedding {

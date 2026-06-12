@@ -368,13 +368,22 @@ public enum PairScorer {
     // Accent color echo: rewards pairs sharing a specific accent hue
     // (Mode 2 slant rhyme, PAIRING_THEORY.md §Component 2).
     //
-    // Score: hueScore × √(satA × satB)
+    // Score: hueScore × √(satA × satB) × warmBandRamp
     //   • hueScore ramp: ≤10° → 1.0, ≤30° → linear 1.0→0.0, >30° → 0.0
     //   • Geometric mean saturation scales the score — pairs where both images
     //     carry vivid accents score higher than pairs where one accent is dull.
-    //   • No hard saturation gate or hue-range exclusions: ambient color detection
-    //     (foliage green vs billboard green, sky blue vs painted blue) requires
-    //     scene context that isn't available at score time — backlog item.
+    //   • Warm-band saturation ramp (#92): hues in [15°, 35°) — the 22.5° extraction
+    //     bin — are where skin-tone accents land. Library data shows skin-driven
+    //     accents in this band sit at saturation ≤ 0.45 (crowds, bare skin, warm-lit
+    //     pavement) while deliberate warm accents (painted metal, upholstery,
+    //     golden-hour light) sit ≥ 0.65. When either image's hue is in the band,
+    //     the score is scaled by a ramp on min(satA, satB): 0 at ≤ 0.45, 1 at ≥ 0.65.
+    //     Reds at the 7.5° bin (the canonical echo pair) are outside the band and
+    //     unaffected. Sky blue needs no gate — the accent extractor's prominence
+    //     weighting already excludes washed-out sky; surviving blue accents
+    //     (signage, clothing, neon) are genuine. See decision #92.
+    //   • Foliage-green/billboard-green disambiguation still requires scene context
+    //     that isn't available at score time — backlog item #58.
     static func accentEchoScore(
         accentHueA: Double?, accentSaturationA: Double?,
         accentHueB: Double?, accentSaturationB: Double?
@@ -394,8 +403,16 @@ public enum PairScorer {
         else if angularDist <= 30 { hueScore = (30 - angularDist) / 20 }
         else                      { return 0 }
 
-        // Score: hue match × geometric mean saturation
-        return hueScore * sqrt(sA * sB)
+        // Warm-band saturation ramp: suppress skin-as-accent echoes (#92)
+        let warmBand: ClosedRange<Float> = 15...35
+        var warmRamp: Float = 1.0
+        if warmBand.contains(hA) || warmBand.contains(hB) {
+            let minSat = min(sA, sB)
+            warmRamp = min(max((minSat - 0.45) / 0.20, 0), 1)
+        }
+
+        // Score: hue match × geometric mean saturation × warm-band ramp
+        return hueScore * sqrt(sA * sB) * warmRamp
     }
 
     static func histogramIntersection(_ a: [Float], _ b: [Float]) -> Float {
