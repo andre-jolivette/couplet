@@ -33,8 +33,25 @@ struct PairsGridView: View {
             }
             .onChange(of: engine.isThematicV2Running) { _, running in
                 guard !running else { return }
-                engine.suppressNextThematicV2Pass = true
-                reloadPairs()
+                // Pass finished — silent refresh to surface any final scored pairs
+                // without wiping the grid. silentRefresh uses triggerThematicPass: false
+                // so it won't restart the pass.
+                let fid = currentFolderID
+                let cid = currentCollectionID
+                Task { @MainActor in
+                    gridVM.silentRefresh(from: engine, folderID: fid, collectionID: cid)
+                }
+            }
+            .onChange(of: engine.thematicV2BatchCount) { _, _ in
+                // Silently refresh the grid each time a new batch of ThematicV2 scores
+                // lands — pairs rearrange in place without clearing the grid or showing
+                // a spinner. Uses silentRefresh rather than reloadPairs so allPairs is
+                // never set to [] mid-pass.
+                let fid = currentFolderID
+                let cid = currentCollectionID
+                Task { @MainActor in
+                    gridVM.silentRefresh(from: engine, folderID: fid, collectionID: cid)
+                }
             }
             .onAppear {
                 Task { @MainActor in

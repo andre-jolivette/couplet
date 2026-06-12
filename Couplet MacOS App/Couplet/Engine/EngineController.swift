@@ -44,9 +44,6 @@ final class EngineController: ObservableObject {
     private var indexStreamTask: Task<Void, Never>?
     /// Background LLM scoring pass — cancelled when a new index starts, restarted after page-0 load.
     private var thematicV2PassTask: Task<Void, Never>?
-    /// Set true by PairsGridView before the completion-triggered reload so the reload itself
-    /// doesn't immediately restart the pass. Cleared on the next startThematicV2Pass() call.
-    var suppressNextThematicV2Pass = false
 
     /// Full cap-2-filtered representative pair list for the current folder/sort context.
     /// Populated on page-0 fetch; subsequent pages slice from this cache.
@@ -819,10 +816,6 @@ final class EngineController: ObservableObject {
     /// Main-thread responsiveness is controlled by @MainActor, not task priority, so
     /// .userInitiated here does not compete with UI work.
     private func startThematicV2Pass() {
-        if suppressNextThematicV2Pass {
-            suppressNextThematicV2Pass = false
-            return
-        }
         // If a pass is already in progress, don't cancel and restart it — sort/filter
         // changes trigger streamPage0Pairs which calls here, and we don't want each
         // navigation event to kill the running pass and start over from pair #1.
