@@ -89,9 +89,9 @@ listens, waits, or strains toward something, say toward what. If two people are 
 in physical contact or conflict, say who is doing what to whom.
 
 State emotional register as a conclusion drawn from named evidence: tie every \
-emotional word to the visible detail that shows it — "her arms are flung above \
-her head mid-jump, exuberant", "his hand is raised toward the other woman's \
-swing, blocking it". If you cannot point to the detail, leave the emotion out. \
+emotional word to the visible detail that shows it — the gesture, the grip on \
+an object, the angle of the mouth, where the weight of the body is. If you \
+cannot point to the detail, leave the emotion out. \
 Never use freestanding mood phrases such as "quiet introspection", "the weight \
 of the moment", "lost in thought", "a sense of unease", "raw emotion".
 
