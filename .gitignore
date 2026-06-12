@@ -25,6 +25,7 @@ clip-vit-base-patch32.mlpackage/
 .LSOverride
 
 # Photo test libraries (large image folders, not source code)
+00-dev-pairing-folder/
 00-Ram-Export/
 00-Ramses-20260415T003144Z-3-001/
 00-exports/
