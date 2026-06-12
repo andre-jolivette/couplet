@@ -7,7 +7,7 @@
 ## Project Overview
 Couplet is a macOS app for photographers. It discovers meaningful image pairs in a photo library — not duplicates or sequential shots, but conceptually resonant connections the photographer might not have noticed.
 
-- **Bundle ID:** `com.toastbrigade.Couplet`
+- **Bundle ID:** `com.toastingmachine.Couplet` (note: UserDefaults keys and the toolbar identifier in the app source still use the legacy `com.toastbrigade.Couplet.*` string prefix — these are plain strings, not the bundle ID, and renaming them would orphan stored preferences)
 - **Deployment target:** macOS 14.0
 - **Language:** Swift
 
@@ -22,9 +22,11 @@ _couplet/
 └── CLAUDE.md                # This file
 ```
 
-Database: `~/Library/Application Support/Conjunct/conjunct.db`
-Thumbnail cache: `~/Library/Caches/Conjunct/thumbnails/{imageID}.jpg`
-Mid-res preview cache: `~/Library/Caches/Conjunct/previews/{imageID}.jpg`
+The app is sandboxed, so all of these live inside the app container at `~/Library/Containers/com.toastingmachine.Couplet/Data/`:
+
+Database: `~/Library/Containers/com.toastingmachine.Couplet/Data/Library/Application Support/Conjunct/conjunct.db`
+Thumbnail cache: `~/Library/Containers/com.toastingmachine.Couplet/Data/Library/Caches/Conjunct/thumbnails/{imageID}.jpg`
+Mid-res preview cache: `~/Library/Containers/com.toastingmachine.Couplet/Data/Library/Caches/Conjunct/previews/{imageID}.jpg`
 
 **pairs table — ThematicV2 columns (v15 migration):**
 - `thematicV2Score REAL` — derived score (confidence when connected, 0 when not). NULL = not yet scored.
