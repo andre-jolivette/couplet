@@ -25,6 +25,9 @@ final class EngineController: ObservableObject {
     @Published private(set) var thematicV2Scored: Int = 0
     /// Total candidates in the current ThematicV2 pass. Set when candidates are fetched.
     @Published private(set) var thematicV2Total: Int = 0
+    /// Increments by 1 every kThematicV2BatchSize pairs scored. Watched by PairsGridView
+    /// to trigger incremental grid reloads mid-pass rather than waiting for completion.
+    @Published private(set) var thematicV2BatchCount: Int = 0
 
     // MARK: - Settings
 
@@ -51,6 +54,9 @@ final class EngineController: ObservableObject {
     private var representativePairsCache: [DisplayPair] = []
     private var representativePairsCacheKey: (folderID: Int64?, collectionID: Int64?, sortColumn: String) = (nil, nil, "")
     private var loadGeneration: Int = 0
+
+    /// Grid reloads during ThematicV2 pass every this many pairs scored.
+    private static let kThematicV2BatchSize = 10
 
     private let thumbnailBaseURL: URL = FileManager.default
         .urls(for: .cachesDirectory, in: .userDomainMask)[0]
@@ -806,7 +812,8 @@ final class EngineController: ObservableObject {
 
     /// Cancels any running ThematicV2 pass and starts a fresh one.
     /// Called after page-0 pairs load so the pass runs against the same pair set the user is viewing.
-    /// Always runs at background priority — never blocks the main thread.
+    /// Runs at .utility priority — low enough not to compete with interactive work, high
+    /// enough not to invert against .userInitiated grid reads (decision #87).
     private func startThematicV2Pass() {
         if suppressNextThematicV2Pass {
             suppressNextThematicV2Pass = false
@@ -821,17 +828,25 @@ final class EngineController: ObservableObject {
         guard !isThematicV2Running else { return }
         guard let db else { return }
         thematicV2PassTask?.cancel()
-        thematicV2PassTask = Task.detached(priority: .background) { [weak self] in
+        thematicV2PassTask = Task.detached(priority: .utility) { [weak self] in
             await MainActor.run { [weak self] in
                 self?.isThematicV2Running = true
                 self?.thematicV2Scored = 0
                 self?.thematicV2Total = 0
             }
             let pass = ThematicV2BackgroundPass(db: db)
-            await pass.run { scored, total in
-                await MainActor.run { [weak self] in
-                    self?.thematicV2Scored = scored
-                    self?.thematicV2Total = total
+            await pass.run { [weak self] scored, total in
+                // guard let creates a strong non-var binding — required in Swift 6 to
+                // avoid "reference to captured var 'self' in concurrently-executing code".
+                guard let self else { return }
+                await MainActor.run {
+                    self.thematicV2Scored = scored
+                    self.thematicV2Total = total
+                    // Increment batch counter every N pairs — PairsGridView watches this
+                    // to reload the grid incrementally rather than waiting for completion.
+                    if scored % EngineController.kThematicV2BatchSize == 0 {
+                        self.thematicV2BatchCount += 1
+                    }
                 }
             }
             await MainActor.run { [weak self] in
