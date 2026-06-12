@@ -14,7 +14,10 @@ private struct V2Candidate: Sendable {
 ///
 /// Candidates: pairs where thematicV2Score IS NULL and at least one of
 /// aestheticScore or geometricScore exceeds the noise floor (0.3), and both
-/// images have non-empty captions. Ordered strongest-first. Limit: 500 pairs.
+/// images have non-empty captions. Accent-echo pairs (aestheticSubmode =
+/// 'accent_echo') are excluded — color is already captured by the aesthetic
+/// axis, and the LLM tends to hallucinate thematic connections from shared
+/// color (decision #91). Ordered strongest-first. Limit: 750 pairs.
 ///
 /// Sequential execution is intentional — Ollama handles one request at a time,
 /// and concurrent calls would not reduce wall-clock time.
@@ -127,8 +130,9 @@ public actor ThematicV2BackgroundPass {
                   AND a.isActive = 1
                   AND b.isActive = 1
                   AND (a.captureDate IS NULL OR b.captureDate IS NULL OR ABS(a.captureDate - b.captureDate) > 300)
+                  AND (p.aestheticSubmode IS NULL OR p.aestheticSubmode != 'accent_echo')
                 ORDER BY MAX(p.aestheticScore, p.geometricScore) DESC
-                LIMIT 500
+                LIMIT 750
             """
             let rows = try Row.fetchAll(db, sql: sql)
             return rows.compactMap { row -> V2Candidate? in
