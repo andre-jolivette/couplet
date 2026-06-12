@@ -223,10 +223,10 @@ final class EngineController: ObservableObject {
             // Fetch a larger pool so the per-image cap has enough to work with.
             // The cap and re-weighting together can shrink 750 down significantly,
             // so we fetch 2000 from the DB and trim after capping.
-            // Anchor queries use the same 2000 limit — the displayLimit trim below
-            // is inside `if anchorImageID == nil`, so the DB limit IS the display
-            // limit for anchor; 200 was too small for hub images (400+ pairs). #86
-            let dbLimit = 2000
+            // Anchor queries use 500 — the displayLimit trim below is inside
+            // `if anchorImageID == nil`, so the DB limit IS the display cap for
+            // anchor; 200 was too small for hub images (400+ pairs). #86
+            let dbLimit = anchorImageID != nil ? 500 : 2000
             let displayLimit = anchorImageID != nil ? 200 : 750
             let results: [PairQueryResult] = try await qs.fetchPairs(
                 folderID: folderID, collectionID: collectionID,
