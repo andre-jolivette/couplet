@@ -313,7 +313,7 @@ struct LightboxInfoRail: View {
             Text(rationale)
                 .font(.system(size: 11))
                 .foregroundColor(.white.opacity(0.60))
-                .lineLimit(rationaleExpanded ? nil : 3)
+                .lineLimit(!needsToggle || rationaleExpanded ? nil : 3)
                 .textSelection(.enabled)
                 .allowsHitTesting(rationaleExpanded || !needsToggle)
                 .overlay(alignment: .bottom) {
