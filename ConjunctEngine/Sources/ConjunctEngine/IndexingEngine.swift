@@ -910,16 +910,17 @@ public actor IndexingEngine {
         // Load all hashes and find groups using union-find.
         // Extract to plain Swift tuples immediately so Row values
         // never cross the actor boundary (Row is not Sendable in GRDB 6).
-        typealias HashRow = (id: Int64, dHash: String, captureDate: Double?)
+        typealias HashRow = (id: Int64, dHash: String, captureDate: Double?, filename: String)
         let hashRows: [HashRow] = try db.read { db in
             try Row.fetchAll(
                 db,
-                sql: "SELECT id, dHash, captureDate FROM images WHERE isActive = 1 AND dHash IS NOT NULL AND dHash != ''"
+                sql: "SELECT id, dHash, captureDate, filename FROM images WHERE isActive = 1 AND dHash IS NOT NULL AND dHash != ''"
             ).map { row in
                 (
                     id: row["id"] as! Int64,
                     dHash: row["dHash"] as! String,
-                    captureDate: (row["captureDate"] as? Double) ?? (row["captureDate"] as? Int64).map(Double.init)
+                    captureDate: (row["captureDate"] as? Double) ?? (row["captureDate"] as? Int64).map(Double.init),
+                    filename: row["filename"] as! String
                 )
             }
         }
@@ -946,6 +947,23 @@ public actor IndexingEngine {
                 let hB  = hashRows[j].dHash
                 if PerceptualHasher.areDuplicates(hA, hB, threshold: settings.hammingThreshold) {
                     union(idA, idB)
+                    continue
+                }
+
+                // Filename-variant rule — documented last resort (decision #94).
+                // Crop/re-export copies of the same photo drift 7–20 Hamming bits,
+                // and no pixel-level threshold separates them from genuine burst
+                // frames (a real same-second burst pair in the reference library
+                // measures Hamming 19 / CLIP 0.964 — *more* similar than a crop
+                // copy at Hamming 20 / CLIP 0.934). So crops are matched by
+                // export naming convention instead, gated on identical EXIF
+                // captureDate: a re-export keeps its capture timestamp, while a
+                // name collision from camera counter rollover does not.
+                if let dA = hashRows[i].captureDate,
+                   let dB = hashRows[j].captureDate,
+                   dA == dB,
+                   FilenameVariants.areVariants(hashRows[i].filename, hashRows[j].filename) {
+                    union(idA, idB)
                 }
             }
         }
@@ -967,8 +985,11 @@ public actor IndexingEngine {
         let summaries: [DuplicateGroupSummary] = try db.write { db in
             var result: [DuplicateGroupSummary] = []
 
-            // Clear any previous duplicate group assignments
+            // Clear any previous duplicate group assignments. Old group rows are
+            // deleted too — they are re-created from scratch every run, and
+            // leaving them accumulates thousands of unreferenced rows.
             try db.execute(sql: "UPDATE images SET duplicateGroupID = NULL, isHero = 1")
+            try db.execute(sql: "DELETE FROM duplicateGroups")
 
             for (_, memberIDs) in duplicateOnlyGroups {
                 var group = DuplicateGroup(memberCount: memberIDs.count)

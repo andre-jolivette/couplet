@@ -216,21 +216,12 @@ public enum PairScorer {
             return 1.0
         }()
 
-        // Filename-base duplicate check — strips both leading numeric prefix ("63-name.jpg"
-        // → "name.jpg") and trailing numeric suffix ("name-2.jpg" → "name.jpg").
-        // Leading prefix pattern: e.g. exports/crops named "63-20250507-_DSF0572.jpg"
-        // alongside the original "20250507-_DSF0572.jpg". dHash won't catch crops because
-        // the composition changes enough that Hamming distance > 6.
-        let sharesBaseName: Bool = {
-            guard !filenameA.isEmpty, !filenameB.isEmpty else { return false }
-            func base(_ s: String) -> String {
-                var r = s
-                r = r.replacingOccurrences(of: #"^\d+-"#, with: "", options: .regularExpression)
-                r = r.replacingOccurrences(of: #"-\d+(\.\w+)$"#, with: "$1", options: .regularExpression)
-                return r.lowercased()
-            }
-            return base(filenameA) == base(filenameB)
-        }()
+        // Filename-base duplicate check — numeric prefix ("63-name.jpg" / "name.jpg")
+        // and trailing suffix ("name-2.jpg" / "name.jpg") export variants. dHash won't
+        // catch crops because the composition changes enough that Hamming distance > 6.
+        // Must use FilenameVariants (asymmetric match): normalizing both sides with
+        // `^\d+-` silently fails for date-prefixed originals — see decision #94.
+        let sharesBaseName = FilenameVariants.areVariants(filenameA, filenameB)
 
         if sharesBaseName    { composite = 0 }
         else if isSequential { composite *= 0.40 }

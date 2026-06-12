@@ -73,6 +73,47 @@ final class FileScannerTests: XCTestCase {
     }
 }
 
+// ── FilenameVariantsTests ─────────────────────────────────────────────────────
+
+final class FilenameVariantsTests: XCTestCase {
+
+    func testPrefixCopyOfDatePrefixedOriginal() {
+        // The regression that motivated decision #94: the original itself starts
+        // with digits, so stripping `^\d+-` from both sides never matched.
+        XCTAssertTrue(FilenameVariants.areVariants("00-20250504-_R017085.jpg", "20250504-_R017085.jpg"))
+        XCTAssertTrue(FilenameVariants.areVariants("20250507-_DSF0572.jpg", "63-20250507-_DSF0572.jpg"))
+    }
+
+    func testPrefixCopyOfPlainOriginal() {
+        XCTAssertTrue(FilenameVariants.areVariants("63-foo.jpg", "foo.jpg"))
+    }
+
+    func testTwoPrefixedCopies() {
+        XCTAssertTrue(FilenameVariants.areVariants("00-20241221-_DSF4186.jpg", "29-20241221-_DSF4186.jpg"))
+    }
+
+    func testTrailingSuffixVariant() {
+        XCTAssertTrue(FilenameVariants.areVariants("20250315-_DSF9076.jpg", "20250315-_DSF9076-2.jpg"))
+    }
+
+    func testDifferentShotsAreNotVariants() {
+        // Adjacent burst frames — distinct trailing frame numbers are part of the
+        // camera base name, not an export suffix... except when one parses as a
+        // "-N" suffix; the captureDate gate in detectDuplicates covers that case.
+        XCTAssertFalse(FilenameVariants.areVariants("20250515-_DSF2488.jpg", "20250515-_DSF2489.jpg"))
+        XCTAssertFalse(FilenameVariants.areVariants("46-20250326-_DSF3715.jpg", "20250326-_DSF3713.jpg"))
+    }
+
+    func testIdenticalNamesAreNotVariants() {
+        XCTAssertFalse(FilenameVariants.areVariants("foo.jpg", "foo.jpg"))
+    }
+
+    func testEmptyNamesAreNotVariants() {
+        XCTAssertFalse(FilenameVariants.areVariants("", "foo.jpg"))
+        XCTAssertFalse(FilenameVariants.areVariants("", ""))
+    }
+}
+
 // ── PairScorerTests ───────────────────────────────────────────────────────────
 
 final class PairScorerTests: XCTestCase {
