@@ -30,10 +30,13 @@ You evaluate whether two photographs form a meaningful thematic pair.
 A pair is connected ONLY if it creates meaning that neither image conveys alone. \
 Shared genre, shared location, or shared lighting alone do not make a pair connected.
 
-Visual properties — color palette, vibrancy, light quality, compositional style — \
-are evaluated by a separate system. Do not use them as the basis for a thematic \
-connection. Test: if both images were converted to black and white and you could \
-only read their captions, would the connection still hold? If not, set connected=false.
+Visual properties are evaluated by a separate system — do not use them as the \
+basis for a thematic connection. This includes: shared color, palette, vibrancy, \
+brightness, light quality, or compositional style. If you find yourself writing a \
+rationale that mentions color, hue, tone, brightness, or visual style — stop. \
+That is an aesthetic connection, not a thematic one. Set connected=false. \
+A thematic connection must be based solely on subject, action, role, emotion, \
+or narrative — things that have nothing to do with how the image looks.
 
 Respond with exactly this JSON structure. No preamble, no markdown, no other text:
 {"connected": true or false, "confidence": 0.0 to 1.0, "relationship_type": "one word", \
@@ -82,8 +85,15 @@ CONFIDENCE SCALE:
         self.timeoutSeconds = timeoutSeconds
     }
 
-    /// Scores a pair from its captions. Returns nil on connection failure or parse error.
-    public func score(captionA: String, captionB: String) async -> ThematicV2Result? {
+    /// Scores a pair from its captions.
+    ///
+    /// - Returns: A `ThematicV2Result` on success, or `nil` when the LLM returned a
+    ///   response the JSON parser could not interpret (model output format issue — the
+    ///   pair stays unscored in the DB and can be retried in a later pass). Also returns
+    ///   `nil` when the Swift task is cancelled (caller should check `Task.isCancelled`).
+    /// - Throws: Any underlying network or HTTP error when Ollama is unreachable or
+    ///   returns a non-200 status. Callers use this to decide whether to abort.
+    public func score(captionA: String, captionB: String) async throws -> ThematicV2Result? {
         let prompt = "IMAGE A: \(captionA)\n\nIMAGE B: \(captionB)"
         let body: [String: Any] = [
             "model": model,
@@ -113,24 +123,32 @@ CONFIDENCE SCALE:
             (data, response) = try await session.data(for: request)
         } catch let urlError as URLError where urlError.code == .cancelled {
             // Swift task cancellation propagates as URLError.cancelled — not an Ollama problem.
+            // Return nil so the caller can check Task.isCancelled and exit quietly.
             return nil
         } catch {
+            // Real network failure (connection refused, timeout, etc.) — throw so the
+            // caller can track consecutive failures and abort if the server is down.
             print("ThematicScorerV2: connection error (is ollama running?) — \(error.localizedDescription)")
-            return nil
+            throw error
         }
 
         guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
             let code = (response as? HTTPURLResponse)?.statusCode ?? -1
             print("ThematicScorerV2: server returned HTTP \(code)")
-            return nil
+            throw URLError(.badServerResponse)
         }
 
         guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let rawText = json["response"] as? String else {
+            // Ollama's outer envelope is malformed — treat as server-level error.
             print("ThematicScorerV2: unexpected outer response format")
-            return nil
+            throw URLError(.cannotParseResponse)
         }
 
+        // nil here means the LLM's inner JSON was unparseable (e.g. unescaped quotes
+        // from sign text the model quoted verbatim, or a truncated response). This is a
+        // model output quality issue, not a connectivity problem — return nil so the
+        // caller skips this pair without counting it as a server failure.
         return parseResult(from: rawText)
     }
 

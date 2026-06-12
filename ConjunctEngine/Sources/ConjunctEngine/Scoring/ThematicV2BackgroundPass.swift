@@ -57,8 +57,11 @@ public actor ThematicV2BackgroundPass {
 
         print("ThematicV2BackgroundPass: scoring \(candidates.count) candidate pairs")
         var scored = 0
-        var consecutiveFailures = 0
-        let maxConsecutiveFailures = 3  // abort only if the server appears to be down
+        // Only network/HTTP failures count toward the abort threshold. JSON parse
+        // failures (LLM output format issues) do not — the server is clearly up
+        // if we got a response at all, so we reset this counter on any HTTP response.
+        var consecutiveConnectionFailures = 0
+        let maxConsecutiveConnectionFailures = 3
 
         for candidate in candidates {
             guard !Task.isCancelled else {
@@ -66,27 +69,38 @@ public actor ThematicV2BackgroundPass {
                 return
             }
 
-            guard let result = await scorer.score(
-                captionA: candidate.captionA,
-                captionB: candidate.captionB
-            ) else {
-                // Nil from task cancellation (URLError.cancelled) — stop quietly.
+            let result: ThematicV2Result?
+            do {
+                result = try await scorer.score(
+                    captionA: candidate.captionA,
+                    captionB: candidate.captionB
+                )
+            } catch {
+                // Network or HTTP error — server may be down.
                 if Task.isCancelled { return }
-                // Nil from connection failure or bad JSON — skip this pair and
-                // continue. Only abort if we see N consecutive failures, which
-                // reliably indicates the server is down rather than a one-off
-                // bad response for a specific pair.
-                consecutiveFailures += 1
-                print("ThematicV2BackgroundPass: scorer returned nil for pair \(candidate.pairID) " +
-                      "(\(consecutiveFailures)/\(maxConsecutiveFailures) consecutive failures)")
-                if consecutiveFailures >= maxConsecutiveFailures {
+                consecutiveConnectionFailures += 1
+                print("ThematicV2BackgroundPass: connection error for pair \(candidate.pairID) " +
+                      "(\(consecutiveConnectionFailures)/\(maxConsecutiveConnectionFailures))" +
+                      " — \(error.localizedDescription)")
+                if consecutiveConnectionFailures >= maxConsecutiveConnectionFailures {
                     print("ThematicV2BackgroundPass: aborting — server appears to be down")
                     return
                 }
                 continue
             }
 
-            consecutiveFailures = 0  // reset on success
+            guard let result else {
+                // nil return: either task cancelled, or LLM produced unparseable JSON.
+                if Task.isCancelled { return }
+                // Parse failure — server responded (HTTP 200), just the model's output
+                // was malformed. Reset the connection counter and skip this pair; it
+                // stays NULL in the DB and will be a candidate in the next pass.
+                consecutiveConnectionFailures = 0
+                print("ThematicV2BackgroundPass: skipping pair \(candidate.pairID) — unparseable LLM output")
+                continue
+            }
+
+            consecutiveConnectionFailures = 0  // reset on success
 
             do {
                 try writeResult(pairID: candidate.pairID, result: result)
