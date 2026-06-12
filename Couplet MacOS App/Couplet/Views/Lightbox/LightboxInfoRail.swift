@@ -320,7 +320,7 @@ struct LightboxInfoRail: View {
                 .overlay(alignment: .bottom) {
                     if !rationaleExpanded && needsToggle {
                         LinearGradient(
-                            colors: [.clear, Color(white: 0.12)],
+                            colors: [.clear, Color(red: 0.145, green: 0.125, blue: 0.114)],
                             startPoint: .top,
                             endPoint: .bottom
                         )
@@ -334,7 +334,7 @@ struct LightboxInfoRail: View {
                 } label: {
                     Text(rationaleExpanded ? "Show less" : "Show more")
                         .font(.system(size: 10, weight: .medium))
-                        .foregroundColor(.white.opacity(0.45))
+                        .foregroundColor(color.opacity(0.75))
                 }
                 .buttonStyle(.plain)
                 .padding(.top, 2)
