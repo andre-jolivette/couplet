@@ -811,10 +811,9 @@ final class EngineController: ObservableObject {
 
     /// Cancels any running ThematicV2 pass and starts a fresh one.
     /// Called after page-0 pairs load so the pass runs against the same pair set the user is viewing.
-    /// Runs at .userInitiated priority to match the grid read tasks — any QoS mismatch
-    /// causes a priority inversion at GRDB's Pool.swift semaphore (decision #87).
-    /// Main-thread responsiveness is controlled by @MainActor, not task priority, so
-    /// .userInitiated here does not compete with UI work.
+    /// Runs at .background priority — Ollama inference is the bottleneck, not CPU priority.
+    /// The GRDB Pool.swift priority inversion warning (decision #87) remains; fixing it cleanly
+    /// requires GRDB's async-await API, which is a larger refactor than the inversion warrants.
     private func startThematicV2Pass() {
         // If a pass is already in progress, don't cancel and restart it — sort/filter
         // changes trigger streamPage0Pairs which calls here, and we don't want each
@@ -825,27 +824,19 @@ final class EngineController: ObservableObject {
         guard !isThematicV2Running else { return }
         guard let db else { return }
         thematicV2PassTask?.cancel()
-        // Set flag synchronously on @MainActor before creating the task.
-        // If we set it inside the task via await MainActor.run, there is a window
-        // between task creation and flag set where a second startThematicV2Pass()
-        // call can slip through the guard, cancel the first task, and start a new
-        // one — causing the pass to be cancelled silently during scorer.score().
-        isThematicV2Running = true
-        thematicV2Scored = 0
-        thematicV2Total = 0
-        thematicV2PassTask = Task.detached(priority: .userInitiated) { [weak self] in
+        thematicV2PassTask = Task.detached(priority: .background) { [weak self] in
+            await MainActor.run { [weak self] in
+                self?.isThematicV2Running = true
+                self?.thematicV2Scored = 0
+                self?.thematicV2Total = 0
+            }
             let pass = ThematicV2BackgroundPass(db: db)
-            await pass.run { [weak self] scored, total in
-                // guard let creates a strong non-var binding — required in Swift 6 to
-                // avoid "reference to captured var 'self' in concurrently-executing code".
-                guard let self else { return }
-                await MainActor.run {
-                    self.thematicV2Scored = scored
-                    self.thematicV2Total = total
-                    // Increment batch counter every N pairs — PairsGridView watches this
-                    // to reload the grid incrementally rather than waiting for completion.
+            await pass.run { scored, total in
+                await MainActor.run { [weak self] in
+                    self?.thematicV2Scored = scored
+                    self?.thematicV2Total = total
                     if scored % EngineController.kThematicV2BatchSize == 0 {
-                        self.thematicV2BatchCount += 1
+                        self?.thematicV2BatchCount += 1
                     }
                 }
             }
