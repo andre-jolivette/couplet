@@ -20,9 +20,11 @@ public protocol CaptioningEngine: Sendable {
 /// The custom model sets num_ctx 2048 to avoid the default 128k KV cache
 /// allocation — see ConjunctEngine/Modelfile for the full rationale.
 ///
-/// Prompt is tuned for thematic indexing: single flowing paragraph covering
-/// scene context, social situation, emotional register, symbolism, irony/humour,
-/// and meaningful contrasts within the frame.
+/// Prompt is tuned for thematic indexing (#50 v2): physical facts first (hands,
+/// feet, gaze target, precise objects, apparent gender), then direction of every
+/// significant action, then emotional register — every emotional word tied to a
+/// named visible detail. Generic mood phrases ("quiet introspection") are banned;
+/// they turned images into scoring hubs in ThematicV2 (see decision #97).
 public actor OllamaCaptioningEngine: CaptioningEngine {
 
     private let endpoint: URL
@@ -46,11 +48,14 @@ public actor OllamaCaptioningEngine: CaptioningEngine {
     }
 
     public func caption(imageURL: URL) async throws -> String {
-        // Resize to 512px before encoding. Full-resolution camera files often
+        // Resize to 768px before encoding. Full-resolution camera files often
         // encode to 2000+ vision tokens with qwen2.5vl's tiled patch encoding;
-        // a 512px thumbnail produces ~250 prompt tokens total — well within the
-        // num_ctx 2048 budget set in ConjunctEngine/Modelfile. Falls back to the
-        // raw file only if thumbnail generation fails.
+        // a 768px max-dimension thumbnail produces ~500–750 image tokens.
+        // Budget check against num_ctx 2048 (ConjunctEngine/Modelfile):
+        // image ≤750 + prompt ≈460 + output 500 ≈ 1,710. Raised from 512px in
+        // #50/#97 — at 512px qwen missed small load-bearing details (a rose in
+        // a cup read as a "red bandana"). Falls back to the raw file only if
+        // thumbnail generation fails.
         let imageData: Data
         if let thumb = thumbnailData(from: imageURL) {
             imageData = thumb
@@ -60,36 +65,43 @@ public actor OllamaCaptioningEngine: CaptioningEngine {
         let b64 = imageData.base64EncodedString()
 
         let prompt = """
-Describe this photograph in a single flowing paragraph — reading it as a careful \
-observer would, attending to what the scene means, not just what it contains.
+Describe this photograph in a single flowing paragraph, for someone who cannot \
+see it.
 
-What kind of place or moment is this? Name the social or cultural context if you \
-can read it: a ceremony, a protest, a street encounter, a fair, a ritual, a vigil. \
-What is the atmosphere — calm, tense, reverent, chaotic, absurd, hollow?
+Begin immediately with the main subject — your first words should name it \
+("A woman...", "Two men...", "A crowd..."). Never open with "The photograph" or \
+"The image".
 
-If people are present, describe whether they are actually engaging with one another \
-or merely sharing the frame — and attend to the quality and direction of their \
-action — not just what they are doing but what it is aimed at or toward: rushed, \
-deliberate, collapsed inward, reaching outward, numb, graceful, aggressive, \
-straining toward something just out of reach. Describe emotional register with \
-depth: not "looks sad" but the texture of it — withdrawn, grief-stricken, quietly \
-devastated, bracing for something, unexpectedly tender.
+Commit to the physical facts first, and get them right: who is present (state \
+apparent gender and rough age when clearly visible), and what each body is \
+actually doing — where the hands are and what they hold or touch, whether feet \
+are on the ground or in the air, which way the head and eyes are turned and what \
+they are aimed at. Name objects precisely. If an object is unusual, out of place, \
+or used wrongly — something odd inside a cup, something covering a mouth or face, \
+a toy used by an adult — say exactly what it is and where it sits. Transcribe any \
+legible text and say what it is printed on.
 
-If the image contains an act of transmission or exchange — someone performing, \
-speaking, broadcasting, displaying, or otherwise sending something outward; or \
-someone listening, watching, waiting, receiving, or straining toward something — \
-describe the direction and intent of that act explicitly. Note what is being \
-offered or withheld, and whether it finds its recipient.
+Then read what is happening between people: whether they engage one another or \
+merely share the frame, and the direction of every significant action — who or \
+what it is aimed at, offered to, withheld from, blocked by, or received by. If \
+someone performs, displays, or broadcasts, say toward whom. If someone watches, \
+listens, waits, or strains toward something, say toward what. If two people are \
+in physical contact or conflict, say who is doing what to whom.
 
-Note any visible symbols — religious, political, commercial, cultural — and \
-describe how they sit in relation to the people or context around them. If the \
-frame contains humour, irony, or incongruity — a person mirroring a sign behind \
-them, something absurdly out of place, unintended comedy — name it. Describe any \
-significant contrast in the frame: between moods, between people, between a person \
-and their surroundings.
+State emotional register as a conclusion drawn from named evidence: tie every \
+emotional word to the visible detail that shows it — the gesture, the grip on \
+an object, the angle of the mouth, where the weight of the body is. If you \
+cannot point to the detail, leave the emotion out. \
+Never use freestanding mood phrases such as "quiet introspection", "the weight \
+of the moment", "lost in thought", "a sense of unease", "raw emotion".
 
-Write in direct observational prose. No preamble, no "The image shows", no mention \
-of camera, focus, or image quality. Write in English only.
+If the frame contains humour, irony, or incongruity — something absurdly out of \
+place, a person mirroring a sign, unintended comedy — name it concretely. Note \
+any visible symbols — religious, political, commercial, cultural — and how they \
+sit in relation to the people around them.
+
+No meta-commentary ("this image evokes", "a snapshot of", "a testament to"), no \
+mention of camera, focus, or image quality. English only.
 """
 
         let body: [String: Any] = [
@@ -99,13 +111,16 @@ of camera, focus, or image quality. Write in English only.
             "stream": false,
             // num_predict raised 250 → 400 → 500. At 250 tokens (~1,000–1,200 chars),
             // 57% of captions were cut mid-sentence; at 400, ~23% still truncated.
-            // 500 tokens ≈ 1,800–2,200 chars — enough for qwen to complete naturally
-            // while staying within the num_ctx 2048 budget (prompt ≈ 270 tokens
-            // + image ≈ 250 tokens + 500 output = ~1,020 total).
+            // The v2 prompt typically completes in 140–190 tokens; 500 is headroom.
             //
-            // repeat_penalty 1.15 prevents the degenerate repetition loops seen in
-            // ~8 captions on the 400-token pass (e.g. "the the the the...").
-            "options": ["temperature": 0.2, "num_predict": 500, "repeat_penalty": 1.15]
+            // Greedy decoding (temperature 0 + top_k 1), #97: at temperature 0.2,
+            // captions hallucinated run-to-run (a nonexistent second figure
+            // "mimicking" the subject appeared in one sample and not the next).
+            // Greedy is deterministic and removed every observed fabrication on
+            // the pilot set. repeat_penalty 1.15 kept as loop insurance — verified
+            // harmless with an f16 KV cache (the article corruption it was once
+            // suspected of came from OLLAMA_KV_CACHE_TYPE=q8_0; see decision #97).
+            "options": ["temperature": 0, "top_k": 1, "num_predict": 500, "repeat_penalty": 1.15]
         ]
 
         var request = URLRequest(url: endpoint)
@@ -139,11 +154,13 @@ of camera, focus, or image quality. Write in English only.
         return cleaned
     }
 
-    /// Returns a 512px JPEG-encoded thumbnail of the image at `url`.
+    /// Returns a 768px JPEG-encoded thumbnail of the image at `url`.
     ///
-    /// Matches the thumbnail pipeline used by CLIP and the IndexingEngine —
-    /// same 512px ceiling, same transform-aware downscale via ImageIO.
-    private func thumbnailData(from url: URL, maxDimension: Int = 512) -> Data? {
+    /// 768px (not the 512px used by CLIP and the thumbnail cache) — captioning
+    /// needs more detail than CLIP: at 512px qwen2.5vl missed or misread small
+    /// subject-defining objects on the #50 pilot set. Generated fresh from the
+    /// original file, so no dependency on the 512px cache. See decision #97.
+    private func thumbnailData(from url: URL, maxDimension: Int = 768) -> Data? {
         let opts: [CFString: Any] = [
             kCGImageSourceThumbnailMaxPixelSize: maxDimension,
             kCGImageSourceCreateThumbnailFromImageAlways: true,
