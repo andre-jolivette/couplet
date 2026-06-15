@@ -14,10 +14,12 @@ private struct V2Candidate: Sendable {
 ///
 /// Candidates: pairs where thematicV2Score IS NULL and at least one of
 /// aestheticScore or geometricScore exceeds the noise floor (0.3), and both
-/// images have non-empty captions. Accent-echo pairs (aestheticSubmode =
-/// 'accent_echo') are excluded — color is already captured by the aesthetic
-/// axis, and the LLM tends to hallucinate thematic connections from shared
-/// color (decision #91). Ordered strongest-first. Limit: 750 pairs.
+/// images have non-empty captions. Pure-color accent-echo pairs (aestheticSubmode
+/// = 'accent_echo' with no thematic or geometric substance) are excluded as
+/// spurious (decisions #91, #95); other accent-echo pairs stay eligible but are
+/// deprioritised to the tail of the ordering. Candidates are ordered by holistic
+/// compositeScore (decision #95) — which includes the thematic axis — rather than
+/// raw aesthetic/geometric strength. Limit: 750 pairs.
 ///
 /// Sequential execution is intentional — Ollama handles one request at a time,
 /// and concurrent calls would not reduce wall-clock time.
@@ -114,6 +116,23 @@ public actor ThematicV2BackgroundPass {
         try db.read { db in
             // captureDate filter in SQL: identical captureDates mean burst/sequential shots.
             // Filename base-name dedup is applied in Swift below (SQLite has no REGEXP by default).
+            //
+            // Lever 2 (decision #95): the old blanket `aestheticSubmode != 'accent_echo'`
+            // exclusion (#91) discarded ~40K pairs that mostly carry other signal too —
+            // it was really a workaround for the bad `MAX(aes,geo)` ordering below, not a
+            // precision filter. We replace it with a narrow pure-color guard that drops
+            // only accent-echo pairs with no thematic or geometric substance at all
+            // (the spurious sky/skin echoes of #58/#92). Genuine multi-signal color pairs
+            // stay eligible.
+            //
+            // Lever 1 (decision #95): order by holistic `compositeScore` (which includes
+            // the thematic axis) rather than `MAX(aestheticScore, geometricScore)` (which
+            // ignored thematic entirely and over-weighted color), so the V2 budget is
+            // spent on thematically-substantive pairs in the same order the user sees them.
+            // Accent-echo pairs are pushed to the tail (eligible but last) so they no longer
+            // monopolise the budget — honouring #91's intent without permanently excluding
+            // them. Empirically this removes accent_echo from the top-750 entirely while
+            // raising the mean cluster-thematic of the scored band.
             let sql = """
                 SELECT p.id AS pairID,
                        COALESCE(a.caption, '') AS captionA,
@@ -130,8 +149,11 @@ public actor ThematicV2BackgroundPass {
                   AND a.isActive = 1
                   AND b.isActive = 1
                   AND (a.captureDate IS NULL OR b.captureDate IS NULL OR ABS(a.captureDate - b.captureDate) > 300)
-                  AND (p.aestheticSubmode IS NULL OR p.aestheticSubmode != 'accent_echo')
-                ORDER BY MAX(p.aestheticScore, p.geometricScore) DESC
+                  AND NOT (p.aestheticSubmode = 'accent_echo'
+                           AND p.thematicScore < 0.15
+                           AND p.geometricScore < 0.30)
+                ORDER BY (CASE WHEN p.aestheticSubmode = 'accent_echo' THEN 1 ELSE 0 END) ASC,
+                         p.compositeScore DESC
                 LIMIT 750
             """
             let rows = try Row.fetchAll(db, sql: sql)
