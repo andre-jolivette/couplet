@@ -142,12 +142,12 @@ public actor ThematicV2BackgroundPass {
                        COALESCE(b.caption, '') AS captionB,
                        COALESCE(a.filename, '') AS filenameA,
                        COALESCE(b.filename, '') AS filenameB,
-                       COALESCE(p.rationale, '') AS hypothesis
+                       p.roleHypothesis AS hypothesis
                 FROM pairs p
                 JOIN images a ON a.id = p.imageAID
                 JOIN images b ON b.id = p.imageBID
                 WHERE p.thematicV2Score IS NULL
-                  AND p.selectedFor = 'role'
+                  AND p.roleHypothesis IS NOT NULL
                   AND COALESCE(a.caption, '') != ''
                   AND COALESCE(b.caption, '') != ''
                   AND a.isActive = 1
@@ -184,7 +184,7 @@ public actor ThematicV2BackgroundPass {
                     JOIN images a ON a.id = p.imageAID
                     JOIN images b ON b.id = p.imageBID
                     WHERE p.thematicV2Score IS NULL
-                      AND (p.selectedFor IS NULL OR p.selectedFor != 'role')
+                      AND p.roleHypothesis IS NULL
                       AND (p.aestheticScore > 0.3 OR p.geometricScore > 0.3)
                       AND COALESCE(a.caption, '') != ''
                       AND COALESCE(b.caption, '') != ''

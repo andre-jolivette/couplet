@@ -318,6 +318,18 @@ public final class DatabaseManager: Sendable {
             }
         }
 
+        // ── v17: role-join hypothesis on pairs (decision #102) ────────────
+        // The deterministic join's proposed connection, fed to the validation
+        // judge. Set on BOTH newly-generated role candidates and pre-existing
+        // pairs that a join also fires on — so an already-surfaced composite/
+        // aesthetic pair with a genuine role connection still gets validate()d
+        // rather than cold-scored. NULL = not a role candidate.
+        migrator.registerMigration("v17_roleHypothesis") { db in
+            try db.alter(table: "pairs") { t in
+                t.add(column: "roleHypothesis", .text)
+            }
+        }
+
         try migrator.migrate(pool)
     }
 }

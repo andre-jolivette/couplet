@@ -1188,8 +1188,9 @@ public actor IndexingEngine {
     /// cheap axis that the four-pool topK never surfaces (backlog #95). Idempotent:
     /// skips pairs already in the table; re-runs each index (role rows are wiped by
     /// the per-run scoped DELETE and regenerated here). Validated config (Phase 0):
-    /// joins 1/2/3, per-image-per-priority cap 4 → ~2,914 candidates / 6-8 recall.
-    private func generateRoleCandidates(weights: ScoringWeights) async throws {
+    /// joins 1/2/3, per-image-per-priority cap 4. Public so it can be re-run
+    /// standalone (e.g. after a caption/profile change) without a full re-index.
+    public func generateRoleCandidates(weights: ScoringWeights = .default) async throws {
         struct Profiled { let id: Int64; let profile: RoleProfile }
         let profiled: [Profiled] = try db.read { db in
             let rows = try Row.fetchAll(db, sql: """
@@ -1254,22 +1255,39 @@ public actor IndexingEngine {
             }
             return r
         }
-        let existing: Set<String> = try db.read { db in
-            let rows = try Row.fetchAll(db, sql: "SELECT imageAID, imageBID FROM pairs")
-            var s = Set<String>()
+        // Canonical key → existing pairID. A join candidate that already has a pair
+        // row (e.g. surfaced as composite/aesthetic) must still get the role
+        // hypothesis + validate() treatment, so we UPDATE it rather than skip it.
+        let existing: [String: Int64] = try db.read { db in
+            let rows = try Row.fetchAll(db, sql: "SELECT id, imageAID, imageBID FROM pairs")
+            var m = [String: Int64]()
             for row in rows {
-                guard let a = row["imageAID"] as? Int64, let b = row["imageBID"] as? Int64 else { continue }
+                guard let id = row["id"] as? Int64,
+                      let a = row["imageAID"] as? Int64, let b = row["imageBID"] as? Int64 else { continue }
                 let (lo, hi) = a < b ? (a, b) : (b, a)
-                s.insert("\(lo)_\(hi)")
+                m["\(lo)_\(hi)"] = id
             }
-            return s
+            return m
         }
 
-        var inserted = 0
+        var inserted = 0, updated = 0
         try db.write { db in
             for c in cands {
                 let (lo, hi) = c.a < c.b ? (c.a, c.b) : (c.b, c.a)
-                if existing.contains("\(lo)_\(hi)") { continue }
+                let hypothesis = String(c.join.hypothesis.prefix(240))
+                if let pairID = existing["\(lo)_\(hi)"] {
+                    // Existing pair: attach the hypothesis and re-route to validate()
+                    // by clearing any prior (cold) ThematicV2 verdict.
+                    try db.execute(sql: """
+                        UPDATE pairs SET roleHypothesis = ?,
+                                         thematicV2Score = NULL,
+                                         thematicV2RelationshipType = NULL,
+                                         thematicV2Rationale = NULL
+                        WHERE id = ?
+                    """, arguments: [hypothesis, pairID])
+                    updated += 1
+                    continue
+                }
                 guard let vA = vByID[lo], let vB = vByID[hi] else { continue }
                 let mA = meta[lo]; let mB = meta[hi]
                 let s = PairScorer.score(
@@ -1295,13 +1313,14 @@ public actor IndexingEngine {
                     selectedFor: "role",
                     thematicScore: Double(s.thematicScore), compositeScore: Double(s.compositeScore),
                     rationale: c.join.hypothesis,
-                    geometricSubmode: s.geometricSubmode
+                    geometricSubmode: s.geometricSubmode,
+                    roleHypothesis: hypothesis
                 )
                 try rec.insert(db)
                 inserted += 1
             }
         }
-        print("RoleCandidates: inserted \(inserted) new of \(cands.count) join candidates (\(profiled.count) profiles)")
+        print("RoleCandidates: \(inserted) new + \(updated) existing tagged of \(cands.count) joins (\(profiled.count) profiles)")
     }
 
     /// Loads feature vectors for hero images only (one per duplicate stack).
