@@ -80,6 +80,13 @@ public actor IndexingEngine {
                         } catch {
                             // CancellationError or DB error — signal done either way
                         }
+                        // Phase 8.5: role-join entry-gate candidates (decision #102).
+                        // Runs after all normal pairs (intra + cross) exist, so dedup is
+                        // accurate. Skipped if cancelled by a newer index.
+                        if !Task.isCancelled {
+                            do { try await self.generateRoleCandidates(weights: weights) }
+                            catch { print("RoleCandidates: \(error.localizedDescription)") }
+                        }
                         continuation.yield(IndexingProgress(
                             phase: .backgroundScoringComplete,
                             itemsComplete: 0, itemsTotal: 0
@@ -1171,6 +1178,130 @@ public actor IndexingEngine {
         try db.read { db in
             try FeatureVector.fetchAll(db)
         }
+    }
+
+    // MARK: - Phase 8.5: Role-join candidate generation (decision #102)
+
+    /// Generates entry-gate candidate pairs from per-image RoleProfiles and INSERTs
+    /// them into `pairs` (selectedFor = "role", join hypothesis in `rationale`) for
+    /// the validation judge to score. These are conceptual connections weak on every
+    /// cheap axis that the four-pool topK never surfaces (backlog #95). Idempotent:
+    /// skips pairs already in the table; re-runs each index (role rows are wiped by
+    /// the per-run scoped DELETE and regenerated here). Validated config (Phase 0):
+    /// joins 1/2/3, per-image-per-priority cap 4 → ~2,914 candidates / 6-8 recall.
+    private func generateRoleCandidates(weights: ScoringWeights) async throws {
+        struct Profiled { let id: Int64; let profile: RoleProfile }
+        let profiled: [Profiled] = try db.read { db in
+            let rows = try Row.fetchAll(db, sql: """
+                SELECT id, roleProfile FROM images
+                WHERE isActive = 1 AND isHero = 1 AND roleProfile IS NOT NULL
+            """)
+            let dec = JSONDecoder()
+            return rows.compactMap { row -> Profiled? in
+                guard let id = row["id"] as? Int64,
+                      let json = row["roleProfile"] as? String,
+                      let data = json.data(using: .utf8),
+                      let p = try? dec.decode(RoleProfile.self, from: data) else { return nil }
+                return Profiled(id: id, profile: p)
+            }
+        }
+        guard profiled.count > 1 else { return }
+
+        // Corpus-derived non-discriminating concepts, then capped joins over all pairs.
+        let generic = RoleJoins.genericConcepts(profiled.map(\.profile))
+        let cap = 4
+        var degree: [String: Int] = [:]
+        struct Cand { let a: Int64; let b: Int64; let join: RoleJoins.Candidate }
+        var cands: [Cand] = []
+        for i in 0..<profiled.count {
+            for j in (i + 1)..<profiled.count {
+                guard let c = RoleJoins.join(profiled[i].profile, profiled[j].profile, generic: generic) else { continue }
+                let ka = "\(profiled[i].id)#\(c.priority)", kb = "\(profiled[j].id)#\(c.priority)"
+                if (degree[ka] ?? 0) < cap && (degree[kb] ?? 0) < cap {
+                    cands.append(Cand(a: profiled[i].id, b: profiled[j].id, join: c))
+                    degree[ka, default: 0] += 1; degree[kb, default: 0] += 1
+                }
+            }
+        }
+        guard !cands.isEmpty else { return }
+
+        // Vectors + metadata for axis scoring (reuse PairScorer); existing-pair set for dedup.
+        let vectors = try loadHeroVectors()
+        let vByID = Dictionary(uniqueKeysWithValues: vectors.map { ($0.imageID, $0) })
+        typealias ImageMeta = (captureDate: Double?, filename: String, caption: String,
+                               accentHue: Double?, accentSaturation: Double?,
+                               weightCentroidX: Double?, weightCentroidY: Double?,
+                               gazeDirectionX: Double?, colorProfile: String)
+        let heroIDs = vectors.map(\.imageID)
+        let meta: [Int64: ImageMeta] = try db.read { db in
+            guard !heroIDs.isEmpty else { return [:] }
+            let ids = heroIDs.map { "\($0)" }.joined(separator: ",")
+            let rows = try Row.fetchAll(db, sql: "SELECT id, captureDate, filename, caption, accentHue, accentSaturation, weightCentroidX, weightCentroidY, gazeDirectionX, colorProfile FROM images WHERE id IN (\(ids))")
+            var r = [Int64: ImageMeta]()
+            for row in rows {
+                let id = row["id"] as! Int64
+                r[id] = (
+                    captureDate: (row["captureDate"] as? Double) ?? (row["captureDate"] as? Int64).map(Double.init),
+                    filename: row["filename"] as? String ?? "",
+                    caption: row["caption"] as? String ?? "",
+                    accentHue: row["accentHue"] as? Double,
+                    accentSaturation: row["accentSaturation"] as? Double,
+                    weightCentroidX: row["weightCentroidX"] as? Double,
+                    weightCentroidY: row["weightCentroidY"] as? Double,
+                    gazeDirectionX: row["gazeDirectionX"] as? Double,
+                    colorProfile: row["colorProfile"] as? String ?? "color"
+                )
+            }
+            return r
+        }
+        let existing: Set<String> = try db.read { db in
+            let rows = try Row.fetchAll(db, sql: "SELECT imageAID, imageBID FROM pairs")
+            var s = Set<String>()
+            for row in rows {
+                guard let a = row["imageAID"] as? Int64, let b = row["imageBID"] as? Int64 else { continue }
+                let (lo, hi) = a < b ? (a, b) : (b, a)
+                s.insert("\(lo)_\(hi)")
+            }
+            return s
+        }
+
+        var inserted = 0
+        try db.write { db in
+            for c in cands {
+                let (lo, hi) = c.a < c.b ? (c.a, c.b) : (c.b, c.a)
+                if existing.contains("\(lo)_\(hi)") { continue }
+                guard let vA = vByID[lo], let vB = vByID[hi] else { continue }
+                let mA = meta[lo]; let mB = meta[hi]
+                let s = PairScorer.score(
+                    imageAID: lo, vectorA: vA, imageBID: hi, vectorB: vB,
+                    captureDateA: mA?.captureDate, captureDateB: mB?.captureDate,
+                    filenameA: mA?.filename ?? "", filenameB: mB?.filename ?? "",
+                    captionA: mA?.caption ?? "", captionB: mB?.caption ?? "",
+                    accentHueA: mA?.accentHue, accentSaturationA: mA?.accentSaturation,
+                    accentHueB: mB?.accentHue, accentSaturationB: mB?.accentSaturation,
+                    weightCentroidXA: mA?.weightCentroidX.map(Float.init), weightCentroidYA: mA?.weightCentroidY.map(Float.init),
+                    weightCentroidXB: mB?.weightCentroidX.map(Float.init), weightCentroidYB: mB?.weightCentroidY.map(Float.init),
+                    gazeDirectionXA: mA?.gazeDirectionX.map(Float.init), gazeDirectionXB: mB?.gazeDirectionX.map(Float.init),
+                    colorProfileA: mA?.colorProfile ?? "color", colorProfileB: mB?.colorProfile ?? "color",
+                    weights: weights
+                )
+                var rec = PairRecord(
+                    imageAID: s.imageAID, imageBID: s.imageBID,
+                    aestheticScore: Double(s.aestheticScore), aestheticSubmode: s.aestheticSubmode,
+                    geometricScore: Double(s.geometricScore),
+                    rawEdgeSim: Double(s.rawEdgeSim), rawGridSim: Double(s.rawGridSim),
+                    maxEdgePeakedness: Double(s.maxEdgePeakedness), maxGridVariance: Double(s.maxGridVariance),
+                    edgePeakednessMult: Double(s.edgePeakednessMult), gridVarianceMult: Double(s.gridVarianceMult),
+                    selectedFor: "role",
+                    thematicScore: Double(s.thematicScore), compositeScore: Double(s.compositeScore),
+                    rationale: c.join.hypothesis,
+                    geometricSubmode: s.geometricSubmode
+                )
+                try rec.insert(db)
+                inserted += 1
+            }
+        }
+        print("RoleCandidates: inserted \(inserted) new of \(cands.count) join candidates (\(profiled.count) profiles)")
     }
 
     /// Loads feature vectors for hero images only (one per duplicate stack).
