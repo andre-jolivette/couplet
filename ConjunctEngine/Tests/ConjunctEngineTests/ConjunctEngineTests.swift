@@ -126,11 +126,18 @@ final class PairScorerTests: XCTestCase {
         XCTAssertEqual(score.imageBID, 99)
     }
 
-    func testIdenticalImagesScoreHigh() {
+    // Identical images max the thematic axis (CLIP cosine ≈ 1.0), but the composite
+    // is deliberately suppressed: the redundancy penalty (×0.45 when high thematic
+    // comes from CLIP with no captions) and the CLIP-similarity ceiling (×0.40 above
+    // 0.88) drive near-duplicates down so they don't dominate the grid. So thematic
+    // is high while composite is heavily discounted relative to it.
+    func testIdenticalImagesScoreHighThematicLowComposite() {
         let v = makeFeatureVector(imageID: 1)
         let score = PairScorer.score(imageAID: 1, vectorA: v, imageBID: 2, vectorB: v)
         XCTAssertGreaterThan(score.thematicScore, 0.95)
-        XCTAssertGreaterThan(score.compositeScore, 0.7)
+        XCTAssertLessThan(score.compositeScore, 0.3,
+            "Near-duplicate composite is suppressed by the redundancy + CLIP-ceiling penalties")
+        XCTAssertLessThan(score.compositeScore, score.thematicScore)
     }
 
     func testOrthogonalEmbeddingsScoreMidpoint() {
@@ -144,12 +151,23 @@ final class PairScorerTests: XCTestCase {
         XCTAssertEqual(score.thematicScore, 0.5, accuracy: 0.01)
     }
 
+    // A single-axis weight should route the composite to exactly that axis' score.
+    // Uses distinct (orthogonal) embeddings so the pair is NOT a near-duplicate —
+    // identical vectors trip the redundancy + CLIP-ceiling penalties (see
+    // testIdenticalImagesScoreHighThematicLowComposite), which would mask the routing.
+    // Orthogonal embeddings give CLIP cosine 0.5 (thematic 0.5), below every penalty
+    // threshold, so composite == the single weighted axis with no discount.
     func testWeightsAffectComposite() {
-        let v = makeFeatureVector(imageID: 1)
+        var embA = [Float](repeating: 0, count: 512)
+        var embB = [Float](repeating: 0, count: 512)
+        embA[0] = 1.0
+        embB[1] = 1.0
+        let vA = makeFeatureVector(imageID: 1, embedding: embA)
+        let vB = makeFeatureVector(imageID: 2, embedding: embB)
         let allThematic  = ScoringWeights(aesthetic: 0.0, geometric: 0.0, thematic: 1.0)
         let allAesthetic = ScoringWeights(aesthetic: 1.0, geometric: 0.0, thematic: 0.0)
-        let sT = PairScorer.score(imageAID: 1, vectorA: v, imageBID: 2, vectorB: v, weights: allThematic)
-        let sA = PairScorer.score(imageAID: 1, vectorA: v, imageBID: 2, vectorB: v, weights: allAesthetic)
+        let sT = PairScorer.score(imageAID: 1, vectorA: vA, imageBID: 2, vectorB: vB, weights: allThematic)
+        let sA = PairScorer.score(imageAID: 1, vectorA: vA, imageBID: 2, vectorB: vB, weights: allAesthetic)
         XCTAssertEqual(sT.compositeScore, sT.thematicScore,  accuracy: 0.01)
         XCTAssertEqual(sA.compositeScore, sA.aestheticScore, accuracy: 0.01)
     }
@@ -326,10 +344,10 @@ final class ConceptClustersTests: XCTestCase {
         XCTAssertEqual(ConceptClusters.weights["bodily_gesture"],         0.75)
         XCTAssertEqual(ConceptClusters.weights["sound_music"],            0.75)
         XCTAssertEqual(ConceptClusters.weights["joy_celebration"],        0.75)
-        // Tier 0.5 — ambient setting / context
-        XCTAssertEqual(ConceptClusters.weights["urban_street"],           0.5)
-        XCTAssertEqual(ConceptClusters.weights["nature_landscape"],       0.5)
-        XCTAssertEqual(ConceptClusters.weights["community_gathering"],    0.5)
+        // Tier 0.2 — ambient setting / context (demoted from 0.5; see decision #47)
+        XCTAssertEqual(ConceptClusters.weights["urban_street"],           0.2)
+        XCTAssertEqual(ConceptClusters.weights["nature_landscape"],       0.2)
+        XCTAssertEqual(ConceptClusters.weights["community_gathering"],    0.2)
     }
 
     // Verify that the test captions fire exactly the clusters we expect
@@ -354,16 +372,17 @@ final class ConceptClustersTests: XCTestCase {
     }
 
     // Core behavioural proof: a pair sharing a tier-1.0 cluster (grief_sorrow)
-    // should score higher than one sharing only a tier-0.5 cluster (urban_street),
-    // even when both pairs have the same cluster-set sizes.
+    // should score higher than one sharing only an ambient-tier cluster
+    // (urban_street, w=0.2), even when both pairs have the same cluster-set sizes.
     //
     // Without weighting, both would score identically (Dice = 2×1/(2+2) = 0.5).
     //
-    // With weighting:
-    //   Pair A — shared grief_sorrow(w=1.0), unshared community_gathering(0.5)
-    //            and urban_street(0.5): 2×1.0 / (1.5+1.5) ≈ 0.667
-    //   Pair B — shared urban_street(w=0.5), unshared community_gathering(0.5)
-    //            and nature_landscape(0.5): 2×0.5 / (1.0+1.0) = 0.5
+    // With weighting (ambient clusters at 0.2, see decision #47):
+    //   Pair A — shared grief_sorrow(w=1.0), unshared community_gathering(0.2)
+    //            and urban_street(0.2): 2×1.0 / (1.2+1.2) = 0.833
+    //   Pair B — shared cluster is urban_street only (ambient, w=0.2). The
+    //            meaningful-tier gate in weightedDice requires a shared cluster of
+    //            weight ≥ 0.75; with none, it returns kAmbientFloor = 0.1.
     func testEmotionalPairOutscoresAmbientPair() {
         // Pair A: shared cluster is grief_sorrow (weight 1.0)
         let scoreA = ConceptClusters.thematicScore(
@@ -377,11 +396,11 @@ final class ConceptClustersTests: XCTestCase {
         )
 
         XCTAssertGreaterThan(scoreA, scoreB,
-            "Pair sharing grief_sorrow (w=1.0) should outscore pair sharing urban_street (w=0.5)")
-        XCTAssertEqual(Double(scoreA), 2.0/3.0, accuracy: 0.001,
-            "Weighted Dice: 2×1.0 / (1.5+1.5) = 0.667")
-        XCTAssertEqual(Double(scoreB), 0.5, accuracy: 0.001,
-            "Weighted Dice: 2×0.5 / (1.0+1.0) = 0.5")
+            "Pair sharing grief_sorrow (w=1.0) should outscore pair sharing ambient urban_street (w=0.2)")
+        XCTAssertEqual(Double(scoreA), 2.0/2.4, accuracy: 0.001,
+            "Weighted Dice: 2×1.0 / (1.2+1.2) = 0.833")
+        XCTAssertEqual(Double(scoreB), 0.1, accuracy: 0.001,
+            "Ambient-only shared cluster → meaningful-tier gate fails → kAmbientFloor = 0.1")
     }
 }
 
@@ -408,7 +427,11 @@ final class DatabaseTests: XCTestCase {
         }
     }
 
-    func testPairCanonicalOrdering() throws {
+    // PairRecord no longer reorders IDs: PairScorer.score() owns canonical ordering,
+    // and gaze_conversation pairs intentionally store the rightward-gazer as imageAID
+    // regardless of numeric order (decision #71). PairRecord must persist exactly what
+    // the scorer hands it — inserting (20, 10) stores (20, 10), not (10, 20).
+    func testPairStoresIDsAsGiven() throws {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("test-\(UUID().uuidString).db")
         defer { try? FileManager.default.removeItem(at: url) }
@@ -441,7 +464,7 @@ final class DatabaseTests: XCTestCase {
             try PairRecord.fetchOne(db, sql: "SELECT * FROM pairs LIMIT 1")
         }
         XCTAssertNotNil(stored)
-        XCTAssertEqual(stored!.imageAID, 10)
-        XCTAssertEqual(stored!.imageBID, 20)
+        XCTAssertEqual(stored!.imageAID, 20)
+        XCTAssertEqual(stored!.imageBID, 10)
     }
 }
