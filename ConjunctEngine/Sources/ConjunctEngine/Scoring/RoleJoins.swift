@@ -57,50 +57,38 @@ public enum RoleJoins {
     // MARK: Join
 
     /// Returns the highest-priority connection between `a` and `b`, or nil.
-    /// `generic` is the corpus-derived non-discriminating concept set (see `genericConcepts`).
-    public static func join(_ a: RoleProfile, _ b: RoleProfile, generic: Set<String>) -> Candidate? {
-        func conceptToks(_ s: String) -> Set<String> { tokens(s).subtracting(generic) }
-        func conceptMatch(_ x: String, _ y: String) -> Bool { !conceptToks(x).isDisjoint(with: conceptToks(y)) }
+    /// `generic` (the corpus rarity-gate set, see `genericConcepts`) is reserved for the
+    /// enact↔enact tonal join, disabled in v1 — kept in the signature for that future.
+    public static func join(_ a: RoleProfile, _ b: RoleProfile, generic: Set<String> = []) -> Candidate? {
+        _ = generic
         func rawMatch(_ x: String, _ y: String) -> Bool { !tokens(x).isDisjoint(with: tokens(y)) }
 
         // ── Join 1: source ↔ receiver of the same phenomenon (gaze excluded) ──
         let pb = Set(b.phenomena.map { [$0.phenomenon, $0.role] })
         func bHas(_ ph: String, _ role: String) -> Bool { pb.contains([ph, role]) }
         for p in a.phenomena where p.phenomenon != "gaze" {
-            if p.role == "source", bHas(p.phenomenon, "receiver") {
+            if (p.role == "source" && bHas(p.phenomenon, "receiver"))
+                || (p.role == "receiver" && bHas(p.phenomenon, "source")) {
                 return Candidate(priority: 1, relationshipType: "complementary",
-                    hypothesis: "complementary: one image is the source of \(p.phenomenon) while the other receives or blocks it")
-            }
-            if p.role == "receiver", bHas(p.phenomenon, "source") {
-                return Candidate(priority: 1, relationshipType: "complementary",
-                    hypothesis: "complementary: one image is the source of \(p.phenomenon) while the other receives or blocks it")
+                    hypothesis: "complementary: one image is the SOURCE of \(p.phenomenon) — it is produced there — while the other shows \(p.phenomenon) being RECEIVED or physically blocked")
             }
         }
 
-        // ── Join 2a: claim ↔ enact/subvert (claims NOT frequency-gated) ──
+        // ── Join 2: claim ↔ enact/subvert (claims NOT frequency-gated) ──
+        // Only the claim-based path is kept. The enact↔enact ("tonal") path carried
+        // zero golden recall, produced most of the join-2 flood, and yielded judge
+        // false-positives on shared abstract moods — and ambient-tonal pairing
+        // (Mode 3) is out of scope. See decision #102 / PAIRING_THEORY.
         for ca in a.claims {
             for cb in b.enacts + b.subverts where rawMatch(ca, cb) {
                 return Candidate(priority: 2, relationshipType: "ironic",
-                    hypothesis: "ironic: a sign or text in one image invokes ‘\(ca)’, and the other image's subject enacts or contradicts it")
+                    hypothesis: "ironic: a sign or text announces or demands ‘\(ca)’, while the other image's subject literally embodies or contradicts that very idea")
             }
         }
         for ca in b.claims {
             for cb in a.enacts + a.subverts where rawMatch(ca, cb) {
                 return Candidate(priority: 2, relationshipType: "ironic",
-                    hypothesis: "ironic: a sign or text in one image invokes ‘\(ca)’, and the other image's subject enacts or contradicts it")
-            }
-        }
-        // ── Join 2b: enact ↔ enact/subvert (discriminating concepts only) ──
-        for ca in a.enacts {
-            for cb in b.enacts + b.subverts where conceptMatch(ca, cb) {
-                return Candidate(priority: 2, relationshipType: "tonal",
-                    hypothesis: "tonal: both images embody ‘\(ca)’")
-            }
-        }
-        for ca in b.enacts {
-            for cb in a.enacts + a.subverts where conceptMatch(ca, cb) {
-                return Candidate(priority: 2, relationshipType: "tonal",
-                    hypothesis: "tonal: both images embody ‘\(ca)’")
+                    hypothesis: "ironic: a sign or text announces or demands ‘\(ca)’, while the other image's subject literally embodies or contradicts that very idea")
             }
         }
 
@@ -115,8 +103,9 @@ public enum RoleJoins {
                 let regs = Set([oa.register.lowercased(), ob.register.lowercased()])
                 if (nounMatch || catMatch) && oa.register.lowercased() != ob.register.lowercased()
                     && !regs.isDisjoint(with: alt) && regs.contains("real") {
+                    let altReg = alt.intersection(regs).first ?? "depicted"
                     return Candidate(priority: 3, relationshipType: "contrastive",
-                        hypothesis: "contrastive: a real \(oa.object) versus a \(alt.intersection(regs).first ?? "depicted") version of the same thing")
+                        hypothesis: "contrastive: the same kind of thing — a \(oa.object) — appears REAL in one image and as a \(altReg) version in the other, one earnest and one play or representation")
                 }
             }
         }

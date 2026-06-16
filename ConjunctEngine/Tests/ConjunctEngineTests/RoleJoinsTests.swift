@@ -71,15 +71,17 @@ final class RoleJoinsTests: XCTestCase {
         XCTAssertNil(RoleJoins.join(gazerA, gazerB, generic: empty))
     }
 
-    func testEnactEnactGatedByGenericConcept() {
+    func testEnactEnactDoesNotJoinInV1() {
+        // The enact↔enact (tonal) path is disabled in v1 (no golden recall, judge
+        // false-positives, Mode-3 out of scope). Two images sharing only an enact
+        // must not join. See decision #102.
         let a = RoleProfile(enacts: ["celebration"])
         let b = RoleProfile(enacts: ["celebration"])
-        XCTAssertEqual(RoleJoins.join(a, b, generic: empty)?.priority, 2)      // discriminating → fires
-        XCTAssertNil(RoleJoins.join(a, b, generic: ["celebration"]))           // gated → no fire
+        XCTAssertNil(RoleJoins.join(a, b))
     }
 
     func testGenericConceptsThreshold() {
-        // "common" in all 10 profiles (>10%) → generic; "rare" in 1 → not.
+        // Rarity-gate infrastructure retained for the future tonal join.
         var profiles = [RoleProfile](repeating: RoleProfile(enacts: ["common"]), count: 9)
         profiles.append(RoleProfile(enacts: ["common","rare"]))
         let g = RoleJoins.genericConcepts(profiles, threshold: 0.10)

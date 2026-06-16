@@ -72,7 +72,9 @@ public struct PairRecord: Codable, FetchableRecord, MutablePersistableRecord, Se
         self.selectedFor = selectedFor
         self.thematicScore = thematicScore
         self.compositeScore = compositeScore
-        self.rationale = String(rationale.prefix(120))
+        // 240 (was 120): role-join hypotheses (#102) stored here as the judge's input
+        // run ~130-150 chars; normal scoring rationales are short and unaffected.
+        self.rationale = String(rationale.prefix(240))
         self.geometricSubmode = geometricSubmode
         self.scoredAt = scoredAt
     }
