@@ -308,6 +308,16 @@ public final class DatabaseManager: Sendable {
             }
         }
 
+        // ── v16: per-image RoleProfile (decision #102) ────────────────────
+        // JSON role profile extracted from the caption by an LLM, feeding the
+        // role-join entry-gate candidate generator. NULL = not yet extracted
+        // (mirrors `caption` semantics — re-extracted whenever caption changes).
+        migrator.registerMigration("v16_roleProfile") { db in
+            try db.alter(table: "images") { t in
+                t.add(column: "roleProfile", .text)
+            }
+        }
+
         try migrator.migrate(pool)
     }
 }

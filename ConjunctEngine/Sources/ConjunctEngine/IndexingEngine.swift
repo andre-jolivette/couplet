@@ -12,6 +12,7 @@ public actor IndexingEngine {
     private let db: DatabaseManager
     private let clipEngine: any CLIPInferenceEngine
     private let captioningEngine: any CaptioningEngine
+    private let roleExtractionEngine: any RoleExtractionEngine
     /// Concurrency cap for CLIP feature extraction (Phase 3). CLIP is ANE-bound, so a
     /// modest cap avoids contention; left conservative deliberately. See decision #101.
     private let maxConcurrency: Int
@@ -30,11 +31,13 @@ public actor IndexingEngine {
         db: DatabaseManager,
         clipEngine: any CLIPInferenceEngine,
         captioningEngine: any CaptioningEngine = MockCaptioningEngine(),
+        roleExtractionEngine: any RoleExtractionEngine = MockRoleExtractionEngine(),
         maxConcurrency: Int = min(ProcessInfo.processInfo.processorCount, 4)
     ) {
         self.db = db
         self.clipEngine = clipEngine
         self.captioningEngine = captioningEngine
+        self.roleExtractionEngine = roleExtractionEngine
         self.maxConcurrency = maxConcurrency
         let cores = ProcessInfo.processInfo.processorCount
         self.cpuConcurrency = max(1, cores)
@@ -292,6 +295,53 @@ public actor IndexingEngine {
                 phase: .captioning, itemsComplete: captioned, itemsTotal: captionTotal
             ))
         }
+
+        // ── Phase 3.55: Role extraction (decision #102) ───────────────────
+        // Extract a structured RoleProfile from each caption, feeding the role-join
+        // entry-gate candidate generator (RoleJoins). Text-only — reads the caption
+        // the captioning phase produced, so no image decoding. Sequential like
+        // captioning (one local LLM call at a time). Skipped entirely when every
+        // captioned image already has a profile, so normal re-indexes aren't slowed.
+        let roleTargets: [(Int64, String)] = try db.read { db in
+            let rows = try Row.fetchAll(db, sql: """
+                SELECT id, caption FROM images
+                WHERE isActive = 1
+                  AND caption IS NOT NULL AND caption != ''
+                  AND roleProfile IS NULL
+            """)
+            return rows.compactMap { row -> (Int64, String)? in
+                guard let id = row["id"] as? Int64,
+                      let caption = row["caption"] as? String else { return nil }
+                return (id, caption)
+            }
+        }
+        if !roleTargets.isEmpty {
+            continuation.yield(IndexingProgress(
+                phase: .roleExtraction, itemsComplete: 0, itemsTotal: roleTargets.count
+            ))
+            let roleEncoder = JSONEncoder()
+            var rolesExtracted = 0
+            for (imageID, caption) in roleTargets {
+                try Task.checkCancellation()
+                do {
+                    let profile = try await roleExtractionEngine.extract(caption: caption)
+                    let jsonText = String(decoding: try roleEncoder.encode(profile), as: UTF8.self)
+                    try db.write { db in
+                        try db.execute(
+                            sql: "UPDATE images SET roleProfile = ? WHERE id = ?",
+                            arguments: [jsonText, imageID]
+                        )
+                    }
+                    rolesExtracted += 1
+                } catch {
+                    print("ROLE: skipped image \(imageID) — \(error.localizedDescription)")
+                }
+                continuation.yield(IndexingProgress(
+                    phase: .roleExtraction, itemsComplete: rolesExtracted, itemsTotal: roleTargets.count
+                ))
+            }
+        }
+
         // ── Phase 3.6: Accent color extraction ───────────────────────────
         // Backfills accentHue / accentSaturation for all active images that lack it.
         // Uses the cached 512px thumbnail when available (same pattern as Phase 3.5).
