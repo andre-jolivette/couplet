@@ -133,6 +133,21 @@ tonal / none. Use "none" when connected is false.
         return parseResult(from: raw)
     }
 
+    /// Returns true if the Ollama server is reachable and `model` is available.
+    /// Gate the background pass on this so a missing model produces a clean skip
+    /// instead of HTTP errors that trip the consecutive-failure abort (decision #102).
+    public static func isAvailable(
+        host: String = "http://127.0.0.1:11434",
+        model: String = "qwen2.5:14b-instruct"
+    ) async -> Bool {
+        guard let url = URL(string: "\(host)/api/tags") else { return false }
+        let session = URLSession(configuration: .ephemeral)
+        guard let (data, _) = try? await session.data(from: url),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let models = json["models"] as? [[String: Any]] else { return false }
+        return models.contains { ($0["name"] as? String)?.hasPrefix(model) == true }
+    }
+
     // MARK: - Private
 
     /// Shared Ollama call. Returns the model's raw `response` text, or nil on task

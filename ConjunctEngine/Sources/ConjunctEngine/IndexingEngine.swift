@@ -81,10 +81,17 @@ public actor IndexingEngine {
                             // CancellationError or DB error — signal done either way
                         }
                         // Phase 8.5: role-join entry-gate candidates (decision #102).
-                        // Runs after all normal pairs (intra + cross) exist, so dedup is
-                        // accurate. Skipped if cancelled by a newer index.
-                        if !Task.isCancelled {
+                        // Must run after all normal pairs (intra + cross) exist so dedup is
+                        // accurate AND so the cross-folder scoped DELETE can't wipe freshly
+                        // inserted role rows — hence its placement here. It depends only on
+                        // persisted roleProfiles + the final pairs table, and is idempotent,
+                        // so a newer index that cancels this task simply re-runs it; if THIS
+                        // task is superseded we skip (the newer index will generate them).
+                        if Task.isCancelled {
+                            print("RoleCandidates: skipped — index superseded; newer index will regenerate")
+                        } else {
                             do { try await self.generateRoleCandidates(weights: weights) }
+                            catch is CancellationError { /* superseded mid-run; newer index handles it */ }
                             catch { print("RoleCandidates: \(error.localizedDescription)") }
                         }
                         continuation.yield(IndexingProgress(
@@ -288,8 +295,12 @@ public actor IndexingEngine {
                 let text = try await captioningEngine.caption(imageURL: url)
                 if !text.isEmpty {
                     try db.write { db in
+                        // Null roleProfile alongside the caption write: a changed caption
+                        // invalidates the role profile extracted from the old text, so it
+                        // must be re-extracted in Phase 3.55 (decision #102, mirrors the
+                        // documented "roleProfile mirrors caption semantics" contract).
                         try db.execute(
-                            sql: "UPDATE images SET caption = ? WHERE id = ?",
+                            sql: "UPDATE images SET caption = ?, roleProfile = NULL WHERE id = ?",
                             arguments: [text, imageID]
                         )
                     }
@@ -332,6 +343,11 @@ public actor IndexingEngine {
                 try Task.checkCancellation()
                 do {
                     let profile = try await roleExtractionEngine.extract(caption: caption)
+                    // Skip empty profiles (mirrors captioning's `if !text.isEmpty`): a
+                    // no-op/Mock engine returns an empty RoleProfile, and writing it as
+                    // non-null `{}` JSON would poison the `roleProfile IS NULL` sentinel
+                    // and permanently block real re-extraction. Leave NULL → retried.
+                    guard !profile.isEmpty else { continue }
                     let jsonText = String(decoding: try roleEncoder.encode(profile), as: UTF8.self)
                     try db.write { db in
                         try db.execute(
@@ -1191,6 +1207,7 @@ public actor IndexingEngine {
     /// joins 1/2/3, per-image-per-priority cap 4. Public so it can be re-run
     /// standalone (e.g. after a caption/profile change) without a full re-index.
     public func generateRoleCandidates(weights: ScoringWeights = .default) async throws {
+        try Task.checkCancellation()   // bail fast if a newer index superseded us
         struct Profiled { let id: Int64; let profile: RoleProfile }
         let profiled: [Profiled] = try db.read { db in
             let rows = try Row.fetchAll(db, sql: """
@@ -1276,16 +1293,20 @@ public actor IndexingEngine {
                 let (lo, hi) = c.a < c.b ? (c.a, c.b) : (c.b, c.a)
                 let hypothesis = String(c.join.hypothesis.prefix(240))
                 if let pairID = existing["\(lo)_\(hi)"] {
-                    // Existing pair: attach the hypothesis and re-route to validate()
-                    // by clearing any prior (cold) ThematicV2 verdict.
+                    // Existing pair: attach the hypothesis and re-route to validate() by
+                    // clearing any prior (cold) ThematicV2 verdict — but ONLY when the
+                    // hypothesis is new or changed. RoleJoins is deterministic and profiles
+                    // are stable, so an unchanged hypothesis must be a no-op; otherwise every
+                    // re-index would re-null and re-judge the same surviving pairs forever,
+                    // thrashing the judge budget (decision #102).
                     try db.execute(sql: """
                         UPDATE pairs SET roleHypothesis = ?,
                                          thematicV2Score = NULL,
                                          thematicV2RelationshipType = NULL,
                                          thematicV2Rationale = NULL
-                        WHERE id = ?
-                    """, arguments: [hypothesis, pairID])
-                    updated += 1
+                        WHERE id = ? AND (roleHypothesis IS NULL OR roleHypothesis != ?)
+                    """, arguments: [hypothesis, pairID, hypothesis])
+                    if db.changesCount > 0 { updated += 1 }
                     continue
                 }
                 guard let vA = vByID[lo], let vB = vByID[hi] else { continue }

@@ -53,6 +53,10 @@ public struct PairQueryResult: Sendable {
     public let thematicV2RelationshipType: String?
     /// One-sentence LLM rationale for the connection. Nil when thematicV2Score is nil.
     public let thematicV2Rationale: String?
+    /// Role-join proposed connection (#102). Non-nil = this pair is a role candidate;
+    /// used so a rejected role verdict (thematicV2Score == 0) falls back to the cluster
+    /// thematicScore rather than demoting the pair to 0.
+    public let roleHypothesis: String?
 }
 
 public struct FolderQueryResult: Sendable {

@@ -613,14 +613,29 @@ final class EngineController: ObservableObject {
             guard let self else { return }
             let clip = await self.buildCLIPEngine()
             let captioning = await self.buildCaptioningEngine()
+            let roleExtraction = await self.buildRoleExtractionEngine()
             guard !Task.isCancelled else { return }
             await MainActor.run {
                 self.indexingEngine = IndexingEngine(
                     db: db, clipEngine: clip,
-                    captioningEngine: captioning
+                    captioningEngine: captioning,
+                    roleExtractionEngine: roleExtraction
                 )
             }
         }
+    }
+
+    private func buildRoleExtractionEngine() async -> any RoleExtractionEngine {
+        // Role extraction (#102) needs qwen2.5:14b-instruct. If absent, use the mock,
+        // which returns empty profiles — Phase 3.55 skips writing those, so the
+        // `roleProfile IS NULL` sentinel stays intact for a later run once the model
+        // is pulled (no poisoning).
+        if await OllamaRoleExtractionEngine.isAvailable() {
+            print("ROLE: ollama + qwen2.5:14b-instruct available")
+            return OllamaRoleExtractionEngine()
+        }
+        print("ROLE: qwen2.5:14b-instruct not available — role extraction disabled. Run: ollama pull qwen2.5:14b-instruct")
+        return MockRoleExtractionEngine()
     }
 
     private func buildCaptioningEngine() async -> any CaptioningEngine {
@@ -698,8 +713,14 @@ final class EngineController: ObservableObject {
     private func convertToPair(_ r: PairQueryResult, adjustedGeometricScore: Float) -> DisplayPair {
         let geoScore = adjustedGeometricScore
         // Use thematicV2Score when available (LLM-based pair scorer), falling back to
-        // the cluster-based thematicScore. See decision #82.
-        let effectiveThematic = Float(r.thematicV2Score ?? r.thematicScore)
+        // the cluster-based thematicScore. See decision #82. A REJECTED role-join
+        // hypothesis (#102) returns thematicV2Score == 0; that verdict concerns the
+        // specific role connection, not the pair's overall thematic value, so it must
+        // not demote the pair below its cluster thematicScore — fall back in that case.
+        let effectiveThematic: Float = {
+            if r.roleHypothesis != nil, r.thematicV2Score == 0 { return Float(r.thematicScore) }
+            return Float(r.thematicV2Score ?? r.thematicScore)
+        }()
         let modality: PairingModality
         // selectedFor records the actual topK path at scoring time; use it directly
         // when available. NULL (pre-v8 rows) fall back to post-hoc score comparison.
@@ -834,6 +855,14 @@ final class EngineController: ObservableObject {
         thematicV2Total = 0
         thematicV2PassTask?.cancel()
         thematicV2PassTask = Task.detached(priority: .background) { [weak self] in
+            // Gate on model availability: if qwen2.5:14b-instruct isn't pulled, every
+            // request 404s and the pass would abort after 3 consecutive failures. Skip
+            // cleanly instead (decision #102).
+            guard await ThematicScorerV2.isAvailable() else {
+                print("ThematicV2: qwen2.5:14b-instruct not available — pass skipped. Run: ollama pull qwen2.5:14b-instruct")
+                await MainActor.run { [weak self] in self?.isThematicV2Running = false }
+                return
+            }
             let pass = ThematicV2BackgroundPass(db: db)
             await pass.run { scored, total in
                 await MainActor.run { [weak self] in

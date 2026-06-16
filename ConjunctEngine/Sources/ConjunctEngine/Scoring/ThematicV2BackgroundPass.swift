@@ -125,6 +125,10 @@ public actor ThematicV2BackgroundPass {
     // MARK: - Private
 
     private static let budget = 750
+    /// Cap on role candidates per pass so the non-role pool (#100) keeps at least
+    /// `budget - roleBudget` slots and isn't starved while a large role backlog drains
+    /// (decision #102). Role candidates still get priority within their cap.
+    private static let roleBudget = 500
 
     private func fetchCandidates() throws -> [V2Candidate] {
         try db.read { db in
@@ -154,7 +158,7 @@ public actor ThematicV2BackgroundPass {
                   AND b.isActive = 1
                   AND (a.captureDate IS NULL OR b.captureDate IS NULL OR ABS(a.captureDate - b.captureDate) > 300)
                 ORDER BY p.id
-                LIMIT \(Self.budget)
+                LIMIT \(Self.roleBudget)
             """
             var out: [V2Candidate] = []
             for row in try Row.fetchAll(db, sql: roleSQL) {

@@ -68,6 +68,14 @@ public struct RoleProfile: Codable, Sendable, Equatable {
         case stance
     }
 
+    /// True when no role information was extracted. Phase 3.55 skips writing empty
+    /// profiles (mirrors captioning skipping empty captions) so the `roleProfile IS
+    /// NULL` re-extraction sentinel is never poisoned by a no-op/Mock engine (#102).
+    public var isEmpty: Bool {
+        subjects.isEmpty && phenomena.isEmpty && claims.isEmpty && enacts.isEmpty
+            && subverts.isEmpty && objects.isEmpty && directedAt.isEmpty && stance == nil
+    }
+
     public init(
         subjects: [String] = [], phenomena: [Phenomenon] = [], claims: [String] = [],
         enacts: [String] = [], subverts: [String] = [], objects: [ObjectRole] = [],
