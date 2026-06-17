@@ -11,6 +11,10 @@ final class EngineController: ObservableObject {
     @Published var folders: [FolderItem] = []
     @Published var isIndexing: Bool = false
     @Published var isBackgroundScoring: Bool = false
+    /// True only while genuine cross-folder scoring is running (multiple active
+    /// folders/batches). Drives the "Scoring cross-folder pairs" label; otherwise the
+    /// background chip shows "Iterating on thematic concepts".
+    @Published var isScoringCrossFolder: Bool = false
     @Published var indexingProgress: IndexingProgress? = nil
     @Published var hasAnyFolders: Bool = false
     /// True once a real CLIPCoreMLEngine is loaded (not mock)
@@ -131,6 +135,7 @@ final class EngineController: ObservableObject {
 
         isIndexing = true
         isBackgroundScoring = false
+        isScoringCrossFolder = false
         indexingProgress = IndexingProgress(phase: .scanning, itemsComplete: 0, itemsTotal: 0)
 
         thematicV2PassTask?.cancel()
@@ -160,6 +165,7 @@ final class EngineController: ObservableObject {
                     || progress.phase == .failed
                 // Background phases are silent — don't publish to UI progress card.
                 let isVisible = progress.phase != .backgroundScoring
+                    && progress.phase != .scoringCrossFolder
                     && progress.phase != .backgroundScoringComplete
 
                 if (phaseChanged || intervalElapsed || isFolderReady || isStreamDone) && isVisible {
@@ -186,12 +192,25 @@ final class EngineController: ObservableObject {
                 if isFolderReady {
                     // Folder view is ready — unblock the UI and refresh sidebar counts.
                     self.isIndexing = false
-                    self.isBackgroundScoring = true
                     await self.refreshFolders()
+                }
+                // Reveal the background chip only once the engine emits its first
+                // explicit background phase, so its label is correct on first appearance.
+                // (Showing it on .complete would flash "Setting up…" for the sub-second
+                // vector-load before cross-folder scoring starts.) .scoringCrossFolder is
+                // emitted only when there is genuine cross-folder work; .backgroundScoring
+                // covers the setup/role-generation tail and the single-folder case.
+                if progress.phase == .scoringCrossFolder {
+                    self.isBackgroundScoring = true
+                    self.isScoringCrossFolder = true
+                } else if progress.phase == .backgroundScoring {
+                    self.isBackgroundScoring = true
+                    self.isScoringCrossFolder = false
                 }
                 if isStreamDone {
                     // Phase 2 complete (or error) — refresh so All view picks up cross-folder pairs.
                     self.isBackgroundScoring = false
+                    self.isScoringCrossFolder = false
                     await self.refreshFolders()
                     break
                 }
@@ -200,6 +219,7 @@ final class EngineController: ObservableObject {
             // Failsafe: ensure state is cleared if the stream ends unexpectedly.
             self.isIndexing = false
             self.isBackgroundScoring = false
+            self.isScoringCrossFolder = false
             await self.refreshFolders()
         }
     }

@@ -75,11 +75,17 @@ public actor IndexingEngine {
                             try await self.runCrossFolderScoring(
                                 batchIDs: batchIDs,
                                 weights: weights,
-                                topK: topK
+                                topK: topK,
+                                continuation: continuation
                             )
                         } catch {
                             // CancellationError or DB error — signal done either way
                         }
+                        // Cross-folder scoring done — revert the UI label to the generic
+                        // background state while Phase 8.5 role generation runs.
+                        continuation.yield(IndexingProgress(
+                            phase: .backgroundScoring, itemsComplete: 0, itemsTotal: 0
+                        ))
                         // Phase 8.5: role-join entry-gate candidates (decision #102).
                         // Must run after all normal pairs (intra + cross) exist so dedup is
                         // accurate AND so the cross-folder scoped DELETE can't wipe freshly
@@ -732,7 +738,8 @@ public actor IndexingEngine {
     private func runCrossFolderScoring(
         batchIDs: Set<Int64>,
         weights: ScoringWeights,
-        topK: Int
+        topK: Int,
+        continuation: AsyncStream<IndexingProgress>.Continuation
     ) async throws {
         guard !batchIDs.isEmpty else { return }
         try Task.checkCancellation()
@@ -741,7 +748,13 @@ public actor IndexingEngine {
         let batchVectors = allVectors.filter {  batchIDs.contains($0.imageID) }
         let otherVectors = allVectors.filter { !batchIDs.contains($0.imageID) }
 
+        // No other active images to score against (e.g. a single folder) — nothing to do.
         guard !batchVectors.isEmpty, !otherVectors.isEmpty else { return }
+
+        // Genuine cross-folder work exists — surface it in the UI label.
+        continuation.yield(IndexingProgress(
+            phase: .scoringCrossFolder, itemsComplete: 0, itemsTotal: 0
+        ))
 
         typealias ImageMeta = (captureDate: Double?, filename: String, caption: String,
                                accentHue: Double?, accentSaturation: Double?,
