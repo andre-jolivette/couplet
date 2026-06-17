@@ -828,7 +828,7 @@ final class EngineController: ObservableObject {
         // entering the detached task which runs off-actor.
         let bookmarkURL: URL? = ModelBookmark.resolve()
 
-        return await Task.detached(priority: .userInitiated) {
+        return await Task.detached(priority: .userInitiated) { [self] in
             if let url = bookmarkURL {
                 _ = url.startAccessingSecurityScopedResource()
                 if let engine = try? CLIPCoreMLEngine(modelURL: url) {
@@ -874,28 +874,26 @@ final class EngineController: ObservableObject {
         thematicV2Scored = 0
         thematicV2Total = 0
         thematicV2PassTask?.cancel()
-        thematicV2PassTask = Task.detached(priority: .background) { [weak self] in
+        thematicV2PassTask = Task.detached(priority: .background) { [self] in
             // Gate on model availability: if qwen2.5:14b-instruct isn't pulled, every
             // request 404s and the pass would abort after 3 consecutive failures. Skip
             // cleanly instead (decision #102).
             guard await ThematicScorerV2.isAvailable() else {
                 print("ThematicV2: qwen2.5:14b-instruct not available — pass skipped. Run: ollama pull qwen2.5:14b-instruct")
-                await MainActor.run { [weak self] in self?.isThematicV2Running = false }
+                await MainActor.run { self.isThematicV2Running = false }
                 return
             }
             let pass = ThematicV2BackgroundPass(db: db)
-            await pass.run { scored, total in
-                await MainActor.run { [weak self] in
-                    self?.thematicV2Scored = scored
-                    self?.thematicV2Total = total
+            await pass.run { [self] scored, total in
+                await MainActor.run {
+                    self.thematicV2Scored = scored
+                    self.thematicV2Total = total
                     if scored % EngineController.kThematicV2BatchSize == 0 {
-                        self?.thematicV2BatchCount += 1
+                        self.thematicV2BatchCount += 1
                     }
                 }
             }
-            await MainActor.run { [weak self] in
-                self?.isThematicV2Running = false
-            }
+            await MainActor.run { self.isThematicV2Running = false }
         }
     }
 
