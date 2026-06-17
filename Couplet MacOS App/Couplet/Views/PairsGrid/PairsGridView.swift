@@ -206,7 +206,6 @@ struct PairsGridView: View {
                         pair: pair,
                         onLike:   { gridVM.likePair(id: pair.id, engine: engine) },
                         onReject: { gridVM.rejectPair(id: pair.id, engine: engine) },
-                        onDelete: { gridVM.deletePair(id: pair.id, engine: engine) },
                         onOpen:   { gridVM.openLightbox(pairID: pair.id) },
                         onRemoveFromCollection: activeCID == nil ? nil : {
                             guard let collectionID = activeCID else { return }

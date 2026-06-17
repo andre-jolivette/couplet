@@ -14,7 +14,6 @@ struct PairTileView: View {
     let pair: DisplayPair
     let onLike: () -> Void
     let onReject: () -> Void
-    let onDelete: () -> Void
     let onOpen: () -> Void
     var onRemoveFromCollection: (() -> Void)? = nil
 
@@ -59,8 +58,6 @@ struct PairTileView: View {
                 Divider()
                 Button("Remove from Collection", action: remove)
             }
-            Divider()
-            Button("Delete", role: .destructive) { onDelete() }
         }
     }
 
@@ -165,7 +162,6 @@ struct PairTileView: View {
             TileActionButton(icon: pair.decision == .liked ? "heart.fill" : "heart",
                              color: .pink, action: onLike)
             TileActionButton(icon: "eye.slash", color: .orange, action: onReject)
-            TileActionButton(icon: "trash", color: .red.opacity(0.8), action: onDelete)
         }
         .padding(8)
     }
