@@ -1292,6 +1292,15 @@ public actor IndexingEngine {
             for c in cands {
                 let (lo, hi) = c.a < c.b ? (c.a, c.b) : (c.b, c.a)
                 let hypothesis = String(c.join.hypothesis.prefix(240))
+                // Near-duplicate guard — mirror ThematicV2BackgroundPass.fetchCandidates
+                // (decision #102/#84): burst frames (identical/near-identical captureDate)
+                // and filename export variants fire joins on near-identical profiles. The
+                // judge excludes them from scoring anyway, so a role candidate here would
+                // only ever sit unjudged and surface on its inflated cluster thematicScore.
+                // Skip them at the source.
+                let mLo = meta[lo]; let mHi = meta[hi]
+                if let da = mLo?.captureDate, let dbb = mHi?.captureDate, abs(da - dbb) <= 300 { continue }
+                if FilenameVariants.areVariants(mLo?.filename ?? "", mHi?.filename ?? "") { continue }
                 if let pairID = existing["\(lo)_\(hi)"] {
                     // Existing pair: attach the hypothesis and re-route to validate() by
                     // clearing any prior (cold) ThematicV2 verdict — but ONLY when the
@@ -1310,7 +1319,7 @@ public actor IndexingEngine {
                     continue
                 }
                 guard let vA = vByID[lo], let vB = vByID[hi] else { continue }
-                let mA = meta[lo]; let mB = meta[hi]
+                let mA = mLo; let mB = mHi
                 let s = PairScorer.score(
                     imageAID: lo, vectorA: vA, imageBID: hi, vectorB: vB,
                     captureDateA: mA?.captureDate, captureDateB: mB?.captureDate,
