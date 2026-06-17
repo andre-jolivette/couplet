@@ -12,8 +12,6 @@ struct LightboxView: View {
     let onAnchor: (Int) async -> [DisplayPair]
     let onDismiss: () -> Void
 
-    @State private var showDeleteConfirm = false
-    @State private var deleteTargetID: Int? = nil
     @State private var showExportSheet = false
     @State private var showCollectionPicker = false
 
@@ -122,22 +120,6 @@ struct LightboxView: View {
                 .keyboardShortcut("e", modifiers: .command)
                 .frame(width: 0, height: 0)
                 .clipped()
-        }
-        .confirmationDialog(
-            "Remove this pair from Couplet?",
-            isPresented: $showDeleteConfirm,
-            titleVisibility: .visible
-        ) {
-            Button("Remove from catalogue", role: .destructive) {
-                if let id = deleteTargetID {
-                    onDecision(id, .deleted)
-                    vm.syncDecision(id: id, decision: .deleted)
-                }
-                vm.goNext()
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("This pair will be removed from Couplet. Your source files are not affected.")
         }
     }
 
@@ -332,12 +314,6 @@ struct LightboxView: View {
                              isActive: pair.decision == .rejected,
                              iconOpacity: iconOpacity, labelOpacity: labelOpacity) {
                     handleDecision(.rejected)
-                }
-                actionButton(icon: "trash", label: "⌫",
-                             activeColor: .red, isActive: false,
-                             iconOpacity: iconOpacity, labelOpacity: labelOpacity) {
-                    deleteTargetID = pair.id
-                    showDeleteConfirm = true
                 }
                 Divider().frame(height: 18).opacity(resting ? 0.10 : 0.25)
                 Button {
