@@ -6,8 +6,11 @@ struct FilterBarView: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            // Modality pills
-            modalityPills
+            // Modality pills — collapses to a dropdown when the window is too narrow
+            ViewThatFits(in: .horizontal) {
+                modalityPills
+                modalityDropdown
+            }
 
             Divider().frame(height: 20)
 
@@ -42,6 +45,7 @@ struct FilterBarView: View {
                 .toggleStyle(.checkbox)
                 .font(.caption)
                 .foregroundColor(Color.appMutedForeground)
+                .fixedSize()
 
             // Clear filters button
             if gridVM.hasActiveFilters {
@@ -89,6 +93,18 @@ struct FilterBarView: View {
                 }
             }
         }
+    }
+
+    private var modalityDropdown: some View {
+        Picker("Filter", selection: $gridVM.selectedModality) {
+            Text("All").tag(Optional<PairingModality>.none)
+            ForEach(PairingModality.allCases) { modality in
+                Text(modality.rawValue).tag(Optional(modality))
+            }
+        }
+        .labelsHidden()
+        .pickerStyle(.menu)
+        .fixedSize()
     }
 }
 
