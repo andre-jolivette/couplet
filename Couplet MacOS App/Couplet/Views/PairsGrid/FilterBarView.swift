@@ -45,6 +45,7 @@ struct FilterBarView: View {
                 .toggleStyle(.checkbox)
                 .font(.caption)
                 .foregroundColor(Color.appMutedForeground)
+                .fixedSize()
 
             // Clear filters button
             if gridVM.hasActiveFilters {
@@ -95,37 +96,14 @@ struct FilterBarView: View {
     }
 
     private var modalityDropdown: some View {
-        let isFiltered = gridVM.selectedModality != nil
-        return Menu {
-            Picker("Filter", selection: $gridVM.selectedModality) {
-                Text("All").tag(Optional<PairingModality>.none)
-                ForEach(PairingModality.allCases) { modality in
-                    Text(modality.rawValue).tag(Optional(modality))
-                }
+        Picker("Filter", selection: $gridVM.selectedModality) {
+            Text("All").tag(Optional<PairingModality>.none)
+            ForEach(PairingModality.allCases) { modality in
+                Text(modality.rawValue).tag(Optional(modality))
             }
-            .labelsHidden()
-            .pickerStyle(.inline)
-        } label: {
-            HStack(spacing: 4) {
-                Text(gridVM.selectedModality?.rawValue ?? "All")
-                    .font(.system(size: 12))
-                Image(systemName: "chevron.up.chevron.down")
-                    .font(.system(size: 9))
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 4)
-            .background(
-                Capsule()
-                    .fill(isFiltered ? Color.appPrimary : Color.appSecondary)
-            )
-            .overlay(
-                Capsule()
-                    .stroke(isFiltered ? Color.clear : Color.appBorder, lineWidth: 1)
-            )
-            .foregroundColor(isFiltered ? Color.appBackground : Color.appMutedForeground)
         }
-        .menuStyle(.borderlessButton)
-        .menuIndicator(.hidden)
+        .labelsHidden()
+        .pickerStyle(.menu)
         .fixedSize()
     }
 }
