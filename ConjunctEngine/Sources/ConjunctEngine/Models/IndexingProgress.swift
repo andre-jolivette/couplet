@@ -14,8 +14,17 @@ public struct IndexingProgress: Sendable {
         case scoring               = "Scoring pairs"
         case complete              = "Complete"
         case failed                = "Failed"
-        /// Cross-folder scoring running silently in background after phase 1 completes.
+        /// Background work after phase 1 completes: cross-folder pair scoring (only
+        /// meaningful with >1 active folder/batch) followed by Phase 8.5 role-candidate
+        /// generation (intra-folder, runs regardless of folder count). This generic
+        /// phase covers the setup/role-generation portions; the dedicated
+        /// `.scoringCrossFolder` phase below is emitted only while real cross-folder
+        /// scoring is running. See decision #102.
         case backgroundScoring     = "Background scoring"
+        /// Emitted by `runCrossFolderScoring` only when there is genuine cross-folder
+        /// work (the new batch is being scored against other active images). With a
+        /// single active folder this phase is never emitted. See decision #102.
+        case scoringCrossFolder    = "Scoring cross-folder pairs"
         /// Phase 2 finished (or was cancelled) — All-view can refresh.
         case backgroundScoringComplete = "Background scoring complete"
     }

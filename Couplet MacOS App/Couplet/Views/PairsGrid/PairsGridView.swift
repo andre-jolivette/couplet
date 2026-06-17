@@ -126,7 +126,9 @@ struct PairsGridView: View {
                         ProgressView()
                             .scaleEffect(0.6)
                             .frame(width: 12, height: 12)
-                        Text("Scoring cross-folder pairs")
+                        Text(engine.isScoringCrossFolder
+                            ? "Scoring cross-folder pairs"
+                            : "Iterating on thematic concepts")
                             .font(.system(size: 11))
                             .foregroundColor(Color.appMutedForeground)
                     }
