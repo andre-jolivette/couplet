@@ -39,8 +39,14 @@ nonisolated func convertToPairFree(
 ) -> DisplayPair {
     let geoScore = adjustedGeometricScore
     // Use thematicV2Score when available (LLM-based pair scorer), falling back to
-    // the cluster-based thematicScore. See decision #82.
-    let effectiveThematic = Float(r.thematicV2Score ?? r.thematicScore)
+    // the cluster-based thematicScore. See decision #82. A REJECTED role-join
+    // hypothesis (#102) returns thematicV2Score == 0; that verdict is about the
+    // specific role connection, not the pair's overall thematic value, so it must
+    // not demote the pair below its cluster thematicScore — fall back in that case.
+    let effectiveThematic: Float = {
+        if r.roleHypothesis != nil, r.thematicV2Score == 0 { return Float(r.thematicScore) }
+        return Float(r.thematicV2Score ?? r.thematicScore)
+    }()
     let modality: PairingModality
     if r.selectedFor == "thematic" {
         modality = .thematic

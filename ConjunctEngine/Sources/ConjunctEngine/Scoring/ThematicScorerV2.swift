@@ -66,6 +66,32 @@ CONFIDENCE SCALE:
 - below 0.5: set connected=false
 """
 
+    /// Validation prompt (decision #102): the role-join layer already proposed a
+    /// connection; the judge only confirms or rejects it. This converts the judge's
+    /// task from cold *discovery* (which no local model does — 14b scores 0/8 cold)
+    /// to *validation* (where 14b scores 6/7 recall, 4/4 precision). The join layer
+    /// does recall; this prompt does precision.
+    private static let kValidatePrompt = """
+You are validating a PROPOSED thematic connection between two photographs. A separate \
+system already noticed a possible link and named it; your job is to confirm whether it \
+is a genuine THIRD-MEANING pair — one that creates meaning neither image carries alone — \
+or a coincidence.
+
+Confirm (connected=true) only if the proposed connection holds and produces a real third \
+meaning. Reject (connected=false) if the link is superficial (shared clothing, shared \
+generic action like walking or looking, same setting) or simply does not hold.
+
+Do NOT use visual properties (color, light, composition) as the basis. Judge on subject, \
+action, role, claim-vs-enactment, real-vs-depiction, or source-vs-receiver.
+
+Respond with exactly this JSON, no preamble, no markdown, no other text:
+{"connected": true or false, "confidence": 0.0 to 1.0, "relationship_type": "one word", \
+"rationale": "one sentence"}
+
+relationship_type — exactly one word from: complementary / contrastive / echo / ironic / \
+tonal / none. Use "none" when connected is false.
+"""
+
     private let endpoint: URL
     private let model: String
     private let timeoutSeconds: Double
@@ -77,8 +103,8 @@ CONFIDENCE SCALE:
 
     public init(
         host: String = "http://127.0.0.1:11434",  // IPv4 explicit — localhost resolves IPv6 first on macOS
-        model: String = "llama3.2",
-        timeoutSeconds: Double = 60
+        model: String = "qwen2.5:14b-instruct",    // #102: 14b validates role hypotheses 6/7,4/4; benchmarked best local
+        timeoutSeconds: Double = 90                 // 14b is ~3.5s/pair warm; cold load needs headroom
     ) {
         self.endpoint = URL(string: "\(host)/api/generate")!
         self.model = model
@@ -95,14 +121,46 @@ CONFIDENCE SCALE:
     ///   returns a non-200 status. Callers use this to decide whether to abort.
     public func score(captionA: String, captionB: String) async throws -> ThematicV2Result? {
         let prompt = "IMAGE A: \(captionA)\n\nIMAGE B: \(captionB)"
+        guard let raw = try await callOllama(system: Self.kSystemPrompt, prompt: prompt) else { return nil }
+        return parseResult(from: raw)
+    }
+
+    /// Validates a role-join candidate against its proposed connection (decision #102).
+    /// Same return/throw contract as `score()`.
+    public func validate(captionA: String, captionB: String, hypothesis: String) async throws -> ThematicV2Result? {
+        let prompt = "IMAGE A: \(captionA)\n\nIMAGE B: \(captionB)\n\nPROPOSED CONNECTION: \(hypothesis)\n\nIs this a genuine third-meaning pair?"
+        guard let raw = try await callOllama(system: Self.kValidatePrompt, prompt: prompt) else { return nil }
+        return parseResult(from: raw)
+    }
+
+    /// Returns true if the Ollama server is reachable and `model` is available.
+    /// Gate the background pass on this so a missing model produces a clean skip
+    /// instead of HTTP errors that trip the consecutive-failure abort (decision #102).
+    public static func isAvailable(
+        host: String = "http://127.0.0.1:11434",
+        model: String = "qwen2.5:14b-instruct"
+    ) async -> Bool {
+        guard let url = URL(string: "\(host)/api/tags") else { return false }
+        let session = URLSession(configuration: .ephemeral)
+        guard let (data, _) = try? await session.data(from: url),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let models = json["models"] as? [[String: Any]] else { return false }
+        return models.contains { ($0["name"] as? String)?.hasPrefix(model) == true }
+    }
+
+    // MARK: - Private
+
+    /// Shared Ollama call. Returns the model's raw `response` text, or nil on task
+    /// cancellation. Throws on real network/HTTP failures so the caller can track
+    /// consecutive failures and abort if the server is down.
+    private func callOllama(system: String, prompt: String) async throws -> String? {
         let body: [String: Any] = [
             "model": model,
-            "system": Self.kSystemPrompt,
+            "system": system,
             "prompt": prompt,
             "stream": false,
             "options": ["temperature": 0.0]
         ]
-
         let bodyData: Data
         do {
             bodyData = try JSONSerialization.data(withJSONObject: body)
@@ -123,11 +181,8 @@ CONFIDENCE SCALE:
             (data, response) = try await session.data(for: request)
         } catch let urlError as URLError where urlError.code == .cancelled {
             // Swift task cancellation propagates as URLError.cancelled — not an Ollama problem.
-            // Return nil so the caller can check Task.isCancelled and exit quietly.
             return nil
         } catch {
-            // Real network failure (connection refused, timeout, etc.) — throw so the
-            // caller can track consecutive failures and abort if the server is down.
             print("ThematicScorerV2: connection error (is ollama running?) — \(error.localizedDescription)")
             throw error
         }
@@ -140,19 +195,11 @@ CONFIDENCE SCALE:
 
         guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let rawText = json["response"] as? String else {
-            // Ollama's outer envelope is malformed — treat as server-level error.
             print("ThematicScorerV2: unexpected outer response format")
             throw URLError(.cannotParseResponse)
         }
-
-        // nil here means the LLM's inner JSON was unparseable (e.g. unescaped quotes
-        // from sign text the model quoted verbatim, or a truncated response). This is a
-        // model output quality issue, not a connectivity problem — return nil so the
-        // caller skips this pair without counting it as a server failure.
-        return parseResult(from: rawText)
+        return rawText
     }
-
-    // MARK: - Private
 
     private func parseResult(from raw: String) -> ThematicV2Result? {
         var text = raw.trimmingCharacters(in: .whitespacesAndNewlines)

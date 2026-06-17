@@ -1,20 +1,14 @@
 import Foundation
 import GRDB
 
-/// Candidate pair for ThematicV2 scoring: pairID + both captions.
+/// Candidate pair for ThematicV2 scoring: pairID + both captions. When `hypothesis`
+/// is non-nil the pair is a role-join candidate (decision #102) — judged via
+/// `validate()` against the proposed connection rather than cold `score()`.
 private struct V2Candidate: Sendable {
     let pairID: Int64
     let captionA: String
     let captionB: String
-}
-
-/// Strips leading numeric prefix ("63-foo.jpg" → "foo.jpg") and trailing numeric
-/// suffix ("foo-2.jpg" → "foo.jpg"), then lowercases. Mirrors PairScorer.sharesBaseName.
-private func normalizedBaseName(_ filename: String) -> String {
-    var s = filename
-    s = s.replacingOccurrences(of: #"^\d+-"#, with: "", options: .regularExpression)
-    s = s.replacingOccurrences(of: #"-\d+(\.\w+)$"#, with: "$1", options: .regularExpression)
-    return s.lowercased()
+    let hypothesis: String?
 }
 
 /// Runs ThematicScorerV2 sequentially over a candidate subset of existing pairs,
@@ -23,7 +17,12 @@ private func normalizedBaseName(_ filename: String) -> String {
 ///
 /// Candidates: pairs where thematicV2Score IS NULL and at least one of
 /// aestheticScore or geometricScore exceeds the noise floor (0.3), and both
-/// images have non-empty captions. Ordered strongest-first. Limit: 500 pairs.
+/// images have non-empty captions. Pure-color accent-echo pairs (aestheticSubmode
+/// = 'accent_echo' with no thematic or geometric substance) are excluded as
+/// spurious (decisions #91, #95); other accent-echo pairs stay eligible but are
+/// deprioritised to the tail of the ordering. Candidates are ordered by holistic
+/// compositeScore (decision #95) — which includes the thematic axis — rather than
+/// raw aesthetic/geometric strength. Limit: 750 pairs.
 ///
 /// Sequential execution is intentional — Ollama handles one request at a time,
 /// and concurrent calls would not reduce wall-clock time.
@@ -71,10 +70,19 @@ public actor ThematicV2BackgroundPass {
 
             let result: ThematicV2Result?
             do {
-                result = try await scorer.score(
-                    captionA: candidate.captionA,
-                    captionB: candidate.captionB
-                )
+                if let hypothesis = candidate.hypothesis {
+                    // Role-join candidate (#102) — validate the proposed connection.
+                    result = try await scorer.validate(
+                        captionA: candidate.captionA,
+                        captionB: candidate.captionB,
+                        hypothesis: hypothesis
+                    )
+                } else {
+                    result = try await scorer.score(
+                        captionA: candidate.captionA,
+                        captionB: candidate.captionB
+                    )
+                }
             } catch {
                 // Network or HTTP error — server may be down.
                 if Task.isCancelled { return }
@@ -116,40 +124,96 @@ public actor ThematicV2BackgroundPass {
 
     // MARK: - Private
 
+    private static let budget = 750
+    /// Cap on role candidates per pass so the non-role pool (#100) keeps at least
+    /// `budget - roleBudget` slots and isn't starved while a large role backlog drains
+    /// (decision #102). Role candidates still get priority within their cap.
+    private static let roleBudget = 500
+
     private func fetchCandidates() throws -> [V2Candidate] {
         try db.read { db in
             // captureDate filter in SQL: identical captureDates mean burst/sequential shots.
             // Filename base-name dedup is applied in Swift below (SQLite has no REGEXP by default).
-            let sql = """
+
+            // ── Role-join candidates first (decision #102) ──
+            // Entry-gate pairs the four-pool topK never surfaces (backlog #95). Judged
+            // WITH their proposed connection (stored in `rationale`) via validate() —
+            // the only judging that works locally. These are the high-value pairs, so
+            // they get budget priority over the #100 non-role pool.
+            let roleSQL = """
                 SELECT p.id AS pairID,
                        COALESCE(a.caption, '') AS captionA,
                        COALESCE(b.caption, '') AS captionB,
                        COALESCE(a.filename, '') AS filenameA,
-                       COALESCE(b.filename, '') AS filenameB
+                       COALESCE(b.filename, '') AS filenameB,
+                       p.roleHypothesis AS hypothesis
                 FROM pairs p
                 JOIN images a ON a.id = p.imageAID
                 JOIN images b ON b.id = p.imageBID
                 WHERE p.thematicV2Score IS NULL
-                  AND (p.aestheticScore > 0.3 OR p.geometricScore > 0.3)
+                  AND p.roleHypothesis IS NOT NULL
                   AND COALESCE(a.caption, '') != ''
                   AND COALESCE(b.caption, '') != ''
                   AND a.isActive = 1
                   AND b.isActive = 1
                   AND (a.captureDate IS NULL OR b.captureDate IS NULL OR ABS(a.captureDate - b.captureDate) > 300)
-                ORDER BY MAX(p.aestheticScore, p.geometricScore) DESC
-                LIMIT 500
+                ORDER BY p.id
+                LIMIT \(Self.roleBudget)
             """
-            let rows = try Row.fetchAll(db, sql: sql)
-            return rows.compactMap { row -> V2Candidate? in
-                guard let pairID = row["pairID"] as? Int64 else { return nil }
-                let captionA = (row["captionA"] as? String) ?? ""
-                let captionB = (row["captionB"] as? String) ?? ""
-                let filenameA = (row["filenameA"] as? String) ?? ""
-                let filenameB = (row["filenameB"] as? String) ?? ""
-                // Skip numeric-prefix variants (e.g. "63-foo.jpg" paired with "foo.jpg").
-                guard normalizedBaseName(filenameA) != normalizedBaseName(filenameB) else { return nil }
-                return V2Candidate(pairID: pairID, captionA: captionA, captionB: captionB)
+            var out: [V2Candidate] = []
+            for row in try Row.fetchAll(db, sql: roleSQL) {
+                guard let pairID = row["pairID"] as? Int64 else { continue }
+                let fA = (row["filenameA"] as? String) ?? "", fB = (row["filenameB"] as? String) ?? ""
+                guard !FilenameVariants.areVariants(fA, fB) else { continue }
+                out.append(V2Candidate(
+                    pairID: pairID,
+                    captionA: (row["captionA"] as? String) ?? "",
+                    captionB: (row["captionB"] as? String) ?? "",
+                    hypothesis: (row["hypothesis"] as? String) ?? ""))
             }
+
+            // ── Non-role pool (decision #95/#100) — cold score(), fills remaining budget ──
+            // Narrow pure-color guard (replaces #91's blanket accent_echo exclusion) +
+            // composite ordering with accent_echo deprioritised to the tail. Excludes
+            // role rows (judged above).
+            let remaining = Self.budget - out.count
+            if remaining > 0 {
+                let nonRoleSQL = """
+                    SELECT p.id AS pairID,
+                           COALESCE(a.caption, '') AS captionA,
+                           COALESCE(b.caption, '') AS captionB,
+                           COALESCE(a.filename, '') AS filenameA,
+                           COALESCE(b.filename, '') AS filenameB
+                    FROM pairs p
+                    JOIN images a ON a.id = p.imageAID
+                    JOIN images b ON b.id = p.imageBID
+                    WHERE p.thematicV2Score IS NULL
+                      AND p.roleHypothesis IS NULL
+                      AND (p.aestheticScore > 0.3 OR p.geometricScore > 0.3)
+                      AND COALESCE(a.caption, '') != ''
+                      AND COALESCE(b.caption, '') != ''
+                      AND a.isActive = 1
+                      AND b.isActive = 1
+                      AND (a.captureDate IS NULL OR b.captureDate IS NULL OR ABS(a.captureDate - b.captureDate) > 300)
+                      AND NOT (p.aestheticSubmode = 'accent_echo'
+                               AND p.thematicScore < 0.15
+                               AND p.geometricScore < 0.30)
+                    ORDER BY (CASE WHEN p.aestheticSubmode = 'accent_echo' THEN 1 ELSE 0 END) ASC,
+                             p.compositeScore DESC
+                    LIMIT \(remaining)
+                """
+                for row in try Row.fetchAll(db, sql: nonRoleSQL) {
+                    guard let pairID = row["pairID"] as? Int64 else { continue }
+                    let fA = (row["filenameA"] as? String) ?? "", fB = (row["filenameB"] as? String) ?? ""
+                    guard !FilenameVariants.areVariants(fA, fB) else { continue }
+                    out.append(V2Candidate(
+                        pairID: pairID,
+                        captionA: (row["captionA"] as? String) ?? "",
+                        captionB: (row["captionB"] as? String) ?? "",
+                        hypothesis: nil))
+                }
+            }
+            return out
         }
     }
 

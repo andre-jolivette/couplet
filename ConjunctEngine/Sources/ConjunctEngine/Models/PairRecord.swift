@@ -27,6 +27,9 @@ public struct PairRecord: Codable, FetchableRecord, MutablePersistableRecord, Se
     public var rationale: String
     /// Geometric sub-mode that produced the score. Nil for pre-v13 rows.
     public var geometricSubmode: String?
+    /// Role-join proposed connection (#102). Non-nil = role candidate to be judged
+    /// via validate(). Set on new role pairs and existing pairs a join also fires on.
+    public var roleHypothesis: String?
     public var scoredAt: Date
 
     public static var databaseTableName = "pairs"
@@ -52,6 +55,7 @@ public struct PairRecord: Codable, FetchableRecord, MutablePersistableRecord, Se
         compositeScore: Double,
         rationale: String,
         geometricSubmode: String? = nil,
+        roleHypothesis: String? = nil,
         scoredAt: Date = Date()
     ) {
         // PairScorer.score() owns canonical ordering — for most pairs this means
@@ -72,8 +76,11 @@ public struct PairRecord: Codable, FetchableRecord, MutablePersistableRecord, Se
         self.selectedFor = selectedFor
         self.thematicScore = thematicScore
         self.compositeScore = compositeScore
-        self.rationale = String(rationale.prefix(120))
+        // 240 (was 120): role-join hypotheses (#102) stored here as the judge's input
+        // run ~130-150 chars; normal scoring rationales are short and unaffected.
+        self.rationale = String(rationale.prefix(240))
         self.geometricSubmode = geometricSubmode
+        self.roleHypothesis = roleHypothesis
         self.scoredAt = scoredAt
     }
 }

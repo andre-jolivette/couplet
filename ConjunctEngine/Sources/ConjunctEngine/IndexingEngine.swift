@@ -12,7 +12,17 @@ public actor IndexingEngine {
     private let db: DatabaseManager
     private let clipEngine: any CLIPInferenceEngine
     private let captioningEngine: any CaptioningEngine
+    private let roleExtractionEngine: any RoleExtractionEngine
+    /// Concurrency cap for CLIP feature extraction (Phase 3). CLIP is ANE-bound, so a
+    /// modest cap avoids contention; left conservative deliberately. See decision #101.
     private let maxConcurrency: Int
+    /// Concurrency cap for purely CPU/IO-bound backfill phases (thumbnails, accent, dHash).
+    /// Derived from the machine's core count so the work scales on more powerful Macs
+    /// rather than being pinned to a flat cap. See decision #101.
+    private let cpuConcurrency: Int
+    /// Concurrency cap for the Vision phase (saliency/gaze). Vision leans on the Neural
+    /// Engine/GPU, so returns diminish past a handful of concurrent handlers — capped at 6.
+    private let visionConcurrency: Int
     /// Holds the running cross-folder (phase 2) scoring task so it can be
     /// cancelled when a new index is triggered before phase 2 finishes.
     private var crossFolderTask: Task<Void, Never>?
@@ -21,12 +31,17 @@ public actor IndexingEngine {
         db: DatabaseManager,
         clipEngine: any CLIPInferenceEngine,
         captioningEngine: any CaptioningEngine = MockCaptioningEngine(),
+        roleExtractionEngine: any RoleExtractionEngine = MockRoleExtractionEngine(),
         maxConcurrency: Int = min(ProcessInfo.processInfo.processorCount, 4)
     ) {
         self.db = db
         self.clipEngine = clipEngine
         self.captioningEngine = captioningEngine
+        self.roleExtractionEngine = roleExtractionEngine
         self.maxConcurrency = maxConcurrency
+        let cores = ProcessInfo.processInfo.processorCount
+        self.cpuConcurrency = max(1, cores)
+        self.visionConcurrency = max(1, min(cores, 6))
     }
 
     // MARK: - Public entry point
@@ -60,10 +75,30 @@ public actor IndexingEngine {
                             try await self.runCrossFolderScoring(
                                 batchIDs: batchIDs,
                                 weights: weights,
-                                topK: topK
+                                topK: topK,
+                                continuation: continuation
                             )
                         } catch {
                             // CancellationError or DB error — signal done either way
+                        }
+                        // Cross-folder scoring done — revert the UI label to the generic
+                        // background state while Phase 8.5 role generation runs.
+                        continuation.yield(IndexingProgress(
+                            phase: .backgroundScoring, itemsComplete: 0, itemsTotal: 0
+                        ))
+                        // Phase 8.5: role-join entry-gate candidates (decision #102).
+                        // Must run after all normal pairs (intra + cross) exist so dedup is
+                        // accurate AND so the cross-folder scoped DELETE can't wipe freshly
+                        // inserted role rows — hence its placement here. It depends only on
+                        // persisted roleProfiles + the final pairs table, and is idempotent,
+                        // so a newer index that cancels this task simply re-runs it; if THIS
+                        // task is superseded we skip (the newer index will generate them).
+                        if Task.isCancelled {
+                            print("RoleCandidates: skipped — index superseded; newer index will regenerate")
+                        } else {
+                            do { try await self.generateRoleCandidates(weights: weights) }
+                            catch is CancellationError { /* superseded mid-run; newer index handles it */ }
+                            catch { print("RoleCandidates: \(error.localizedDescription)") }
                         }
                         continuation.yield(IndexingProgress(
                             phase: .backgroundScoringComplete,
@@ -144,13 +179,30 @@ public actor IndexingEngine {
         let thumbDir = thumbnailDirectory()
         try FileManager.default.createDirectory(at: thumbDir, withIntermediateDirectories: true)
 
-        for (idx, (imageID, url)) in imageIDs.enumerated() {
-            try Task.checkCancellation()
-            try generateThumbnail(imageID: imageID, sourceURL: url, dir: thumbDir)
-            continuation.yield(IndexingProgress(
-                phase: .thumbnails, itemsComplete: idx + 1, itemsTotal: total
-            ))
-        }
+        var thumbnailsDone = 0
+        try await mapConcurrent(
+            imageIDs,
+            concurrency: cpuConcurrency,
+            work: { pair in
+                let (imageID, url) = pair
+                return (imageID, Self.writeThumbnailFile(imageID: imageID, sourceURL: url, dir: thumbDir))
+            },
+            consume: { result in
+                let (imageID, freshFilename) = result
+                if let freshFilename {
+                    try db.write { db in
+                        try db.execute(
+                            sql: "UPDATE images SET thumbnailPath = ? WHERE id = ?",
+                            arguments: [freshFilename, imageID]
+                        )
+                    }
+                }
+                thumbnailsDone += 1
+                continuation.yield(IndexingProgress(
+                    phase: .thumbnails, itemsComplete: thumbnailsDone, itemsTotal: total
+                ))
+            }
+        )
 
         // ── Phase 3: Feature extraction ───────────────────────────────────
         continuation.yield(IndexingProgress(
@@ -249,8 +301,12 @@ public actor IndexingEngine {
                 let text = try await captioningEngine.caption(imageURL: url)
                 if !text.isEmpty {
                     try db.write { db in
+                        // Null roleProfile alongside the caption write: a changed caption
+                        // invalidates the role profile extracted from the old text, so it
+                        // must be re-extracted in Phase 3.55 (decision #102, mirrors the
+                        // documented "roleProfile mirrors caption semantics" contract).
                         try db.execute(
-                            sql: "UPDATE images SET caption = ? WHERE id = ?",
+                            sql: "UPDATE images SET caption = ?, roleProfile = NULL WHERE id = ?",
                             arguments: [text, imageID]
                         )
                     }
@@ -263,6 +319,58 @@ public actor IndexingEngine {
                 phase: .captioning, itemsComplete: captioned, itemsTotal: captionTotal
             ))
         }
+
+        // ── Phase 3.55: Role extraction (decision #102) ───────────────────
+        // Extract a structured RoleProfile from each caption, feeding the role-join
+        // entry-gate candidate generator (RoleJoins). Text-only — reads the caption
+        // the captioning phase produced, so no image decoding. Sequential like
+        // captioning (one local LLM call at a time). Skipped entirely when every
+        // captioned image already has a profile, so normal re-indexes aren't slowed.
+        let roleTargets: [(Int64, String)] = try db.read { db in
+            let rows = try Row.fetchAll(db, sql: """
+                SELECT id, caption FROM images
+                WHERE isActive = 1
+                  AND caption IS NOT NULL AND caption != ''
+                  AND roleProfile IS NULL
+            """)
+            return rows.compactMap { row -> (Int64, String)? in
+                guard let id = row["id"] as? Int64,
+                      let caption = row["caption"] as? String else { return nil }
+                return (id, caption)
+            }
+        }
+        if !roleTargets.isEmpty {
+            continuation.yield(IndexingProgress(
+                phase: .roleExtraction, itemsComplete: 0, itemsTotal: roleTargets.count
+            ))
+            let roleEncoder = JSONEncoder()
+            var rolesExtracted = 0
+            for (imageID, caption) in roleTargets {
+                try Task.checkCancellation()
+                do {
+                    let profile = try await roleExtractionEngine.extract(caption: caption)
+                    // Skip empty profiles (mirrors captioning's `if !text.isEmpty`): a
+                    // no-op/Mock engine returns an empty RoleProfile, and writing it as
+                    // non-null `{}` JSON would poison the `roleProfile IS NULL` sentinel
+                    // and permanently block real re-extraction. Leave NULL → retried.
+                    guard !profile.isEmpty else { continue }
+                    let jsonText = String(decoding: try roleEncoder.encode(profile), as: UTF8.self)
+                    try db.write { db in
+                        try db.execute(
+                            sql: "UPDATE images SET roleProfile = ? WHERE id = ?",
+                            arguments: [jsonText, imageID]
+                        )
+                    }
+                    rolesExtracted += 1
+                } catch {
+                    print("ROLE: skipped image \(imageID) — \(error.localizedDescription)")
+                }
+                continuation.yield(IndexingProgress(
+                    phase: .roleExtraction, itemsComplete: rolesExtracted, itemsTotal: roleTargets.count
+                ))
+            }
+        }
+
         // ── Phase 3.6: Accent color extraction ───────────────────────────
         // Backfills accentHue / accentSaturation for all active images that lack it.
         // Uses the cached 512px thumbnail when available (same pattern as Phase 3.5).
@@ -296,22 +404,31 @@ public actor IndexingEngine {
 
         var accentDone = 0
         let accentTotal = accentRows.count
-        for (imageID, url) in accentRows {
-            try Task.checkCancellation()
-            if let cgImage = Self.loadCGImage(url: url),
-               let accent  = try? ColourAnalyser.extractAccentColor(image: cgImage) {
-                try db.write { db in
-                    try db.execute(
-                        sql: "UPDATE images SET accentHue = ?, accentSaturation = ? WHERE id = ?",
-                        arguments: [accent.hue, accent.saturation, imageID]
-                    )
+        try await mapConcurrent(
+            accentRows,
+            concurrency: cpuConcurrency,
+            work: { pair -> (Int64, Float, Float)? in
+                let (imageID, url) = pair
+                guard let cgImage = Self.loadCGImage(url: url),
+                      let accent  = try? ColourAnalyser.extractAccentColor(image: cgImage)
+                else { return nil }
+                return (imageID, accent.hue, accent.saturation)
+            },
+            consume: { result in
+                if let (imageID, hue, saturation) = result {
+                    try db.write { db in
+                        try db.execute(
+                            sql: "UPDATE images SET accentHue = ?, accentSaturation = ? WHERE id = ?",
+                            arguments: [hue, saturation, imageID]
+                        )
+                    }
                 }
+                accentDone += 1
+                continuation.yield(IndexingProgress(
+                    phase: .accentExtraction, itemsComplete: accentDone, itemsTotal: accentTotal
+                ))
             }
-            accentDone += 1
-            continuation.yield(IndexingProgress(
-                phase: .accentExtraction, itemsComplete: accentDone, itemsTotal: accentTotal
-            ))
-        }
+        )
         // ── Phase 3.7: Saliency centroid extraction ───────────────────────
         // Backfills weightCentroidX / weightCentroidY using Vision attention saliency.
         // Runs on cached 512px thumbnails — no re-decode from originals required.
@@ -329,29 +446,35 @@ public actor IndexingEngine {
 
         var saliencyDone = 0
         let saliencyTotal = saliencyIDs.count
-        for imageID in saliencyIDs {
-            try Task.checkCancellation()
-            let url = thumbDir.appendingPathComponent("\(imageID).jpg")
-            let features = try? SaliencyAnalyser.analyse(thumbnailURL: url)
-            try db.write { db in
-                try db.execute(
-                    sql: """
-                        UPDATE images
-                        SET weightCentroidX = ?, weightCentroidY = ?, gazeDirectionX = ?
-                        WHERE id = ?
-                    """,
-                    arguments: [
-                        features?.centroid?.x, features?.centroid?.y,
-                        features?.gazeDirectionX,
-                        imageID
-                    ]
-                )
+        try await mapConcurrent(
+            saliencyIDs,
+            concurrency: visionConcurrency,
+            work: { imageID -> (Int64, ImageSpatialFeatures?) in
+                let url = thumbDir.appendingPathComponent("\(imageID).jpg")
+                return (imageID, try? SaliencyAnalyser.analyse(thumbnailURL: url))
+            },
+            consume: { result in
+                let (imageID, features) = result
+                try db.write { db in
+                    try db.execute(
+                        sql: """
+                            UPDATE images
+                            SET weightCentroidX = ?, weightCentroidY = ?, gazeDirectionX = ?
+                            WHERE id = ?
+                        """,
+                        arguments: [
+                            features?.centroid?.x, features?.centroid?.y,
+                            features?.gazeDirectionX,
+                            imageID
+                        ]
+                    )
+                }
+                saliencyDone += 1
+                continuation.yield(IndexingProgress(
+                    phase: .centroidExtraction, itemsComplete: saliencyDone, itemsTotal: saliencyTotal
+                ))
             }
-            saliencyDone += 1
-            continuation.yield(IndexingProgress(
-                phase: .centroidExtraction, itemsComplete: saliencyDone, itemsTotal: saliencyTotal
-            ))
-        }
+        )
 
         // ── Phase 4: Intra-folder pair scoring ───────────────────────────
         // Scores only images in the current scan batch against each other.
@@ -398,50 +521,73 @@ public actor IndexingEngine {
             return result
         }
 
+        // Score every (i, j>i) pair. PairScorer.score is a pure static function, so each
+        // row is independent and safe to compute concurrently; results are merged and
+        // written serially on the actor in `consume`. Final four-pool topK selection is
+        // order-independent, so parallel completion order does not change which pairs are
+        // stored. See decision #101.
         var allScores: [PairScore] = []
         allScores.reserveCapacity(batchVectors.count * (batchVectors.count - 1) / 2)
 
         var scored = 0
-        for (i, vA) in batchVectors.enumerated() {
-            try Task.checkCancellation()
-
-            for vB in batchVectors[(i+1)...] {
+        try await mapConcurrent(
+            Array(batchVectors.indices),
+            concurrency: cpuConcurrency,
+            work: { i -> [PairScore] in
+                let vA = batchVectors[i]
                 let metaA = imageMeta[vA.imageID]
-                let metaB = imageMeta[vB.imageID]
-                let s = PairScorer.score(
-                    imageAID: vA.imageID, vectorA: vA,
-                    imageBID: vB.imageID, vectorB: vB,
-                    captureDateA: metaA?.captureDate,
-                    captureDateB: metaB?.captureDate,
-                    filenameA: metaA?.filename ?? "",
-                    filenameB: metaB?.filename ?? "",
-                    captionA: metaA?.caption ?? "",
-                    captionB: metaB?.caption ?? "",
-                    accentHueA: metaA?.accentHue, accentSaturationA: metaA?.accentSaturation,
-                    accentHueB: metaB?.accentHue, accentSaturationB: metaB?.accentSaturation,
-                    weightCentroidXA: metaA?.weightCentroidX.map(Float.init),
-                    weightCentroidYA: metaA?.weightCentroidY.map(Float.init),
-                    weightCentroidXB: metaB?.weightCentroidX.map(Float.init),
-                    weightCentroidYB: metaB?.weightCentroidY.map(Float.init),
-                    gazeDirectionXA: metaA?.gazeDirectionX.map(Float.init),
-                    gazeDirectionXB: metaB?.gazeDirectionX.map(Float.init),
-                    colorProfileA: metaA?.colorProfile ?? "color",
-                    colorProfileB: metaB?.colorProfile ?? "color",
-                    weights: weights
-                )
-                if s.compositeScore > 0 {
-                    allScores.append(s)
+                var rowScores: [PairScore] = []
+                for j in (i + 1)..<batchVectors.count {
+                    let vB = batchVectors[j]
+                    let metaB = imageMeta[vB.imageID]
+                    let s = PairScorer.score(
+                        imageAID: vA.imageID, vectorA: vA,
+                        imageBID: vB.imageID, vectorB: vB,
+                        captureDateA: metaA?.captureDate,
+                        captureDateB: metaB?.captureDate,
+                        filenameA: metaA?.filename ?? "",
+                        filenameB: metaB?.filename ?? "",
+                        captionA: metaA?.caption ?? "",
+                        captionB: metaB?.caption ?? "",
+                        accentHueA: metaA?.accentHue, accentSaturationA: metaA?.accentSaturation,
+                        accentHueB: metaB?.accentHue, accentSaturationB: metaB?.accentSaturation,
+                        weightCentroidXA: metaA?.weightCentroidX.map(Float.init),
+                        weightCentroidYA: metaA?.weightCentroidY.map(Float.init),
+                        weightCentroidXB: metaB?.weightCentroidX.map(Float.init),
+                        weightCentroidYB: metaB?.weightCentroidY.map(Float.init),
+                        gazeDirectionXA: metaA?.gazeDirectionX.map(Float.init),
+                        gazeDirectionXB: metaB?.gazeDirectionX.map(Float.init),
+                        colorProfileA: metaA?.colorProfile ?? "color",
+                        colorProfileB: metaB?.colorProfile ?? "color",
+                        weights: weights
+                    )
+                    if s.compositeScore > 0 {
+                        rowScores.append(s)
+                    }
                 }
+                return rowScores
+            },
+            consume: { rowScores in
+                allScores.append(contentsOf: rowScores)
+                scored += 1
+                continuation.yield(IndexingProgress(
+                    phase: .scoring, itemsComplete: scored, itemsTotal: batchVectors.count
+                ))
             }
-
-            scored += 1
-            continuation.yield(IndexingProgress(
-                phase: .scoring, itemsComplete: scored, itemsTotal: batchVectors.count
-            ))
-        }
+        )
 
         let batchIDList = Array(batchIDs)
-        let scoresToInsert = allScores
+        // Drop burst near-duplicates before pool selection so they never enter any of the
+        // four topK pools (the thematic/aesthetic/geometric pools select on raw axis score,
+        // where the temporal penalty never applies). See decision #84.
+        let scoresToInsert = allScores.filter { s in
+            !Self.isBurstNearDuplicate(
+                captureDateA: imageMeta[s.imageAID]?.captureDate,
+                captureDateB: imageMeta[s.imageBID]?.captureDate,
+                filenameA: imageMeta[s.imageAID]?.filename ?? "",
+                filenameB: imageMeta[s.imageBID]?.filename ?? ""
+            )
+        }
         try db.write { db in
             // Orphan sweep: remove pairs for deactivated images (run once per index).
             try db.execute(sql: """
@@ -477,7 +623,7 @@ public actor IndexingEngine {
             var toInsert = [String: PairScore]()
             var compositeKeys = Set<String>()
             for (_, scores) in perImage {
-                for s in scores.sorted(by: { $0.compositeScore > $1.compositeScore }).prefix(topK) {
+                for s in Self.orderedByScore(scores, { $0.compositeScore }).prefix(topK) {
                     let key = "\(s.imageAID)_\(s.imageBID)"
                     if toInsert[key] == nil {
                         toInsert[key] = s
@@ -488,10 +634,10 @@ public actor IndexingEngine {
 
             let thematicK = max(30, topK / 3)
             for (_, scores) in perImage {
-                let thematicCandidates = scores
-                    .filter { $0.thematicScore >= 0.20 }
-                    .sorted { $0.thematicScore > $1.thematicScore }
-                    .prefix(thematicK)
+                let thematicCandidates = Self.orderedByScore(
+                    scores.filter { $0.thematicScore >= 0.20 },
+                    { $0.thematicScore }
+                ).prefix(thematicK)
                 for s in thematicCandidates {
                     let key = "\(s.imageAID)_\(s.imageBID)"
                     if toInsert[key] == nil { toInsert[key] = s }
@@ -505,7 +651,7 @@ public actor IndexingEngine {
             let geometricK = 5
             var geometricKeys = Set<String>()
             for (_, scores) in perImage {
-                let byGeo = scores.sorted { $0.geometricScore > $1.geometricScore }
+                let byGeo = Self.orderedByScore(scores, { $0.geometricScore })
                 var slotsUsed = 0
                 var hasNonStructural = false
                 for s in byGeo {
@@ -537,9 +683,10 @@ public actor IndexingEngine {
             let aestheticK = 5
             var aestheticKeys = Set<String>()
             for (_, scores) in perImage {
-                let byAesthetic = scores
-                    .filter { $0.aestheticScore >= 0.55 }
-                    .sorted { $0.aestheticScore > $1.aestheticScore }
+                let byAesthetic = Self.orderedByScore(
+                    scores.filter { $0.aestheticScore >= 0.55 },
+                    { $0.aestheticScore }
+                )
                 for s in byAesthetic.prefix(aestheticK) {
                     let key = "\(s.imageAID)_\(s.imageBID)"
                     if toInsert[key] == nil {
@@ -591,7 +738,8 @@ public actor IndexingEngine {
     private func runCrossFolderScoring(
         batchIDs: Set<Int64>,
         weights: ScoringWeights,
-        topK: Int
+        topK: Int,
+        continuation: AsyncStream<IndexingProgress>.Continuation
     ) async throws {
         guard !batchIDs.isEmpty else { return }
         try Task.checkCancellation()
@@ -600,7 +748,13 @@ public actor IndexingEngine {
         let batchVectors = allVectors.filter {  batchIDs.contains($0.imageID) }
         let otherVectors = allVectors.filter { !batchIDs.contains($0.imageID) }
 
+        // No other active images to score against (e.g. a single folder) — nothing to do.
         guard !batchVectors.isEmpty, !otherVectors.isEmpty else { return }
+
+        // Genuine cross-folder work exists — surface it in the UI label.
+        continuation.yield(IndexingProgress(
+            phase: .scoringCrossFolder, itemsComplete: 0, itemsTotal: 0
+        ))
 
         typealias ImageMeta = (captureDate: Double?, filename: String, caption: String,
                                accentHue: Double?, accentSaturation: Double?,
@@ -629,45 +783,65 @@ public actor IndexingEngine {
             return result
         }
 
+        // batch × all-other scoring. As in the intra-folder phase, PairScorer.score is
+        // pure, so each batch row is computed concurrently and merged serially. See #101.
         var allScores: [PairScore] = []
         allScores.reserveCapacity(batchVectors.count * otherVectors.count)
 
-        for vA in batchVectors {
-            try Task.checkCancellation()
-            let metaA = imageMeta[vA.imageID]
-            for vB in otherVectors {
-                let metaB = imageMeta[vB.imageID]
-                let s = PairScorer.score(
-                    imageAID: vA.imageID, vectorA: vA,
-                    imageBID: vB.imageID, vectorB: vB,
-                    captureDateA: metaA?.captureDate,
-                    captureDateB: metaB?.captureDate,
-                    filenameA: metaA?.filename ?? "",
-                    filenameB: metaB?.filename ?? "",
-                    captionA: metaA?.caption ?? "",
-                    captionB: metaB?.caption ?? "",
-                    accentHueA: metaA?.accentHue, accentSaturationA: metaA?.accentSaturation,
-                    accentHueB: metaB?.accentHue, accentSaturationB: metaB?.accentSaturation,
-                    weightCentroidXA: metaA?.weightCentroidX.map(Float.init),
-                    weightCentroidYA: metaA?.weightCentroidY.map(Float.init),
-                    weightCentroidXB: metaB?.weightCentroidX.map(Float.init),
-                    weightCentroidYB: metaB?.weightCentroidY.map(Float.init),
-                    gazeDirectionXA: metaA?.gazeDirectionX.map(Float.init),
-                    gazeDirectionXB: metaB?.gazeDirectionX.map(Float.init),
-                    colorProfileA: metaA?.colorProfile ?? "color",
-                    colorProfileB: metaB?.colorProfile ?? "color",
-                    weights: weights
-                )
-                if s.compositeScore > 0 {
-                    allScores.append(s)
+        try await mapConcurrent(
+            Array(batchVectors.indices),
+            concurrency: cpuConcurrency,
+            work: { i -> [PairScore] in
+                let vA = batchVectors[i]
+                let metaA = imageMeta[vA.imageID]
+                var rowScores: [PairScore] = []
+                for vB in otherVectors {
+                    let metaB = imageMeta[vB.imageID]
+                    let s = PairScorer.score(
+                        imageAID: vA.imageID, vectorA: vA,
+                        imageBID: vB.imageID, vectorB: vB,
+                        captureDateA: metaA?.captureDate,
+                        captureDateB: metaB?.captureDate,
+                        filenameA: metaA?.filename ?? "",
+                        filenameB: metaB?.filename ?? "",
+                        captionA: metaA?.caption ?? "",
+                        captionB: metaB?.caption ?? "",
+                        accentHueA: metaA?.accentHue, accentSaturationA: metaA?.accentSaturation,
+                        accentHueB: metaB?.accentHue, accentSaturationB: metaB?.accentSaturation,
+                        weightCentroidXA: metaA?.weightCentroidX.map(Float.init),
+                        weightCentroidYA: metaA?.weightCentroidY.map(Float.init),
+                        weightCentroidXB: metaB?.weightCentroidX.map(Float.init),
+                        weightCentroidYB: metaB?.weightCentroidY.map(Float.init),
+                        gazeDirectionXA: metaA?.gazeDirectionX.map(Float.init),
+                        gazeDirectionXB: metaB?.gazeDirectionX.map(Float.init),
+                        colorProfileA: metaA?.colorProfile ?? "color",
+                        colorProfileB: metaB?.colorProfile ?? "color",
+                        weights: weights
+                    )
+                    if s.compositeScore > 0 {
+                        rowScores.append(s)
+                    }
                 }
+                return rowScores
+            },
+            consume: { rowScores in
+                allScores.append(contentsOf: rowScores)
             }
-        }
+        )
 
         try Task.checkCancellation()
 
         let batchIDList = Array(batchIDs)
-        let scoresToInsert = allScores
+        // Drop burst near-duplicates before pool selection — see decision #84 and the
+        // matching guard in runIntraFolderScoring.
+        let scoresToInsert = allScores.filter { s in
+            !Self.isBurstNearDuplicate(
+                captureDateA: imageMeta[s.imageAID]?.captureDate,
+                captureDateB: imageMeta[s.imageBID]?.captureDate,
+                filenameA: imageMeta[s.imageAID]?.filename ?? "",
+                filenameB: imageMeta[s.imageBID]?.filename ?? ""
+            )
+        }
         try db.write { db in
             // Delete existing cross-folder pairs for this batch (one image inside,
             // one outside). Intra-folder pairs (both inside) were handled by phase 1.
@@ -689,7 +863,7 @@ public actor IndexingEngine {
             var toInsert = [String: PairScore]()
             var compositeKeys = Set<String>()
             for (_, scores) in perImage {
-                for s in scores.sorted(by: { $0.compositeScore > $1.compositeScore }).prefix(topK) {
+                for s in Self.orderedByScore(scores, { $0.compositeScore }).prefix(topK) {
                     let key = "\(s.imageAID)_\(s.imageBID)"
                     if toInsert[key] == nil {
                         toInsert[key] = s
@@ -700,10 +874,10 @@ public actor IndexingEngine {
 
             let thematicK = max(30, topK / 3)
             for (_, scores) in perImage {
-                let thematicCandidates = scores
-                    .filter { $0.thematicScore >= 0.20 }
-                    .sorted { $0.thematicScore > $1.thematicScore }
-                    .prefix(thematicK)
+                let thematicCandidates = Self.orderedByScore(
+                    scores.filter { $0.thematicScore >= 0.20 },
+                    { $0.thematicScore }
+                ).prefix(thematicK)
                 for s in thematicCandidates {
                     let key = "\(s.imageAID)_\(s.imageBID)"
                     if toInsert[key] == nil { toInsert[key] = s }
@@ -715,7 +889,7 @@ public actor IndexingEngine {
             let geometricK = 5
             var geometricKeys = Set<String>()
             for (_, scores) in perImage {
-                let byGeo = scores.sorted { $0.geometricScore > $1.geometricScore }
+                let byGeo = Self.orderedByScore(scores, { $0.geometricScore })
                 var slotsUsed = 0
                 var hasNonStructural = false
                 for s in byGeo {
@@ -744,9 +918,10 @@ public actor IndexingEngine {
             let aestheticK = 5
             var aestheticKeys = Set<String>()
             for (_, scores) in perImage {
-                let byAesthetic = scores
-                    .filter { $0.aestheticScore >= 0.55 }
-                    .sorted { $0.aestheticScore > $1.aestheticScore }
+                let byAesthetic = Self.orderedByScore(
+                    scores.filter { $0.aestheticScore >= 0.55 },
+                    { $0.aestheticScore }
+                )
                 for s in byAesthetic.prefix(aestheticK) {
                     let key = "\(s.imageAID)_\(s.imageBID)"
                     if toInsert[key] == nil {
@@ -879,47 +1054,53 @@ public actor IndexingEngine {
         continuation: AsyncStream<IndexingProgress>.Continuation
     ) async throws -> [DuplicateGroupSummary] {
 
-        // Compute dHash for any images that don't have one yet
-        for (idx, (imageID, url)) in imageIDs.enumerated() {
-            try Task.checkCancellation()
-
-            let alreadyHashed: Bool = try db.read { db in
-                try Row.fetchOne(
-                    db,
-                    sql: "SELECT dHash FROM images WHERE id = ? AND dHash IS NOT NULL",
-                    arguments: [imageID]
-                ) != nil
-            }
-            if !alreadyHashed {
-                let hash = (try? PerceptualHasher.dHash(url: url)) ?? ""
-                try db.write { db in
-                    try db.execute(
-                        sql: "UPDATE images SET dHash = ? WHERE id = ?",
-                        arguments: [hash, imageID]
-                    )
-                }
-            }
-
-            continuation.yield(IndexingProgress(
-                phase: .duplicateDetection,
-                itemsComplete: idx + 1,
-                itemsTotal: imageIDs.count
-            ))
+        // Compute dHash for any images that don't have one yet. The "already hashed?"
+        // check is hoisted into a single read so the hash computation (CGImageSource
+        // decode + dHash) can run concurrently; DB writes stay serial in `consume`.
+        let alreadyHashed: Set<Int64> = try db.read { db in
+            try Int64.fetchSet(db, sql: "SELECT id FROM images WHERE dHash IS NOT NULL")
         }
+        var hashedDone = 0
+        try await mapConcurrent(
+            imageIDs,
+            concurrency: cpuConcurrency,
+            work: { pair -> (Int64, String)? in
+                let (imageID, url) = pair
+                guard !alreadyHashed.contains(imageID) else { return nil }
+                return (imageID, (try? PerceptualHasher.dHash(url: url)) ?? "")
+            },
+            consume: { result in
+                if let (imageID, hash) = result {
+                    try db.write { db in
+                        try db.execute(
+                            sql: "UPDATE images SET dHash = ? WHERE id = ?",
+                            arguments: [hash, imageID]
+                        )
+                    }
+                }
+                hashedDone += 1
+                continuation.yield(IndexingProgress(
+                    phase: .duplicateDetection,
+                    itemsComplete: hashedDone,
+                    itemsTotal: imageIDs.count
+                ))
+            }
+        )
 
         // Load all hashes and find groups using union-find.
         // Extract to plain Swift tuples immediately so Row values
         // never cross the actor boundary (Row is not Sendable in GRDB 6).
-        typealias HashRow = (id: Int64, dHash: String, captureDate: Double?)
+        typealias HashRow = (id: Int64, dHash: String, captureDate: Double?, filename: String)
         let hashRows: [HashRow] = try db.read { db in
             try Row.fetchAll(
                 db,
-                sql: "SELECT id, dHash, captureDate FROM images WHERE isActive = 1 AND dHash IS NOT NULL AND dHash != ''"
+                sql: "SELECT id, dHash, captureDate, filename FROM images WHERE isActive = 1 AND dHash IS NOT NULL AND dHash != ''"
             ).map { row in
                 (
                     id: row["id"] as! Int64,
                     dHash: row["dHash"] as! String,
-                    captureDate: (row["captureDate"] as? Double) ?? (row["captureDate"] as? Int64).map(Double.init)
+                    captureDate: (row["captureDate"] as? Double) ?? (row["captureDate"] as? Int64).map(Double.init),
+                    filename: row["filename"] as! String
                 )
             }
         }
@@ -946,6 +1127,23 @@ public actor IndexingEngine {
                 let hB  = hashRows[j].dHash
                 if PerceptualHasher.areDuplicates(hA, hB, threshold: settings.hammingThreshold) {
                     union(idA, idB)
+                    continue
+                }
+
+                // Filename-variant rule — documented last resort (decision #94).
+                // Crop/re-export copies of the same photo drift 7–20 Hamming bits,
+                // and no pixel-level threshold separates them from genuine burst
+                // frames (a real same-second burst pair in the reference library
+                // measures Hamming 19 / CLIP 0.964 — *more* similar than a crop
+                // copy at Hamming 20 / CLIP 0.934). So crops are matched by
+                // export naming convention instead, gated on identical EXIF
+                // captureDate: a re-export keeps its capture timestamp, while a
+                // name collision from camera counter rollover does not.
+                if let dA = hashRows[i].captureDate,
+                   let dB = hashRows[j].captureDate,
+                   dA == dB,
+                   FilenameVariants.areVariants(hashRows[i].filename, hashRows[j].filename) {
+                    union(idA, idB)
                 }
             }
         }
@@ -967,8 +1165,11 @@ public actor IndexingEngine {
         let summaries: [DuplicateGroupSummary] = try db.write { db in
             var result: [DuplicateGroupSummary] = []
 
-            // Clear any previous duplicate group assignments
+            // Clear any previous duplicate group assignments. Old group rows are
+            // deleted too — they are re-created from scratch every run, and
+            // leaving them accumulates thousands of unreferenced rows.
             try db.execute(sql: "UPDATE images SET duplicateGroupID = NULL, isHero = 1")
+            try db.execute(sql: "DELETE FROM duplicateGroups")
 
             for (_, memberIDs) in duplicateOnlyGroups {
                 var group = DuplicateGroup(memberCount: memberIDs.count)
@@ -1025,6 +1226,163 @@ public actor IndexingEngine {
         try db.read { db in
             try FeatureVector.fetchAll(db)
         }
+    }
+
+    // MARK: - Phase 8.5: Role-join candidate generation (decision #102)
+
+    /// Generates entry-gate candidate pairs from per-image RoleProfiles and INSERTs
+    /// them into `pairs` (selectedFor = "role", join hypothesis in `rationale`) for
+    /// the validation judge to score. These are conceptual connections weak on every
+    /// cheap axis that the four-pool topK never surfaces (backlog #95). Idempotent:
+    /// skips pairs already in the table; re-runs each index (role rows are wiped by
+    /// the per-run scoped DELETE and regenerated here). Validated config (Phase 0):
+    /// joins 1/2/3, per-image-per-priority cap 4. Public so it can be re-run
+    /// standalone (e.g. after a caption/profile change) without a full re-index.
+    public func generateRoleCandidates(weights: ScoringWeights = .default) async throws {
+        try Task.checkCancellation()   // bail fast if a newer index superseded us
+        struct Profiled { let id: Int64; let profile: RoleProfile }
+        let profiled: [Profiled] = try db.read { db in
+            let rows = try Row.fetchAll(db, sql: """
+                SELECT id, roleProfile FROM images
+                WHERE isActive = 1 AND isHero = 1 AND roleProfile IS NOT NULL
+            """)
+            let dec = JSONDecoder()
+            return rows.compactMap { row -> Profiled? in
+                guard let id = row["id"] as? Int64,
+                      let json = row["roleProfile"] as? String,
+                      let data = json.data(using: .utf8),
+                      let p = try? dec.decode(RoleProfile.self, from: data) else { return nil }
+                return Profiled(id: id, profile: p)
+            }
+        }
+        guard profiled.count > 1 else { return }
+
+        // Corpus-derived non-discriminating concepts, then capped joins over all pairs.
+        let generic = RoleJoins.genericConcepts(profiled.map(\.profile))
+        let cap = 4
+        var degree: [String: Int] = [:]
+        struct Cand { let a: Int64; let b: Int64; let join: RoleJoins.Candidate }
+        var cands: [Cand] = []
+        for i in 0..<profiled.count {
+            for j in (i + 1)..<profiled.count {
+                guard let c = RoleJoins.join(profiled[i].profile, profiled[j].profile, generic: generic) else { continue }
+                let ka = "\(profiled[i].id)#\(c.priority)", kb = "\(profiled[j].id)#\(c.priority)"
+                if (degree[ka] ?? 0) < cap && (degree[kb] ?? 0) < cap {
+                    cands.append(Cand(a: profiled[i].id, b: profiled[j].id, join: c))
+                    degree[ka, default: 0] += 1; degree[kb, default: 0] += 1
+                }
+            }
+        }
+        guard !cands.isEmpty else { return }
+
+        // Vectors + metadata for axis scoring (reuse PairScorer); existing-pair set for dedup.
+        let vectors = try loadHeroVectors()
+        let vByID = Dictionary(uniqueKeysWithValues: vectors.map { ($0.imageID, $0) })
+        typealias ImageMeta = (captureDate: Double?, filename: String, caption: String,
+                               accentHue: Double?, accentSaturation: Double?,
+                               weightCentroidX: Double?, weightCentroidY: Double?,
+                               gazeDirectionX: Double?, colorProfile: String)
+        let heroIDs = vectors.map(\.imageID)
+        let meta: [Int64: ImageMeta] = try db.read { db in
+            guard !heroIDs.isEmpty else { return [:] }
+            let ids = heroIDs.map { "\($0)" }.joined(separator: ",")
+            let rows = try Row.fetchAll(db, sql: "SELECT id, captureDate, filename, caption, accentHue, accentSaturation, weightCentroidX, weightCentroidY, gazeDirectionX, colorProfile FROM images WHERE id IN (\(ids))")
+            var r = [Int64: ImageMeta]()
+            for row in rows {
+                let id = row["id"] as! Int64
+                r[id] = (
+                    captureDate: (row["captureDate"] as? Double) ?? (row["captureDate"] as? Int64).map(Double.init),
+                    filename: row["filename"] as? String ?? "",
+                    caption: row["caption"] as? String ?? "",
+                    accentHue: row["accentHue"] as? Double,
+                    accentSaturation: row["accentSaturation"] as? Double,
+                    weightCentroidX: row["weightCentroidX"] as? Double,
+                    weightCentroidY: row["weightCentroidY"] as? Double,
+                    gazeDirectionX: row["gazeDirectionX"] as? Double,
+                    colorProfile: row["colorProfile"] as? String ?? "color"
+                )
+            }
+            return r
+        }
+        // Canonical key → existing pairID. A join candidate that already has a pair
+        // row (e.g. surfaced as composite/aesthetic) must still get the role
+        // hypothesis + validate() treatment, so we UPDATE it rather than skip it.
+        let existing: [String: Int64] = try db.read { db in
+            let rows = try Row.fetchAll(db, sql: "SELECT id, imageAID, imageBID FROM pairs")
+            var m = [String: Int64]()
+            for row in rows {
+                guard let id = row["id"] as? Int64,
+                      let a = row["imageAID"] as? Int64, let b = row["imageBID"] as? Int64 else { continue }
+                let (lo, hi) = a < b ? (a, b) : (b, a)
+                m["\(lo)_\(hi)"] = id
+            }
+            return m
+        }
+
+        var inserted = 0, updated = 0
+        try db.write { db in
+            for c in cands {
+                let (lo, hi) = c.a < c.b ? (c.a, c.b) : (c.b, c.a)
+                let hypothesis = String(c.join.hypothesis.prefix(240))
+                // Near-duplicate guard — mirror ThematicV2BackgroundPass.fetchCandidates
+                // (decision #102/#84): burst frames (identical/near-identical captureDate)
+                // and filename export variants fire joins on near-identical profiles. The
+                // judge excludes them from scoring anyway, so a role candidate here would
+                // only ever sit unjudged and surface on its inflated cluster thematicScore.
+                // Skip them at the source.
+                let mLo = meta[lo]; let mHi = meta[hi]
+                if let da = mLo?.captureDate, let dbb = mHi?.captureDate, abs(da - dbb) <= 300 { continue }
+                if FilenameVariants.areVariants(mLo?.filename ?? "", mHi?.filename ?? "") { continue }
+                if let pairID = existing["\(lo)_\(hi)"] {
+                    // Existing pair: attach the hypothesis and re-route to validate() by
+                    // clearing any prior (cold) ThematicV2 verdict — but ONLY when the
+                    // hypothesis is new or changed. RoleJoins is deterministic and profiles
+                    // are stable, so an unchanged hypothesis must be a no-op; otherwise every
+                    // re-index would re-null and re-judge the same surviving pairs forever,
+                    // thrashing the judge budget (decision #102).
+                    try db.execute(sql: """
+                        UPDATE pairs SET roleHypothesis = ?,
+                                         thematicV2Score = NULL,
+                                         thematicV2RelationshipType = NULL,
+                                         thematicV2Rationale = NULL
+                        WHERE id = ? AND (roleHypothesis IS NULL OR roleHypothesis != ?)
+                    """, arguments: [hypothesis, pairID, hypothesis])
+                    if db.changesCount > 0 { updated += 1 }
+                    continue
+                }
+                guard let vA = vByID[lo], let vB = vByID[hi] else { continue }
+                let mA = mLo; let mB = mHi
+                let s = PairScorer.score(
+                    imageAID: lo, vectorA: vA, imageBID: hi, vectorB: vB,
+                    captureDateA: mA?.captureDate, captureDateB: mB?.captureDate,
+                    filenameA: mA?.filename ?? "", filenameB: mB?.filename ?? "",
+                    captionA: mA?.caption ?? "", captionB: mB?.caption ?? "",
+                    accentHueA: mA?.accentHue, accentSaturationA: mA?.accentSaturation,
+                    accentHueB: mB?.accentHue, accentSaturationB: mB?.accentSaturation,
+                    weightCentroidXA: mA?.weightCentroidX.map(Float.init), weightCentroidYA: mA?.weightCentroidY.map(Float.init),
+                    weightCentroidXB: mB?.weightCentroidX.map(Float.init), weightCentroidYB: mB?.weightCentroidY.map(Float.init),
+                    gazeDirectionXA: mA?.gazeDirectionX.map(Float.init), gazeDirectionXB: mB?.gazeDirectionX.map(Float.init),
+                    colorProfileA: mA?.colorProfile ?? "color", colorProfileB: mB?.colorProfile ?? "color",
+                    weights: weights
+                )
+                var rec = PairRecord(
+                    imageAID: s.imageAID, imageBID: s.imageBID,
+                    aestheticScore: Double(s.aestheticScore), aestheticSubmode: s.aestheticSubmode,
+                    geometricScore: Double(s.geometricScore),
+                    rawEdgeSim: Double(s.rawEdgeSim), rawGridSim: Double(s.rawGridSim),
+                    maxEdgePeakedness: Double(s.maxEdgePeakedness), maxGridVariance: Double(s.maxGridVariance),
+                    edgePeakednessMult: Double(s.edgePeakednessMult), gridVarianceMult: Double(s.gridVarianceMult),
+                    selectedFor: "role",
+                    thematicScore: Double(s.thematicScore), compositeScore: Double(s.compositeScore),
+                    rationale: c.join.hypothesis,
+                    geometricSubmode: s.geometricSubmode,
+                    roleHypothesis: hypothesis
+                )
+                try rec.insert(db)
+                inserted += 1
+            }
+        }
+        print("RoleCandidates: \(inserted) new + \(updated) existing tagged of \(cands.count) joins (\(profiled.count) profiles)")
     }
 
     /// Loads feature vectors for hero images only (one per duplicate stack).
@@ -1170,9 +1528,84 @@ public actor IndexingEngine {
         }
     }
 
-    private func generateThumbnail(imageID: Int64, sourceURL: URL, dir: URL) throws {
+    /// Runs `work` over `items` with at most `concurrency` tasks in flight, invoking
+    /// `consume` on the engine actor for each result as it completes.
+    ///
+    /// `work` MUST be pure/`Sendable` — no actor state, no DB access — because it runs on
+    /// the concurrent task pool. All DB writes belong in `consume`, which runs serially on
+    /// the engine actor, preserving GRDB's single-writer requirement. This is the bounded
+    /// producer-consumer pattern used by Phase 3 CLIP extraction, generalised. See #101.
+    private func mapConcurrent<Item: Sendable, Result: Sendable>(
+        _ items: [Item],
+        concurrency: Int,
+        work: @escaping @Sendable (Item) async throws -> Result,
+        consume: (Result) throws -> Void
+    ) async throws {
+        var iterator = items.makeIterator()
+        try await withThrowingTaskGroup(of: Result.self) { group in
+            func launchNext() {
+                guard let item = iterator.next() else { return }
+                group.addTask { try await work(item) }
+            }
+            for _ in 0..<max(1, concurrency) { launchNext() }
+            while let result = try await group.next() {
+                try Task.checkCancellation()
+                try consume(result)
+                launchNext()
+            }
+        }
+    }
+
+    /// Deterministic ordering for topK pool selection: primary `key` descending with a
+    /// stable tiebreaker on pair identity. Because scoring is now parallel, `scoresToInsert`
+    /// arrives in nondeterministic order; without a tiebreaker an unstable `sorted` + `prefix`
+    /// would select different pairs among exact score ties run-to-run. This keeps the stored
+    /// pair set fully reproducible regardless of completion order. See decision #101.
+    private static func orderedByScore(
+        _ scores: [PairScore],
+        _ key: (PairScore) -> Float
+    ) -> [PairScore] {
+        scores.sorted { a, b in
+            let sa = key(a), sb = key(b)
+            if sa != sb { return sa > sb }
+            if a.imageAID != b.imageAID { return a.imageAID < b.imageAID }
+            return a.imageBID < b.imageBID
+        }
+    }
+
+    /// Burst near-duplicate gap (seconds). Two images shot within this window are
+    /// treated as same-session frames of one scene rather than a meaningful pair.
+    /// Matches the gap used by the ThematicV2 judge (`fetchCandidates`) so a pair the
+    /// judge would reject never enters the four-pool topK either. See decisions #84, #94.
+    static let kBurstGapSeconds: Double = 300
+
+    /// True when a candidate pair is a burst near-duplicate that must never enter the
+    /// four-pool topK: either two same-session frames (identical/near-identical
+    /// `captureDate`) or filename export variants. This is the SELECTION-side guard the
+    /// four-pool topK previously lacked — burst frames caption alike, so they reach the
+    /// thematic pool (which selects on raw `thematicScore`, where the temporal penalty
+    /// never applies) and surface as pairs. Distinct from dHash duplicate detection
+    /// (#94, true duplicates): these are genuinely different frames that merely caption
+    /// alike, so they aren't grouped/deactivated — they must be filtered here. The
+    /// `FilenameVariants` arm mirrors the existing judge/role-candidate guards; crop/
+    /// re-export duplicates themselves are handled upstream by #94 grouping. See #84.
+    static func isBurstNearDuplicate(
+        captureDateA: Double?, captureDateB: Double?,
+        filenameA: String, filenameB: String
+    ) -> Bool {
+        if let da = captureDateA, let db = captureDateB,
+           abs(da - db) <= kBurstGapSeconds { return true }
+        if FilenameVariants.areVariants(filenameA, filenameB) { return true }
+        return false
+    }
+
+    /// Writes the 512px thumbnail file for an image. Returns the thumbnail's filename when
+    /// freshly written (so the caller can persist `thumbnailPath`), or nil when the file
+    /// already existed or generation failed — matching the original early-return behaviour.
+    /// Static and pure (no actor state, no DB) so it is safe to call concurrently. See #101.
+    private static func writeThumbnailFile(imageID: Int64, sourceURL: URL, dir: URL) -> String? {
         let dest = dir.appendingPathComponent("\(imageID).jpg")
-        guard !FileManager.default.fileExists(atPath: dest.path) else { return }
+        guard !FileManager.default.fileExists(atPath: dest.path) else { return nil }
 
         guard
             let src = CGImageSourceCreateWithURL(sourceURL as CFURL, nil),
@@ -1187,20 +1620,14 @@ public actor IndexingEngine {
             let destDest = CGImageDestinationCreateWithURL(
                 dest as CFURL, "public.jpeg" as CFString, 1, nil
             )
-        else { return }
+        else { return nil }
 
         CGImageDestinationAddImage(
             destDest, thumb,
             [kCGImageDestinationLossyCompressionQuality: 0.8] as CFDictionary
         )
-        CGImageDestinationFinalize(destDest)
-
-        try db.write { db in
-            try db.execute(
-                sql: "UPDATE images SET thumbnailPath = ? WHERE id = ?",
-                arguments: [dest.lastPathComponent, imageID]
-            )
-        }
+        guard CGImageDestinationFinalize(destDest) else { return nil }
+        return dest.lastPathComponent
     }
 
     private func thumbnailDirectory() -> URL {
