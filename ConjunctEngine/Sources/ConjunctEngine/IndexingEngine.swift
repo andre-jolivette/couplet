@@ -571,7 +571,17 @@ public actor IndexingEngine {
         )
 
         let batchIDList = Array(batchIDs)
-        let scoresToInsert = allScores
+        // Drop burst near-duplicates before pool selection so they never enter any of the
+        // four topK pools (the thematic/aesthetic/geometric pools select on raw axis score,
+        // where the temporal penalty never applies). See decision #84.
+        let scoresToInsert = allScores.filter { s in
+            !Self.isBurstNearDuplicate(
+                captureDateA: imageMeta[s.imageAID]?.captureDate,
+                captureDateB: imageMeta[s.imageBID]?.captureDate,
+                filenameA: imageMeta[s.imageAID]?.filename ?? "",
+                filenameB: imageMeta[s.imageBID]?.filename ?? ""
+            )
+        }
         try db.write { db in
             // Orphan sweep: remove pairs for deactivated images (run once per index).
             try db.execute(sql: """
@@ -809,7 +819,16 @@ public actor IndexingEngine {
         try Task.checkCancellation()
 
         let batchIDList = Array(batchIDs)
-        let scoresToInsert = allScores
+        // Drop burst near-duplicates before pool selection — see decision #84 and the
+        // matching guard in runIntraFolderScoring.
+        let scoresToInsert = allScores.filter { s in
+            !Self.isBurstNearDuplicate(
+                captureDateA: imageMeta[s.imageAID]?.captureDate,
+                captureDateB: imageMeta[s.imageBID]?.captureDate,
+                filenameA: imageMeta[s.imageAID]?.filename ?? "",
+                filenameB: imageMeta[s.imageBID]?.filename ?? ""
+            )
+        }
         try db.write { db in
             // Delete existing cross-folder pairs for this batch (one image inside,
             // one outside). Intra-folder pairs (both inside) were handled by phase 1.
@@ -1539,6 +1558,32 @@ public actor IndexingEngine {
             if a.imageAID != b.imageAID { return a.imageAID < b.imageAID }
             return a.imageBID < b.imageBID
         }
+    }
+
+    /// Burst near-duplicate gap (seconds). Two images shot within this window are
+    /// treated as same-session frames of one scene rather than a meaningful pair.
+    /// Matches the gap used by the ThematicV2 judge (`fetchCandidates`) so a pair the
+    /// judge would reject never enters the four-pool topK either. See decisions #84, #94.
+    static let kBurstGapSeconds: Double = 300
+
+    /// True when a candidate pair is a burst near-duplicate that must never enter the
+    /// four-pool topK: either two same-session frames (identical/near-identical
+    /// `captureDate`) or filename export variants. This is the SELECTION-side guard the
+    /// four-pool topK previously lacked — burst frames caption alike, so they reach the
+    /// thematic pool (which selects on raw `thematicScore`, where the temporal penalty
+    /// never applies) and surface as pairs. Distinct from dHash duplicate detection
+    /// (#94, true duplicates): these are genuinely different frames that merely caption
+    /// alike, so they aren't grouped/deactivated — they must be filtered here. The
+    /// `FilenameVariants` arm mirrors the existing judge/role-candidate guards; crop/
+    /// re-export duplicates themselves are handled upstream by #94 grouping. See #84.
+    static func isBurstNearDuplicate(
+        captureDateA: Double?, captureDateB: Double?,
+        filenameA: String, filenameB: String
+    ) -> Bool {
+        if let da = captureDateA, let db = captureDateB,
+           abs(da - db) <= kBurstGapSeconds { return true }
+        if FilenameVariants.areVariants(filenameA, filenameB) { return true }
+        return false
     }
 
     /// Writes the 512px thumbnail file for an image. Returns the thumbnail's filename when

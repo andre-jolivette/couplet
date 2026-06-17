@@ -114,6 +114,51 @@ final class FilenameVariantsTests: XCTestCase {
     }
 }
 
+// ── BurstNearDuplicateGuardTests ──────────────────────────────────────────────
+// Selection-side burst guard for the four-pool topK (decision #84). These are
+// genuinely different frames that caption alike — distinct from dHash duplicates
+// (#94) — so they must be filtered out of pool selection by captureDate gap.
+final class BurstNearDuplicateGuardTests: XCTestCase {
+    private func isBurst(_ a: Double?, _ b: Double?,
+                         _ fa: String = "a.jpg", _ fb: String = "b.jpg") -> Bool {
+        IndexingEngine.isBurstNearDuplicate(
+            captureDateA: a, captureDateB: b, filenameA: fa, filenameB: fb
+        )
+    }
+
+    func testSameSecondFramesAreBurst() {
+        XCTAssertTrue(isBurst(1_700_000_000, 1_700_000_000))
+    }
+
+    func testWithinGapIsBurst() {
+        // Inclusive boundary at kBurstGapSeconds, and clearly inside it.
+        XCTAssertTrue(isBurst(1_700_000_000, 1_700_000_000 + 30))
+        XCTAssertTrue(isBurst(1_700_000_000, 1_700_000_000 + IndexingEngine.kBurstGapSeconds))
+    }
+
+    func testJustOutsideGapIsNotBurst() {
+        XCTAssertFalse(isBurst(1_700_000_000, 1_700_000_000 + IndexingEngine.kBurstGapSeconds + 1))
+    }
+
+    func testMinutesApartIsNotBurst() {
+        // 5min-1hr band — same event but a meaningful gap; must survive.
+        XCTAssertFalse(isBurst(1_700_000_000, 1_700_000_000 + 3600))
+    }
+
+    func testNilCaptureDatesFallBackToFilenameOnly() {
+        // No date signal → only filename-variant arm can fire.
+        XCTAssertFalse(isBurst(nil, 1_700_000_000))
+        XCTAssertFalse(isBurst(nil, nil))
+        XCTAssertTrue(isBurst(nil, nil, "00-20250504-_R017085.jpg", "20250504-_R017085.jpg"))
+    }
+
+    func testFilenameVariantArmFiresIndependentOfDate() {
+        // Export variant far apart in time is still caught (mirrors #94/judge guards).
+        XCTAssertTrue(isBurst(1_700_000_000, 1_700_099_999,
+                              "63-20250507-_DSF0572.jpg", "20250507-_DSF0572.jpg"))
+    }
+}
+
 // ── PairScorerTests ───────────────────────────────────────────────────────────
 
 final class PairScorerTests: XCTestCase {
