@@ -12,6 +12,7 @@ public actor IndexingEngine {
     private let db: DatabaseManager
     private let clipEngine: any CLIPInferenceEngine
     private let captioningEngine: any CaptioningEngine
+    private let roleExtractionEngine: any RoleExtractionEngine
     /// Concurrency cap for CLIP feature extraction (Phase 3). CLIP is ANE-bound, so a
     /// modest cap avoids contention; left conservative deliberately. See decision #101.
     private let maxConcurrency: Int
@@ -30,11 +31,13 @@ public actor IndexingEngine {
         db: DatabaseManager,
         clipEngine: any CLIPInferenceEngine,
         captioningEngine: any CaptioningEngine = MockCaptioningEngine(),
+        roleExtractionEngine: any RoleExtractionEngine = MockRoleExtractionEngine(),
         maxConcurrency: Int = min(ProcessInfo.processInfo.processorCount, 4)
     ) {
         self.db = db
         self.clipEngine = clipEngine
         self.captioningEngine = captioningEngine
+        self.roleExtractionEngine = roleExtractionEngine
         self.maxConcurrency = maxConcurrency
         let cores = ProcessInfo.processInfo.processorCount
         self.cpuConcurrency = max(1, cores)
@@ -76,6 +79,20 @@ public actor IndexingEngine {
                             )
                         } catch {
                             // CancellationError or DB error — signal done either way
+                        }
+                        // Phase 8.5: role-join entry-gate candidates (decision #102).
+                        // Must run after all normal pairs (intra + cross) exist so dedup is
+                        // accurate AND so the cross-folder scoped DELETE can't wipe freshly
+                        // inserted role rows — hence its placement here. It depends only on
+                        // persisted roleProfiles + the final pairs table, and is idempotent,
+                        // so a newer index that cancels this task simply re-runs it; if THIS
+                        // task is superseded we skip (the newer index will generate them).
+                        if Task.isCancelled {
+                            print("RoleCandidates: skipped — index superseded; newer index will regenerate")
+                        } else {
+                            do { try await self.generateRoleCandidates(weights: weights) }
+                            catch is CancellationError { /* superseded mid-run; newer index handles it */ }
+                            catch { print("RoleCandidates: \(error.localizedDescription)") }
                         }
                         continuation.yield(IndexingProgress(
                             phase: .backgroundScoringComplete,
@@ -278,8 +295,12 @@ public actor IndexingEngine {
                 let text = try await captioningEngine.caption(imageURL: url)
                 if !text.isEmpty {
                     try db.write { db in
+                        // Null roleProfile alongside the caption write: a changed caption
+                        // invalidates the role profile extracted from the old text, so it
+                        // must be re-extracted in Phase 3.55 (decision #102, mirrors the
+                        // documented "roleProfile mirrors caption semantics" contract).
                         try db.execute(
-                            sql: "UPDATE images SET caption = ? WHERE id = ?",
+                            sql: "UPDATE images SET caption = ?, roleProfile = NULL WHERE id = ?",
                             arguments: [text, imageID]
                         )
                     }
@@ -292,6 +313,58 @@ public actor IndexingEngine {
                 phase: .captioning, itemsComplete: captioned, itemsTotal: captionTotal
             ))
         }
+
+        // ── Phase 3.55: Role extraction (decision #102) ───────────────────
+        // Extract a structured RoleProfile from each caption, feeding the role-join
+        // entry-gate candidate generator (RoleJoins). Text-only — reads the caption
+        // the captioning phase produced, so no image decoding. Sequential like
+        // captioning (one local LLM call at a time). Skipped entirely when every
+        // captioned image already has a profile, so normal re-indexes aren't slowed.
+        let roleTargets: [(Int64, String)] = try db.read { db in
+            let rows = try Row.fetchAll(db, sql: """
+                SELECT id, caption FROM images
+                WHERE isActive = 1
+                  AND caption IS NOT NULL AND caption != ''
+                  AND roleProfile IS NULL
+            """)
+            return rows.compactMap { row -> (Int64, String)? in
+                guard let id = row["id"] as? Int64,
+                      let caption = row["caption"] as? String else { return nil }
+                return (id, caption)
+            }
+        }
+        if !roleTargets.isEmpty {
+            continuation.yield(IndexingProgress(
+                phase: .roleExtraction, itemsComplete: 0, itemsTotal: roleTargets.count
+            ))
+            let roleEncoder = JSONEncoder()
+            var rolesExtracted = 0
+            for (imageID, caption) in roleTargets {
+                try Task.checkCancellation()
+                do {
+                    let profile = try await roleExtractionEngine.extract(caption: caption)
+                    // Skip empty profiles (mirrors captioning's `if !text.isEmpty`): a
+                    // no-op/Mock engine returns an empty RoleProfile, and writing it as
+                    // non-null `{}` JSON would poison the `roleProfile IS NULL` sentinel
+                    // and permanently block real re-extraction. Leave NULL → retried.
+                    guard !profile.isEmpty else { continue }
+                    let jsonText = String(decoding: try roleEncoder.encode(profile), as: UTF8.self)
+                    try db.write { db in
+                        try db.execute(
+                            sql: "UPDATE images SET roleProfile = ? WHERE id = ?",
+                            arguments: [jsonText, imageID]
+                        )
+                    }
+                    rolesExtracted += 1
+                } catch {
+                    print("ROLE: skipped image \(imageID) — \(error.localizedDescription)")
+                }
+                continuation.yield(IndexingProgress(
+                    phase: .roleExtraction, itemsComplete: rolesExtracted, itemsTotal: roleTargets.count
+                ))
+            }
+        }
+
         // ── Phase 3.6: Accent color extraction ───────────────────────────
         // Backfills accentHue / accentSaturation for all active images that lack it.
         // Uses the cached 512px thumbnail when available (same pattern as Phase 3.5).
@@ -1121,6 +1194,163 @@ public actor IndexingEngine {
         try db.read { db in
             try FeatureVector.fetchAll(db)
         }
+    }
+
+    // MARK: - Phase 8.5: Role-join candidate generation (decision #102)
+
+    /// Generates entry-gate candidate pairs from per-image RoleProfiles and INSERTs
+    /// them into `pairs` (selectedFor = "role", join hypothesis in `rationale`) for
+    /// the validation judge to score. These are conceptual connections weak on every
+    /// cheap axis that the four-pool topK never surfaces (backlog #95). Idempotent:
+    /// skips pairs already in the table; re-runs each index (role rows are wiped by
+    /// the per-run scoped DELETE and regenerated here). Validated config (Phase 0):
+    /// joins 1/2/3, per-image-per-priority cap 4. Public so it can be re-run
+    /// standalone (e.g. after a caption/profile change) without a full re-index.
+    public func generateRoleCandidates(weights: ScoringWeights = .default) async throws {
+        try Task.checkCancellation()   // bail fast if a newer index superseded us
+        struct Profiled { let id: Int64; let profile: RoleProfile }
+        let profiled: [Profiled] = try db.read { db in
+            let rows = try Row.fetchAll(db, sql: """
+                SELECT id, roleProfile FROM images
+                WHERE isActive = 1 AND isHero = 1 AND roleProfile IS NOT NULL
+            """)
+            let dec = JSONDecoder()
+            return rows.compactMap { row -> Profiled? in
+                guard let id = row["id"] as? Int64,
+                      let json = row["roleProfile"] as? String,
+                      let data = json.data(using: .utf8),
+                      let p = try? dec.decode(RoleProfile.self, from: data) else { return nil }
+                return Profiled(id: id, profile: p)
+            }
+        }
+        guard profiled.count > 1 else { return }
+
+        // Corpus-derived non-discriminating concepts, then capped joins over all pairs.
+        let generic = RoleJoins.genericConcepts(profiled.map(\.profile))
+        let cap = 4
+        var degree: [String: Int] = [:]
+        struct Cand { let a: Int64; let b: Int64; let join: RoleJoins.Candidate }
+        var cands: [Cand] = []
+        for i in 0..<profiled.count {
+            for j in (i + 1)..<profiled.count {
+                guard let c = RoleJoins.join(profiled[i].profile, profiled[j].profile, generic: generic) else { continue }
+                let ka = "\(profiled[i].id)#\(c.priority)", kb = "\(profiled[j].id)#\(c.priority)"
+                if (degree[ka] ?? 0) < cap && (degree[kb] ?? 0) < cap {
+                    cands.append(Cand(a: profiled[i].id, b: profiled[j].id, join: c))
+                    degree[ka, default: 0] += 1; degree[kb, default: 0] += 1
+                }
+            }
+        }
+        guard !cands.isEmpty else { return }
+
+        // Vectors + metadata for axis scoring (reuse PairScorer); existing-pair set for dedup.
+        let vectors = try loadHeroVectors()
+        let vByID = Dictionary(uniqueKeysWithValues: vectors.map { ($0.imageID, $0) })
+        typealias ImageMeta = (captureDate: Double?, filename: String, caption: String,
+                               accentHue: Double?, accentSaturation: Double?,
+                               weightCentroidX: Double?, weightCentroidY: Double?,
+                               gazeDirectionX: Double?, colorProfile: String)
+        let heroIDs = vectors.map(\.imageID)
+        let meta: [Int64: ImageMeta] = try db.read { db in
+            guard !heroIDs.isEmpty else { return [:] }
+            let ids = heroIDs.map { "\($0)" }.joined(separator: ",")
+            let rows = try Row.fetchAll(db, sql: "SELECT id, captureDate, filename, caption, accentHue, accentSaturation, weightCentroidX, weightCentroidY, gazeDirectionX, colorProfile FROM images WHERE id IN (\(ids))")
+            var r = [Int64: ImageMeta]()
+            for row in rows {
+                let id = row["id"] as! Int64
+                r[id] = (
+                    captureDate: (row["captureDate"] as? Double) ?? (row["captureDate"] as? Int64).map(Double.init),
+                    filename: row["filename"] as? String ?? "",
+                    caption: row["caption"] as? String ?? "",
+                    accentHue: row["accentHue"] as? Double,
+                    accentSaturation: row["accentSaturation"] as? Double,
+                    weightCentroidX: row["weightCentroidX"] as? Double,
+                    weightCentroidY: row["weightCentroidY"] as? Double,
+                    gazeDirectionX: row["gazeDirectionX"] as? Double,
+                    colorProfile: row["colorProfile"] as? String ?? "color"
+                )
+            }
+            return r
+        }
+        // Canonical key → existing pairID. A join candidate that already has a pair
+        // row (e.g. surfaced as composite/aesthetic) must still get the role
+        // hypothesis + validate() treatment, so we UPDATE it rather than skip it.
+        let existing: [String: Int64] = try db.read { db in
+            let rows = try Row.fetchAll(db, sql: "SELECT id, imageAID, imageBID FROM pairs")
+            var m = [String: Int64]()
+            for row in rows {
+                guard let id = row["id"] as? Int64,
+                      let a = row["imageAID"] as? Int64, let b = row["imageBID"] as? Int64 else { continue }
+                let (lo, hi) = a < b ? (a, b) : (b, a)
+                m["\(lo)_\(hi)"] = id
+            }
+            return m
+        }
+
+        var inserted = 0, updated = 0
+        try db.write { db in
+            for c in cands {
+                let (lo, hi) = c.a < c.b ? (c.a, c.b) : (c.b, c.a)
+                let hypothesis = String(c.join.hypothesis.prefix(240))
+                // Near-duplicate guard — mirror ThematicV2BackgroundPass.fetchCandidates
+                // (decision #102/#84): burst frames (identical/near-identical captureDate)
+                // and filename export variants fire joins on near-identical profiles. The
+                // judge excludes them from scoring anyway, so a role candidate here would
+                // only ever sit unjudged and surface on its inflated cluster thematicScore.
+                // Skip them at the source.
+                let mLo = meta[lo]; let mHi = meta[hi]
+                if let da = mLo?.captureDate, let dbb = mHi?.captureDate, abs(da - dbb) <= 300 { continue }
+                if FilenameVariants.areVariants(mLo?.filename ?? "", mHi?.filename ?? "") { continue }
+                if let pairID = existing["\(lo)_\(hi)"] {
+                    // Existing pair: attach the hypothesis and re-route to validate() by
+                    // clearing any prior (cold) ThematicV2 verdict — but ONLY when the
+                    // hypothesis is new or changed. RoleJoins is deterministic and profiles
+                    // are stable, so an unchanged hypothesis must be a no-op; otherwise every
+                    // re-index would re-null and re-judge the same surviving pairs forever,
+                    // thrashing the judge budget (decision #102).
+                    try db.execute(sql: """
+                        UPDATE pairs SET roleHypothesis = ?,
+                                         thematicV2Score = NULL,
+                                         thematicV2RelationshipType = NULL,
+                                         thematicV2Rationale = NULL
+                        WHERE id = ? AND (roleHypothesis IS NULL OR roleHypothesis != ?)
+                    """, arguments: [hypothesis, pairID, hypothesis])
+                    if db.changesCount > 0 { updated += 1 }
+                    continue
+                }
+                guard let vA = vByID[lo], let vB = vByID[hi] else { continue }
+                let mA = mLo; let mB = mHi
+                let s = PairScorer.score(
+                    imageAID: lo, vectorA: vA, imageBID: hi, vectorB: vB,
+                    captureDateA: mA?.captureDate, captureDateB: mB?.captureDate,
+                    filenameA: mA?.filename ?? "", filenameB: mB?.filename ?? "",
+                    captionA: mA?.caption ?? "", captionB: mB?.caption ?? "",
+                    accentHueA: mA?.accentHue, accentSaturationA: mA?.accentSaturation,
+                    accentHueB: mB?.accentHue, accentSaturationB: mB?.accentSaturation,
+                    weightCentroidXA: mA?.weightCentroidX.map(Float.init), weightCentroidYA: mA?.weightCentroidY.map(Float.init),
+                    weightCentroidXB: mB?.weightCentroidX.map(Float.init), weightCentroidYB: mB?.weightCentroidY.map(Float.init),
+                    gazeDirectionXA: mA?.gazeDirectionX.map(Float.init), gazeDirectionXB: mB?.gazeDirectionX.map(Float.init),
+                    colorProfileA: mA?.colorProfile ?? "color", colorProfileB: mB?.colorProfile ?? "color",
+                    weights: weights
+                )
+                var rec = PairRecord(
+                    imageAID: s.imageAID, imageBID: s.imageBID,
+                    aestheticScore: Double(s.aestheticScore), aestheticSubmode: s.aestheticSubmode,
+                    geometricScore: Double(s.geometricScore),
+                    rawEdgeSim: Double(s.rawEdgeSim), rawGridSim: Double(s.rawGridSim),
+                    maxEdgePeakedness: Double(s.maxEdgePeakedness), maxGridVariance: Double(s.maxGridVariance),
+                    edgePeakednessMult: Double(s.edgePeakednessMult), gridVarianceMult: Double(s.gridVarianceMult),
+                    selectedFor: "role",
+                    thematicScore: Double(s.thematicScore), compositeScore: Double(s.compositeScore),
+                    rationale: c.join.hypothesis,
+                    geometricSubmode: s.geometricSubmode,
+                    roleHypothesis: hypothesis
+                )
+                try rec.insert(db)
+                inserted += 1
+            }
+        }
+        print("RoleCandidates: \(inserted) new + \(updated) existing tagged of \(cands.count) joins (\(profiled.count) profiles)")
     }
 
     /// Loads feature vectors for hero images only (one per duplicate stack).

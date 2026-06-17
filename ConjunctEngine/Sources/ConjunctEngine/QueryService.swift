@@ -132,6 +132,7 @@ public actor QueryService {
                 p.thematicV2Score,
                 p.thematicV2RelationshipType,
                 p.thematicV2Rationale,
+                p.roleHypothesis,
                 a.filename       AS filenameA,
                 a.thumbnailPath  AS thumbA,
                 a.path           AS imagePathA,
@@ -218,7 +219,8 @@ public actor QueryService {
                     geometricSubmode: row["geometricSubmode"] as? String,
                     thematicV2Score: row["thematicV2Score"] as? Double,
                     thematicV2RelationshipType: row["thematicV2RelationshipType"] as? String,
-                    thematicV2Rationale: row["thematicV2Rationale"] as? String
+                    thematicV2Rationale: row["thematicV2Rationale"] as? String,
+                    roleHypothesis: row["roleHypothesis"] as? String
                 ))
                 if chunk.count == chunkSize {
                     try process(chunk)
@@ -339,6 +341,7 @@ public actor QueryService {
                 p.thematicV2Score,
                 p.thematicV2RelationshipType,
                 p.thematicV2Rationale,
+                p.roleHypothesis,
                 a.filename       AS filenameA,
                 a.thumbnailPath  AS thumbA,
                 a.path           AS imagePathA,
@@ -372,7 +375,7 @@ public actor QueryService {
             JOIN folders fa ON fa.id = a.folderID
             JOIN folders fb ON fb.id = b.folderID
             \(where_)
-            ORDER BY MAX(p.compositeScore, 0.6 * MAX(p.aestheticScore, p.geometricScore * 0.8, COALESCE(p.thematicV2Score, p.thematicScore)) + 0.4 * (p.aestheticScore * 0.4 + p.geometricScore * 0.2 + COALESCE(p.thematicV2Score, p.thematicScore) * 0.4)) DESC
+            ORDER BY MAX(p.compositeScore, 0.6 * MAX(p.aestheticScore, p.geometricScore * 0.8, CASE WHEN p.roleHypothesis IS NOT NULL AND p.thematicV2Score = 0 THEN p.thematicScore ELSE COALESCE(p.thematicV2Score, p.thematicScore) END) + 0.4 * (p.aestheticScore * 0.4 + p.geometricScore * 0.2 + (CASE WHEN p.roleHypothesis IS NOT NULL AND p.thematicV2Score = 0 THEN p.thematicScore ELSE COALESCE(p.thematicV2Score, p.thematicScore) END) * 0.4)) DESC
             LIMIT \(limit)
         """
 
@@ -426,7 +429,8 @@ public actor QueryService {
                     geometricSubmode: row["geometricSubmode"] as? String,
                     thematicV2Score: row["thematicV2Score"] as? Double,
                     thematicV2RelationshipType: row["thematicV2RelationshipType"] as? String,
-                    thematicV2Rationale: row["thematicV2Rationale"] as? String
+                    thematicV2Rationale: row["thematicV2Rationale"] as? String,
+                    roleHypothesis: row["roleHypothesis"] as? String
                 )
             }
         }

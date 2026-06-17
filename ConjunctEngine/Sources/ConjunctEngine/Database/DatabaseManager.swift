@@ -308,6 +308,28 @@ public final class DatabaseManager: Sendable {
             }
         }
 
+        // ── v16: per-image RoleProfile (decision #102) ────────────────────
+        // JSON role profile extracted from the caption by an LLM, feeding the
+        // role-join entry-gate candidate generator. NULL = not yet extracted
+        // (mirrors `caption` semantics — re-extracted whenever caption changes).
+        migrator.registerMigration("v16_roleProfile") { db in
+            try db.alter(table: "images") { t in
+                t.add(column: "roleProfile", .text)
+            }
+        }
+
+        // ── v17: role-join hypothesis on pairs (decision #102) ────────────
+        // The deterministic join's proposed connection, fed to the validation
+        // judge. Set on BOTH newly-generated role candidates and pre-existing
+        // pairs that a join also fires on — so an already-surfaced composite/
+        // aesthetic pair with a genuine role connection still gets validate()d
+        // rather than cold-scored. NULL = not a role candidate.
+        migrator.registerMigration("v17_roleHypothesis") { db in
+            try db.alter(table: "pairs") { t in
+                t.add(column: "roleHypothesis", .text)
+            }
+        }
+
         try migrator.migrate(pool)
     }
 }
