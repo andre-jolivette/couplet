@@ -51,6 +51,14 @@ final class OllamaSetupManager: ObservableObject {
         Task { await _pullAllModels() }
     }
 
+    func retryCaptionModel() {
+        Task { await _pullCaptionModel() }
+    }
+
+    func retryThematicModel() {
+        Task { await _pullThematicModel() }
+    }
+
     // MARK: - Dependency check
 
     private func _check() async {

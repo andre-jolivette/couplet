@@ -169,7 +169,8 @@ private struct PullingModelsView: View {
             badge: .automatic,
             sizeLabel: "6.0 GB",
             description: "Reads your photos and writes captions",
-            phase: manager.captionModelPhase
+            phase: manager.captionModelPhase,
+            onRetry: { manager.retryCaptionModel() }
         )
     }
 
@@ -179,7 +180,8 @@ private struct PullingModelsView: View {
             badge: .automatic,
             sizeLabel: "9.0 GB",
             description: "Finds the connections between photos",
-            phase: manager.thematicModelPhase
+            phase: manager.thematicModelPhase,
+            onRetry: { manager.retryThematicModel() }
         )
     }
 }
@@ -352,6 +354,7 @@ private struct ModelDownloadRow: View {
     let sizeLabel: String
     let description: String
     let phase: ModelRowPhase
+    let onRetry: (() -> Void)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -385,6 +388,18 @@ private struct ModelDownloadRow: View {
                 HStack(spacing: 6) {
                     ProgressView().controlSize(.mini).tint(.appMutedForeground)
                     Text("Configuring…").font(.system(size: 11)).foregroundColor(.appMutedForeground)
+                }
+            } else if case .failed(let message) = phase {
+                HStack(spacing: 10) {
+                    Text(message)
+                        .font(.system(size: 11))
+                        .foregroundColor(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer()
+                    if let onRetry {
+                        Button("Retry", action: onRetry)
+                            .buttonStyle(SetupSecondaryButtonStyle())
+                    }
                 }
             }
         }
