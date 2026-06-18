@@ -86,7 +86,6 @@ final class EngineController: ObservableObject {
             queryService = QueryService(db: database)
             startEngineBuild(db: database)
             Task { await self.refreshFolders() }
-            Task { await self.checkDependencyHealth() }
         } catch {
             print("EngineController init error: \(error)")
         }
@@ -670,6 +669,12 @@ final class EngineController: ObservableObject {
                     roleExtractionEngine: roleExtraction
                 )
             }
+            // Fire after engine build so Ollama has already responded to the
+            // isAvailable() calls in buildCaptioningEngine / buildRoleExtractionEngine —
+            // avoids a false-positive from checking before Ollama finishes loading
+            // its model list (locally-created models like qwen2.5vl-caption appear
+            // in /api/tags slightly after startup).
+            await self.checkDependencyHealth()
         }
     }
 
