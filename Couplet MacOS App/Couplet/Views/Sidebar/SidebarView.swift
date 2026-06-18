@@ -158,14 +158,6 @@ struct SidebarView: View {
             .padding(.horizontal, 16)
             .padding(.bottom, 4)
 
-            if libraryVM.collections.filter({ !$0.isPermanent }).isEmpty {
-                Text("No collections yet")
-                    .font(.system(size: 12))
-                    .foregroundColor(Color.appMutedForeground)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 6)
-            }
-
             ForEach(libraryVM.collections) { collection in
                 let isDropTarget = dropTargetCollectionID == collection.id
                 CollectionRowView(

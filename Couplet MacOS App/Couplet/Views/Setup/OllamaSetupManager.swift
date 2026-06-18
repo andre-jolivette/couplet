@@ -53,11 +53,17 @@ final class OllamaSetupManager: ObservableObject {
     }
 
     func retryCaptionModel() {
-        Task { await _pullCaptionModel() }
+        Task {
+            await _pullCaptionModel()
+            if allModelsDone { step = .done }
+        }
     }
 
     func retryThematicModel() {
-        Task { await _pullThematicModel() }
+        Task {
+            await _pullThematicModel()
+            if allModelsDone { step = .done }
+        }
     }
 
     // MARK: - Dependency check
@@ -90,6 +96,7 @@ final class OllamaSetupManager: ObservableObject {
             group.addTask { await self._pullCaptionModel() }
             group.addTask { await self._pullThematicModel() }
         }
+        if allModelsDone { step = .done }
     }
 
     // MARK: - Caption model (pull qwen2.5vl:7b + ollama create)
@@ -100,21 +107,30 @@ final class OllamaSetupManager: ObservableObject {
             captionModelPhase = .done
             return
         }
-        do {
-            try await pullOllamaModel(model: "qwen2.5vl:7b") { [weak self] completed, total in
-                await self?.setCaptionPhase(.downloading(completed: completed, total: total))
-            } onVerifying: { [weak self] in
-                self?.setCaptionPhase(.verifying)
+        // Only pull the base model if it isn't already in Ollama.
+        // Ollama's model store lives outside the sandbox and survives app reinstalls,
+        // so re-pulling an existing model causes a spurious download flash.
+        if !inventory.has(model: "qwen2.5vl:7b") {
+            do {
+                try await pullOllamaModel(model: "qwen2.5vl:7b") { [weak self] completed, total in
+                    if let self, self.captionTotalBytes == 0 { self.captionTotalBytes = total }
+                    await self?.setCaptionPhase(.downloading(completed: completed, total: total))
+                } onVerifying: { [weak self] in
+                    self?.setCaptionPhase(.verifying)
+                }
+            } catch {
+                print("[setup] qwen2.5vl:7b pull failed: \(error)")
+                captionModelPhase = .failed(error.localizedDescription)
+                return
             }
-        } catch {
-            captionModelPhase = .failed(error.localizedDescription)
-            return
         }
+        print("[setup] qwen2.5vl:7b pull done — calling ollamaCreate")
         captionModelPhase = .configuring
         do {
             try await ollamaCreate(name: "qwen2.5vl-caption")
             captionModelPhase = .done
         } catch {
+            print("[setup] ollamaCreate failed: \(error)")
             captionModelPhase = .failed(error.localizedDescription)
         }
     }
@@ -133,6 +149,7 @@ final class OllamaSetupManager: ObservableObject {
         }
         do {
             try await pullOllamaModel(model: "qwen2.5:14b-instruct") { [weak self] completed, total in
+                if let self, self.thematicTotalBytes == 0 { self.thematicTotalBytes = total }
                 await self?.setThematicPhase(.downloading(completed: completed, total: total))
             } onVerifying: { [weak self] in
                 self?.setThematicPhase(.verifying)
@@ -142,6 +159,11 @@ final class OllamaSetupManager: ObservableObject {
             thematicModelPhase = .failed(error.localizedDescription)
         }
     }
+
+    // MARK: - Real model size (extracted from first pull progress event)
+
+    @Published var captionTotalBytes: Int64 = 0
+    @Published var thematicTotalBytes: Int64 = 0
 
     private func setThematicPhase(_ phase: ModelRowPhase) {
         thematicModelPhase = phase
@@ -197,25 +219,29 @@ private func pullOllamaModel(
 }
 
 // MARK: - ollama create (via POST /api/create) — sandbox-safe, no subprocess
+// Uses the structured Ollama API (from + parameters) rather than a raw Modelfile string.
+// Older Ollama versions used "modelfile"; newer versions require "from" — this is the current form.
 
 private func ollamaCreate(name: String) async throws {
-    guard let modelfileURL = Bundle.main.url(forResource: "Modelfile", withExtension: nil),
-          let modelfileContent = try? String(contentsOf: modelfileURL, encoding: .utf8)
-    else {
-        throw OllamaSetupError.modelfileNotFound
-    }
     guard let url = URL(string: "http://127.0.0.1:11434/api/create") else { return }
     var req = URLRequest(url: url)
     req.httpMethod = "POST"
     req.setValue("application/json", forHTTPHeaderField: "Content-Type")
     req.httpBody = try JSONSerialization.data(withJSONObject: [
-        "name": name,
-        "modelfile": modelfileContent
+        "model": name,
+        "from": "qwen2.5vl:7b",
+        "parameters": ["num_ctx": 2048],
+        "stream": false
     ])
     let session = URLSession(configuration: .ephemeral)
-    let (_, response) = try await session.data(for: req)
-    guard (response as? HTTPURLResponse)?.statusCode == 200 else {
-        throw OllamaSetupError.createFailed(name)
+    let (data, response) = try await session.data(for: req)
+    let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
+    print("[ollamaCreate] HTTP \(statusCode), body: \(String(data: data, encoding: .utf8) ?? "")")
+    guard statusCode == 200 else {
+        let ollamaError = (try? JSONSerialization.jsonObject(with: data) as? [String: Any])
+            .flatMap { $0["error"] as? String }
+            ?? "HTTP \(statusCode)"
+        throw OllamaSetupError.createFailed(ollamaError)
     }
 }
 
@@ -224,13 +250,16 @@ private func ollamaCreate(name: String) async throws {
 enum OllamaSetupError: LocalizedError {
     case badStatus
     case modelfileNotFound
-    case createFailed(String)
+    case createFailed(String) // raw Ollama error — shown only in debug print; UI uses plain message below
 
     var errorDescription: String? {
         switch self {
-        case .badStatus:           return "Ollama returned an unexpected status."
-        case .modelfileNotFound:   return "Modelfile not found in app bundle."
-        case .createFailed(let n): return "Failed to create model '\(n)'."
+        case .badStatus:
+            return "Couldn't reach Ollama. Make sure it's running and try again."
+        case .modelfileNotFound:
+            return "Modelfile not found in app bundle."
+        case .createFailed:
+            return "Couldn't configure the caption model. Quit Ollama from the menu bar, reopen it, then retry."
         }
     }
 }

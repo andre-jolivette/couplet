@@ -161,13 +161,16 @@ private struct PullingModelsView: View {
         }
         .frame(maxWidth: 540)
         .onAppear { manager.startModelPull() }
+        .onChange(of: manager.allModelsDone) { _, done in
+            if done { manager.step = .done }
+        }
     }
 
     private var captionRow: some View {
         ModelDownloadRow(
             name: "qwen2.5vl-caption",
             badge: .automatic,
-            sizeLabel: "6.0 GB",
+            totalBytes: manager.captionTotalBytes,
             description: "Reads your photos and writes captions",
             phase: manager.captionModelPhase,
             onRetry: { manager.retryCaptionModel() }
@@ -178,7 +181,7 @@ private struct PullingModelsView: View {
         ModelDownloadRow(
             name: "qwen2.5:14b-instruct",
             badge: .automatic,
-            sizeLabel: "9.0 GB",
+            totalBytes: manager.thematicTotalBytes,
             description: "Finds the connections between photos",
             phase: manager.thematicModelPhase,
             onRetry: { manager.retryThematicModel() }
@@ -194,6 +197,7 @@ struct DoneView: View {
     @State private var countdown: Int = 6
     @State private var sweepFraction: Double = 0
     @State private var isPaused = false
+    @State private var isOpening = false
     @State private var timer: Timer? = nil
 
     var body: some View {
@@ -224,33 +228,52 @@ struct DoneView: View {
                 }
             }
 
-            Button(action: onComplete) {
+            // Button is built inline so the sweep can cover the full button surface
+            // (SetupPrimaryButtonStyle adds padding inside the label, which clips the GeometryReader).
+            Button(action: advance) {
                 ZStack(alignment: .leading) {
-                    // Shaded sweep left to right
+                    Color.setupAccent
+                        .opacity(isOpening ? 0.9 : 1)
+                    // Sweep — full-bleed, fills the entire button surface
                     GeometryReader { geo in
-                        Color.white.opacity(0.12)
-                            .frame(width: geo.size.width * sweepFraction)
+                        Color.white.opacity(0.15)
+                            .frame(width: geo.size.width * sweepFraction,
+                                   height: geo.size.height)
                     }
+                    // Label centred over the sweep
                     HStack(spacing: 8) {
-                        if countdown > 0 && !isPaused {
+                        if isOpening || (countdown > 0 && !isPaused) {
                             ProgressView().controlSize(.mini).tint(.white)
                         }
-                        Text(countdown > 0 && !isPaused
-                             ? "Opens automatically in \(countdown)s"
-                             : "Start using Couplet")
+                        Text(isOpening
+                             ? "Opening Couplet\u{2026}"
+                             : countdown > 0 && !isPaused
+                                 ? "Opens automatically in \(countdown)s"
+                                 : "Start using Couplet")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundColor(.white)
                     }
                     .frame(maxWidth: .infinity)
                 }
-                .frame(height: 36)
+                .frame(width: 280, height: 40)  // fixed size prevents Color from expanding
             }
-            .buttonStyle(SetupPrimaryButtonStyle())
-            .frame(maxWidth: 280)
+            .buttonStyle(.plain)
             .clipShape(RoundedRectangle(cornerRadius: 8))
             .onHover { hovering in isPaused = hovering }
+            .disabled(isOpening)
         }
         .frame(maxWidth: 400)
         .onAppear { startCountdown() }
         .onDisappear { timer?.invalidate() }
+    }
+
+    private func advance() {
+        guard !isOpening else { return }
+        timer?.invalidate()
+        isOpening = true
+        sweepFraction = 1
+        // Hold the "Opening Couplet…" state briefly before dismissing
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.75) { onComplete() }
     }
 
     private func checklistItem(_ label: String) -> some View {
@@ -265,13 +288,13 @@ struct DoneView: View {
         var elapsed: Double = 0
         let interval: Double = 0.05
         timer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { t in
-            guard !isPaused else { return }
+            guard !isPaused, !isOpening else { return }
             elapsed += interval
             sweepFraction = min(elapsed / totalSeconds, 1.0)
             countdown = max(0, Int(ceil(totalSeconds - elapsed)))
             if elapsed >= totalSeconds {
                 t.invalidate()
-                onComplete()
+                advance()
             }
         }
     }
@@ -351,10 +374,14 @@ private struct SetupRow<Actions: View>: View {
 private struct ModelDownloadRow: View {
     let name: String
     let badge: RowBadge
-    let sizeLabel: String
+    let totalBytes: Int64  // 0 = unknown (model already present or not yet started)
     let description: String
     let phase: ModelRowPhase
     let onRetry: (() -> Void)?
+
+    private var sizeLabel: String? {
+        totalBytes > 0 ? byteLabel(totalBytes) : nil
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -368,8 +395,8 @@ private struct ModelDownloadRow: View {
                         .font(.system(size: 11)).foregroundColor(.appMutedForeground)
                 }
                 Spacer()
-                // Show static size only before download starts — real size comes from the stream
-                if phase == .waiting {
+                // Show real size when known; hidden once model is already present
+                if let sizeLabel, phase == .waiting {
                     Text(sizeLabel)
                         .font(.system(size: 12)).foregroundColor(.appMutedForeground)
                 }
