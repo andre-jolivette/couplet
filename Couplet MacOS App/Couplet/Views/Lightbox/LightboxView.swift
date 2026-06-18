@@ -315,7 +315,9 @@ struct LightboxView: View {
                              iconOpacity: iconOpacity, labelOpacity: labelOpacity) {
                     handleDecision(.rejected)
                 }
-                Divider().frame(height: 20).opacity(0.35)
+                Rectangle()
+                    .fill(Color.white.opacity(labelOpacity))
+                    .frame(width: 1, height: 20)
                 Button {
                     showCollectionPicker = true
                 } label: {
