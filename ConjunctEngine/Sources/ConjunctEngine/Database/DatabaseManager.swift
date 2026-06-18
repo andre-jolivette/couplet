@@ -330,6 +330,29 @@ public final class DatabaseManager: Sendable {
             }
         }
 
+        // ── v18: unique pairID in userDecisions ───────────────────────────
+        // saveDecision was inserting new rows instead of updating existing
+        // ones, leaving duplicate rows per pair. Collapse to the most-recent
+        // decision per pair, then enforce uniqueness so future writes can use
+        // ON CONFLICT DO UPDATE.
+        migrator.registerMigration("v18_uniqueUserDecisions") { db in
+            try db.execute(sql: """
+                DELETE FROM userDecisions
+                WHERE id NOT IN (
+                    SELECT id FROM userDecisions ud2
+                    WHERE ud2.pairID = userDecisions.pairID
+                    ORDER BY decidedAt DESC LIMIT 1
+                )
+            """)
+            try db.drop(index: "idx_userDecisions_pairID")
+            try db.create(
+                index: "idx_userDecisions_pairID",
+                on: "userDecisions",
+                columns: ["pairID"],
+                unique: true
+            )
+        }
+
         try migrator.migrate(pool)
     }
 }

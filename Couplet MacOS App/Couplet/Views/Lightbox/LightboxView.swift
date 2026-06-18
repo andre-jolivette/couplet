@@ -90,6 +90,7 @@ struct LightboxView: View {
         } // end outer HStack
         .background(Color(red: 0.07, green: 0.07, blue: 0.07))
         .focusable()
+        .focusEffectDisabled()
         .focused($isFocused)
         .onAppear { isFocused = true }
         .onContinuousHover { phase in
@@ -315,7 +316,10 @@ struct LightboxView: View {
                              iconOpacity: iconOpacity, labelOpacity: labelOpacity) {
                     handleDecision(.rejected)
                 }
-                Divider().frame(height: 18).opacity(resting ? 0.10 : 0.25)
+                Rectangle()
+                    .fill(Color.white.opacity(resting ? 0.07 : 0.18))
+                    .frame(width: 1, height: 20)
+                    .padding(.horizontal, 8)
                 Button {
                     showCollectionPicker = true
                 } label: {
@@ -331,7 +335,7 @@ struct LightboxView: View {
                 .buttonStyle(.plain)
                 .popover(isPresented: $showCollectionPicker) {
                     CollectionPickerPopover(
-                        collections: collections,
+                        collections: collections.filter { !$0.isPermanent },
                         onSelect: { collectionID in
                             guard let pair = vm.currentPair else { return }
                             onAddToCollection(pair.id, collectionID)
@@ -494,8 +498,9 @@ struct LightboxView: View {
             Image(systemName: direction == .left ? "chevron.left" : "chevron.right")
                 .font(.system(size: 18, weight: .semibold))
                 .foregroundColor(.white.opacity(canGo ? 0.80 : 0.18))
-                .frame(width: width, height: 44)
-                .background(Circle().fill(Color.white.opacity(canGo ? 0.10 : 0.03)))
+                .frame(width: 32, height: 44)
+                .background(RoundedRectangle(cornerRadius: 6).fill(Color.white.opacity(canGo ? 0.10 : 0.03)))
+                .frame(width: width)
                 .contentShape(Rectangle().size(width: width, height: 1000))
         }
         .buttonStyle(.plain)

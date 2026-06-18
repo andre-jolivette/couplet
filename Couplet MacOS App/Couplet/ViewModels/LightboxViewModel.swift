@@ -163,9 +163,12 @@ final class LightboxViewModel: ObservableObject {
 
     func syncDecision(id: Int, decision: PairDecision) {
         guard let idx = pairs.firstIndex(where: { $0.id == id }) else { return }
-        if decision == .liked {
+        switch decision {
+        case .liked:
             pairs[idx].decision = pairs[idx].decision == .liked ? .none : .liked
-        } else {
+        case .rejected:
+            pairs[idx].decision = pairs[idx].decision == .rejected ? .none : .rejected
+        default:
             pairs[idx].decision = decision
         }
     }

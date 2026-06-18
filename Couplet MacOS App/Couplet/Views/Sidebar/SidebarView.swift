@@ -158,7 +158,7 @@ struct SidebarView: View {
             .padding(.horizontal, 16)
             .padding(.bottom, 4)
 
-            if libraryVM.collections.isEmpty {
+            if libraryVM.collections.filter({ !$0.isPermanent }).isEmpty {
                 Text("No collections yet")
                     .font(.system(size: 12))
                     .foregroundColor(Color.appMutedForeground)
@@ -185,7 +185,8 @@ struct SidebarView: View {
                         }
                     )
                 ) { providers in
-                    guard let provider = providers.first else { return false }
+                    guard !collection.isPermanent,
+                          let provider = providers.first else { return false }
                     _ = provider.loadObject(ofClass: NSString.self) { item, _ in
                         guard let str = item as? String, let pairID = Int(str) else { return }
                         Task { @MainActor in
@@ -198,13 +199,15 @@ struct SidebarView: View {
                     return true
                 }
                 .contextMenu {
-                    Button("Rename\u{2026}") {
-                        collectionToRename = collection
-                        renamedValue = collection.name
-                    }
-                    Divider()
-                    Button("Delete", role: .destructive) {
-                        libraryVM.deleteCollection(id: collection.id, engine: engine)
+                    if !collection.isPermanent {
+                        Button("Rename\u{2026}") {
+                            collectionToRename = collection
+                            renamedValue = collection.name
+                        }
+                        Divider()
+                        Button("Delete", role: .destructive) {
+                            libraryVM.deleteCollection(id: collection.id, engine: engine)
+                        }
                     }
                 }
             }
@@ -253,7 +256,7 @@ private struct CollectionRowView: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            Image(systemName: "rectangle.stack")
+            Image(systemName: collection.isPermanent ? "heart" : "rectangle.stack")
                 .frame(width: 14)
                 .font(.system(size: 13))
                 .foregroundColor(isDropTarget ? Color.accentColor : (isSelected ? Color.appForeground : Color.appMutedForeground))

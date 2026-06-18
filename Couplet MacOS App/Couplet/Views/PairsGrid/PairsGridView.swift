@@ -9,6 +9,8 @@ struct PairsGridView: View {
     @ObservedObject var libraryVM: LibraryViewModel
     @Environment(SettingsStore.self) private var settings
     @State private var completionCardDismissed = false
+    @State private var exportingPair: DisplayPair? = nil
+    var onLikedCountChange: ((Int) -> Void)? = nil
 
     // Fixed row height prevents tiles from collapsing/expanding during window resize.
     // The tile height = 120px thumbnail + ~36px metadata strip.
@@ -69,6 +71,9 @@ struct PairsGridView: View {
             .onChange(of: gridVM.sortOrder) { _, _ in reloadPairs() }
             .onAppear { gridVM.hideSequential = settings.hideSequential }
             .onChange(of: settings.hideSequential) { _, new in gridVM.hideSequential = new }
+            .sheet(item: $exportingPair) { pair in
+                ExportSheet(pair: pair)
+            }
     }
 
     private func reloadPairs() {
@@ -204,8 +209,13 @@ struct PairsGridView: View {
                 ForEach(pairs) { pair in
                     PairTileView(
                         pair: pair,
-                        onLike:   { gridVM.likePair(id: pair.id, engine: engine) },
+                        onLike: {
+                            let wasLiked = pair.decision == .liked
+                            gridVM.likePair(id: pair.id, engine: engine)
+                            onLikedCountChange?(wasLiked ? -1 : +1)
+                        },
                         onReject: { gridVM.rejectPair(id: pair.id, engine: engine) },
+                        onExport: { exportingPair = pair },
                         onOpen:   { gridVM.openLightbox(pairID: pair.id) },
                         onRemoveFromCollection: activeCID == nil ? nil : {
                             guard let collectionID = activeCID else { return }
@@ -275,6 +285,9 @@ struct PairsGridView: View {
                 Text("No pairs match these filters").foregroundColor(Color.appMutedForeground)
                 Button("Clear filters") { gridVM.clearFilters() }
                     .buttonStyle(.plain).foregroundColor(Color.appMutedForeground)
+            } else if libraryVM.selectedCollectionID == LibraryViewModel.likedCollectionID {
+                Text("💔").font(.system(size: 36))
+                Text("No liked pairs, yet.").foregroundColor(Color.appMutedForeground)
             } else if libraryVM.selectedCollectionID != nil {
                 Image(systemName: "rectangle.stack")
                     .font(.system(size: 40)).foregroundColor(Color.appMutedForeground.opacity(0.4))

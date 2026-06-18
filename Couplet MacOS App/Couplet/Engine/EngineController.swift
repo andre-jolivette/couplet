@@ -531,6 +531,11 @@ final class EngineController: ObservableObject {
         }
     }
 
+    func likedPairsCount() async -> Int {
+        guard let qs = queryService else { return 0 }
+        return (try? await Task.detached { [qs] in try qs.fetchLikedPairsCount() }.value) ?? 0
+    }
+
     func createCollection(name: String) async -> CollectionItem? {
         guard let qs = queryService else { return nil }
         do {

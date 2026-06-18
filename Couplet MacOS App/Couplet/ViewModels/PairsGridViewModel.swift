@@ -171,8 +171,9 @@ final class PairsGridViewModel: ObservableObject {
             allPairs[idx].decision = next
             engine?.saveDecision(pairID: Int64(id), decision: next == .liked ? "liked" : "none")
         case .rejected:
-            allPairs[idx].decision = .rejected
-            engine?.saveDecision(pairID: Int64(id), decision: "rejected")
+            let next: PairDecision = allPairs[idx].decision == .rejected ? .none : .rejected
+            allPairs[idx].decision = next
+            engine?.saveDecision(pairID: Int64(id), decision: next == .rejected ? "rejected" : "none")
         case .deleted:
             allPairs[idx].decision = .deleted
             engine?.deletePair(pairID: Int64(id))
