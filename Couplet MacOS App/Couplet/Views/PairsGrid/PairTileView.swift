@@ -14,6 +14,7 @@ struct PairTileView: View {
     let pair: DisplayPair
     let onLike: () -> Void
     let onReject: () -> Void
+    let onExport: () -> Void
     let onOpen: () -> Void
     var onRemoveFromCollection: (() -> Void)? = nil
 
@@ -53,11 +54,13 @@ struct PairTileView: View {
             Button("Open in Lightbox") { onOpen() }
             Divider()
             Button(pair.decision == .liked ? "Unlike" : "Favorite") { onLike() }
-            Button("Reject") { onReject() }
+            Button(pair.decision == .rejected ? "Unhide" : "Hide") { onReject() }
             if let remove = onRemoveFromCollection {
                 Divider()
                 Button("Remove from Collection", action: remove)
             }
+            Divider()
+            Button("Export…") { onExport() }
         }
     }
 
@@ -161,7 +164,9 @@ struct PairTileView: View {
         HStack(spacing: 6) {
             TileActionButton(icon: pair.decision == .liked ? "heart.fill" : "heart",
                              color: .pink, action: onLike)
-            TileActionButton(icon: "eye.slash", color: .orange, action: onReject)
+            TileActionButton(icon: pair.decision == .rejected ? "eye" : "eye.slash",
+                             color: .orange, action: onReject)
+            TileActionButton(icon: "square.and.arrow.up", color: .blue, action: onExport)
         }
         .padding(8)
     }

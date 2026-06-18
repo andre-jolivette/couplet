@@ -5,8 +5,36 @@ import ImageIO
 
 // MARK: - Options
 
+enum ExportLayout: String, CaseIterable, Sendable {
+    case horizontal = "Horizontal"
+    case vertical   = "Vertical"
+}
+
+enum ExportBackground: String, CaseIterable, Sendable {
+    case white = "White"
+    case black = "Black"
+
+    nonisolated var cgColor: CGColor {
+        switch self {
+        case .white: return CGColor(red: 1, green: 1, blue: 1, alpha: 1)
+        case .black: return CGColor(
+            red: 0x0e / 255.0, green: 0x0e / 255.0, blue: 0x10 / 255.0, alpha: 1
+        )
+        }
+    }
+
+    nonisolated var labelColor: CGColor {
+        switch self {
+        case .white: return CGColor(red: 0.75, green: 0.75, blue: 0.75, alpha: 1)
+        case .black: return CGColor(red: 0.45, green: 0.45, blue: 0.45, alpha: 1)
+        }
+    }
+}
+
 struct DiptychExportOptions: Sendable {
     var includeFilenames: Bool
+    var layout: ExportLayout      = .horizontal
+    var background: ExportBackground = .white
 }
 
 // MARK: - Exporter
@@ -61,14 +89,19 @@ struct DiptychExporter: Sendable {
     // MARK: - Canvas rendering
 
     nonisolated func renderCanvas() -> CGImage? {
+        switch options.layout {
+        case .horizontal: return renderHorizontal()
+        case .vertical:   return renderVertical()
+        }
+    }
+
+    private nonisolated func renderHorizontal() -> CGImage? {
         let wA = CGFloat(cgImageA.width), hA = CGFloat(cgImageA.height)
         let wB = CGFloat(cgImageB.width), hB = CGFloat(cgImageB.height)
 
-        // Slot = bounding box that can hold either image without upscaling
         var slotW = max(wA, wB)
         var slotH = max(hA, hB)
 
-        // Clamp so the long edge never exceeds 6000px
         let longEdge = max(slotW, slotH)
         if longEdge > 6000 {
             let f = 6000 / longEdge
@@ -76,11 +109,10 @@ struct DiptychExporter: Sendable {
             slotH = (slotH * f).rounded()
         }
 
-        let outerPad = (slotH * 0.040).rounded()           // 4% — uniform white border
-        let gap      = max(20, (slotH * 0.025).rounded())  // 2.5% — gap between images
+        let outerPad = (slotH * 0.040).rounded()
+        let gap      = max(20, (slotH * 0.025).rounded())
         let labelH   = options.includeFilenames ? (slotH * 0.045).rounded() : 0
 
-        // Canvas dimensions include the outer border on all sides
         let canvasW = (outerPad * 2 + slotW * 2 + gap).rounded()
         let canvasH = (outerPad * 2 + slotH + labelH).rounded()
 
@@ -92,39 +124,93 @@ struct DiptychExporter: Sendable {
             bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
         ) else { return nil }
 
-        // White background
-        ctx.setFillColor(CGColor(red: 1, green: 1, blue: 1, alpha: 1))
+        ctx.setFillColor(options.background.cgColor)
         ctx.fill(CGRect(x: 0, y: 0, width: canvasW, height: canvasH))
 
-        // Image slots — inset by outerPad, sitting above the label strip
         // In CGContext coords (y=0 at bottom):
         //   bottom border: 0 … outerPad
         //   label strip:   outerPad … outerPad+labelH
         //   image area:    outerPad+labelH … outerPad+labelH+slotH
         //   top border:    outerPad+labelH+slotH … canvasH
         let imageY    = outerPad + labelH
-        let leftSlot  = CGRect(x: outerPad,                   y: imageY, width: slotW, height: slotH)
-        let rightSlot = CGRect(x: outerPad + slotW + gap,     y: imageY, width: slotW, height: slotH)
+        let leftSlot  = CGRect(x: outerPad,               y: imageY, width: slotW, height: slotH)
+        let rightSlot = CGRect(x: outerPad + slotW + gap, y: imageY, width: slotW, height: slotH)
         letterbox(cgImageA, pixelW: wA, pixelH: hA, into: ctx, slot: leftSlot)
         letterbox(cgImageB, pixelW: wB, pixelH: hB, into: ctx, slot: rightSlot)
 
-        // Filename labels — left-aligned with their respective image slot
         if options.includeFilenames {
-            let fontSize  = max(12, (slotH * 0.016).rounded())
-            let labelGray = CGColor(red: 0.75, green: 0.75, blue: 0.75, alpha: 1)
+            let fontSize = max(12, (slotH * 0.016).rounded())
+            let labelColor = options.background.labelColor
+            drawLabel(filenameA, in: ctx,
+                      rect: CGRect(x: outerPad, y: outerPad, width: slotW, height: labelH),
+                      fontSize: fontSize, color: labelColor)
+            drawLabel(filenameB, in: ctx,
+                      rect: CGRect(x: outerPad + slotW + gap, y: outerPad, width: slotW, height: labelH),
+                      fontSize: fontSize, color: labelColor)
+        }
 
-            let leftLabelRect  = CGRect(x: outerPad,
-                                        y: outerPad,
-                                        width: slotW,
-                                        height: labelH)
-            let rightLabelRect = CGRect(x: outerPad + slotW + gap,
-                                        y: outerPad,
-                                        width: slotW,
-                                        height: labelH)
-            drawLabel(filenameA, in: ctx, rect: leftLabelRect,
-                      fontSize: fontSize, color: labelGray)
-            drawLabel(filenameB, in: ctx, rect: rightLabelRect,
-                      fontSize: fontSize, color: labelGray)
+        return ctx.makeImage()
+    }
+
+    private nonisolated func renderVertical() -> CGImage? {
+        let wA = CGFloat(cgImageA.width), hA = CGFloat(cgImageA.height)
+        let wB = CGFloat(cgImageB.width), hB = CGFloat(cgImageB.height)
+
+        var slotW = max(wA, wB)
+        var slotH = max(hA, hB)
+
+        let longEdge = max(slotW, slotH)
+        if longEdge > 6000 {
+            let f = 6000 / longEdge
+            slotW = (slotW * f).rounded()
+            slotH = (slotH * f).rounded()
+        }
+
+        let outerPad = (slotW * 0.040).rounded()
+        let gap      = max(20, (slotW * 0.025).rounded())
+        let labelH   = options.includeFilenames ? (slotW * 0.028).rounded() : 0
+
+        let canvasW = (outerPad * 2 + slotW).rounded()
+        let canvasH = (outerPad * 2 + slotH * 2 + gap + labelH * 2).rounded()
+
+        guard let ctx = CGContext(
+            data: nil,
+            width: Int(canvasW), height: Int(canvasH),
+            bitsPerComponent: 8, bytesPerRow: 0,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else { return nil }
+
+        ctx.setFillColor(options.background.cgColor)
+        ctx.fill(CGRect(x: 0, y: 0, width: canvasW, height: canvasH))
+
+        // In CGContext coords (y=0 at bottom):
+        //   bottom border:    0 … outerPad
+        //   bottom label:     outerPad … outerPad+labelH
+        //   bottom image (B): outerPad+labelH … outerPad+labelH+slotH
+        //   gap:              outerPad+labelH+slotH … outerPad+labelH+slotH+gap
+        //   top label (A):    outerPad+labelH+slotH+gap … outerPad+labelH*2+slotH+gap
+        //   top image (A):    outerPad+labelH*2+slotH+gap … outerPad+labelH*2+slotH*2+gap
+        //   top border:       … canvasH
+        let topImageY    = outerPad + labelH * 2 + slotH + gap
+        let bottomImageY = outerPad + labelH
+        let topSlot    = CGRect(x: outerPad, y: topImageY,    width: slotW, height: slotH)
+        let bottomSlot = CGRect(x: outerPad, y: bottomImageY, width: slotW, height: slotH)
+        letterbox(cgImageA, pixelW: wA, pixelH: hA, into: ctx, slot: topSlot)
+        letterbox(cgImageB, pixelW: wB, pixelH: hB, into: ctx, slot: bottomSlot)
+
+        if options.includeFilenames {
+            let fontSize = max(10, (slotW * 0.013).rounded())
+            let labelColor = options.background.labelColor
+            // Label A sits just above top image (inside the gap area, right at bottom of top image)
+            let topLabelY    = outerPad + labelH + slotH + gap
+            let bottomLabelY = outerPad
+            drawLabel(filenameA, in: ctx,
+                      rect: CGRect(x: outerPad, y: topLabelY, width: slotW, height: labelH),
+                      fontSize: fontSize, color: labelColor)
+            drawLabel(filenameB, in: ctx,
+                      rect: CGRect(x: outerPad, y: bottomLabelY, width: slotW, height: labelH),
+                      fontSize: fontSize, color: labelColor)
         }
 
         return ctx.makeImage()

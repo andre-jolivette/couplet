@@ -18,6 +18,8 @@ struct ExportSheet: View {
     @EnvironmentObject var engine: EngineController
 
     @State private var format: ExportFormat = .jpeg
+    @State private var layout: ExportLayout = .horizontal
+    @State private var background: ExportBackground = .white
     @State private var includeFilenames: Bool = true
     @State private var isExporting: Bool = false
     @State private var errorMessage: String?
@@ -36,6 +38,32 @@ struct ExportSheet: View {
                 Picker("Format", selection: $format) {
                     ForEach(ExportFormat.allCases, id: \.self) { f in
                         Text(f.rawValue).tag(f)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Layout")
+                    .font(.system(size: 11))
+                    .foregroundColor(.secondary)
+                Picker("Layout", selection: $layout) {
+                    ForEach(ExportLayout.allCases, id: \.self) { l in
+                        Text(l.rawValue).tag(l)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Background")
+                    .font(.system(size: 11))
+                    .foregroundColor(.secondary)
+                Picker("Background", selection: $background) {
+                    ForEach(ExportBackground.allCases, id: \.self) { b in
+                        Text(b.rawValue).tag(b)
                     }
                 }
                 .pickerStyle(.segmented)
@@ -116,7 +144,8 @@ struct ExportSheet: View {
         //    Security-scoped access remains active for the duration of the task.
         let filenameA = pair.filenameA
         let filenameB = pair.filenameB
-        let opts      = DiptychExportOptions(includeFilenames: includeFilenames)
+        let opts      = DiptychExportOptions(includeFilenames: includeFilenames,
+                                             layout: layout, background: background)
         let useJPEG   = (format == .jpeg)
 
         do {

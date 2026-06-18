@@ -9,6 +9,7 @@ struct PairsGridView: View {
     @ObservedObject var libraryVM: LibraryViewModel
     @Environment(SettingsStore.self) private var settings
     @State private var completionCardDismissed = false
+    @State private var exportingPair: DisplayPair? = nil
 
     // Fixed row height prevents tiles from collapsing/expanding during window resize.
     // The tile height = 120px thumbnail + ~36px metadata strip.
@@ -69,6 +70,9 @@ struct PairsGridView: View {
             .onChange(of: gridVM.sortOrder) { _, _ in reloadPairs() }
             .onAppear { gridVM.hideSequential = settings.hideSequential }
             .onChange(of: settings.hideSequential) { _, new in gridVM.hideSequential = new }
+            .sheet(item: $exportingPair) { pair in
+                ExportSheet(pair: pair)
+            }
     }
 
     private func reloadPairs() {
@@ -206,6 +210,7 @@ struct PairsGridView: View {
                         pair: pair,
                         onLike:   { gridVM.likePair(id: pair.id, engine: engine) },
                         onReject: { gridVM.rejectPair(id: pair.id, engine: engine) },
+                        onExport: { exportingPair = pair },
                         onOpen:   { gridVM.openLightbox(pairID: pair.id) },
                         onRemoveFromCollection: activeCID == nil ? nil : {
                             guard let collectionID = activeCID else { return }
