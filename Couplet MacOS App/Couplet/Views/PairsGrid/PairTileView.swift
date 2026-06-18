@@ -186,7 +186,7 @@ private struct TileActionButton: View {
             Image(systemName: icon)
                 .font(.system(size: 12)).foregroundColor(.white)
                 .padding(6)
-                .background(Circle().fill(isHovered ? color : color.opacity(0.7)))
+                .background(Circle().fill(color))
         }
         .buttonStyle(.plain)
         .onHover { isHovered = $0 }
