@@ -14,14 +14,22 @@ struct SetupFlowView: View {
     var body: some View {
         ZStack {
             Color.appBackground.ignoresSafeArea()
+            SetupWindowTitleConfigurator()
             VStack(spacing: 0) {
                 SetupWindowChrome()
-                Spacer()
-                stepContent
-                Spacer()
+                ScrollView {
+                    VStack {
+                        Spacer(minLength: 0)
+                        stepContent
+                            .padding(.vertical, 40)
+                            .frame(maxWidth: .infinity)
+                        Spacer(minLength: 0)
+                    }
+                    .containerRelativeFrame(.vertical)
+                }
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .frame(minWidth: 600, maxWidth: .infinity, minHeight: 500, maxHeight: .infinity)
         .onAppear { manager.checkAndAdvance() }
     }
 
@@ -40,13 +48,29 @@ struct SetupFlowView: View {
     }
 }
 
+// MARK: - Window title hider
+// The setup flow has its own chrome header, so the macOS window title is redundant.
+// A zero-size NSViewRepresentable is the only reliable way to access the NSWindow
+// before it becomes key — .onAppear races against the window being ready.
+private struct SetupWindowTitleConfigurator: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView {
+        let v = NSView(frame: .zero)
+        DispatchQueue.main.async {
+            v.window?.titleVisibility = .hidden
+            v.window?.titlebarAppearsTransparent = true
+        }
+        return v
+    }
+    func updateNSView(_ nsView: NSView, context: Context) {}
+}
+
 // MARK: - Window chrome (title + step rail)
 
 private struct SetupWindowChrome: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 8) {
-                Image("AppIcon")
+                Image("CoupletIcon")
                     .resizable().frame(width: 22, height: 22)
                     .clipShape(RoundedRectangle(cornerRadius: 5))
                 Text("Couplet").font(.system(size: 13, weight: .semibold)).foregroundColor(.appPrimary)
@@ -404,7 +428,7 @@ private struct ModelDownloadRow: View {
             }
             if case .downloading(let completed, let total) = phase, total > 0 {
                 VStack(alignment: .leading, spacing: 4) {
-                    ProgressView(value: Double(completed), total: Double(total))
+                    ProgressView(value: Double(min(completed, total)), total: Double(total))
                         .tint(.appPrimary)
                     HStack {
                         Text(byteLabel(completed) + " / " + byteLabel(total))
