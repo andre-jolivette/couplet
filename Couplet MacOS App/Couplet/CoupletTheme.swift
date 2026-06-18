@@ -12,6 +12,11 @@ extension Color {
     static let appMutedForeground = Color(hex: "#71717a") // zinc-500 — dim/secondary text
     static let appPrimary         = Color(hex: "#f4f4f5") // zinc-100 — buttons, active pills
     static let appBorder          = Color(hex: "#27272a") // zinc-800 — borders, inputs
+
+    /// Blue accent used exclusively in the setup flow for human-action rows ("Needs You").
+    /// Distinct from the app's default zinc/monochrome palette — nothing else uses blue.
+    static let setupAccent        = Color(hex: "#3b82f6") // blue-500
+    static let setupSuccess       = Color(hex: "#22c55e") // green-500
 }
 
 extension Color {

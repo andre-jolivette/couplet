@@ -657,7 +657,7 @@ final class DependencyHealthTests: XCTestCase {
         let result = issues(models: Self.allModels, clip: .broken)
         XCTAssertEqual(result.count, 1)
         XCTAssertEqual(result[0].title, "CLIP model unavailable")
-        XCTAssert(result[0].body.contains("previously located"))
+        XCTAssert(result[0].body.contains("bundled"))
     }
 
     // MARK: - Combined states
@@ -683,5 +683,85 @@ final class DependencyHealthTests: XCTestCase {
     func testWithIssuesIsNotHealthy() {
         let health = DependencyHealth(issues: [DependencyIssue(title: "t", body: "b")])
         XCTAssertFalse(health.isHealthy)
+    }
+}
+
+// ── SetupFlowGateTests ─────────────────────────────────────────────────────────
+// Pure unit tests for setup-flow entry-gate logic. No live Ollama required.
+// Decision #106.
+
+/// Pure function mirroring the gate logic in CoupletApp.body — whether the
+/// setup flow should appear given an OllamaInventory snapshot.
+private func needsSetupFlow(inventory: OllamaInventory) -> Bool {
+    !inventory.reachable
+        || !inventory.has(model: "qwen2.5vl-caption")
+        || !inventory.has(model: "qwen2.5:14b-instruct")
+}
+
+/// Pure function mirroring the step selection in OllamaSetupManager._check().
+private enum SetupFlowStep { case installOllama, pullingModels, done }
+private func setupStep(inventory: OllamaInventory) -> SetupFlowStep {
+    guard inventory.reachable else { return .installOllama }
+    let needsCaption  = !inventory.has(model: "qwen2.5vl-caption")
+    let needsThematic = !inventory.has(model: "qwen2.5:14b-instruct")
+    return (needsCaption || needsThematic) ? .pullingModels : .done
+}
+
+final class SetupFlowGateTests: XCTestCase {
+
+    private func inv(reachable: Bool, models: [String] = []) -> OllamaInventory {
+        OllamaInventory(reachable: reachable, availableModels: Set(models))
+    }
+
+    private static let allModels = ["qwen2.5vl-caption", "qwen2.5:14b-instruct"]
+
+    // MARK: - Gate: does the flow show?
+
+    func testHealthyMachineSkipsSetup() {
+        let i = inv(reachable: true, models: Self.allModels)
+        XCTAssertFalse(needsSetupFlow(inventory: i))
+    }
+
+    func testOllamaDownRequiresSetup() {
+        XCTAssertTrue(needsSetupFlow(inventory: inv(reachable: false)))
+    }
+
+    func testMissingCaptionModelRequiresSetup() {
+        let i = inv(reachable: true, models: ["qwen2.5:14b-instruct"])
+        XCTAssertTrue(needsSetupFlow(inventory: i))
+    }
+
+    func testMissingThematicModelRequiresSetup() {
+        let i = inv(reachable: true, models: ["qwen2.5vl-caption"])
+        XCTAssertTrue(needsSetupFlow(inventory: i))
+    }
+
+    func testBothModelsMissingRequiresSetup() {
+        XCTAssertTrue(needsSetupFlow(inventory: inv(reachable: true)))
+    }
+
+    func testVersionSuffixCountsAsPresent() {
+        let i = inv(reachable: true, models: ["qwen2.5vl-caption:latest", "qwen2.5:14b-instruct:q4_K_M"])
+        XCTAssertFalse(needsSetupFlow(inventory: i))
+    }
+
+    // MARK: - Which step lands first?
+
+    func testOllamaDownLandsOnInstallStep() {
+        XCTAssertEqual(setupStep(inventory: inv(reachable: false)), .installOllama)
+    }
+
+    func testOllamaUpAllModelsMissingLandsOnPullingStep() {
+        XCTAssertEqual(setupStep(inventory: inv(reachable: true, models: [])), .pullingModels)
+    }
+
+    func testOllamaUpMissingOneModelLandsOnPullingStep() {
+        let i = inv(reachable: true, models: ["qwen2.5vl-caption"])
+        XCTAssertEqual(setupStep(inventory: i), .pullingModels)
+    }
+
+    func testAllPresentLandsOnDone() {
+        let i = inv(reachable: true, models: Self.allModels)
+        XCTAssertEqual(setupStep(inventory: i), .done)
     }
 }

@@ -7,9 +7,6 @@ struct SetupSheet: View {
     @Binding var isPresented: Bool
 
     @State private var selectedFolderURL: URL? = nil
-    @State private var selectedModelURL: URL? = nil
-
-    private var modelAlreadyConfigured: Bool { engine.hasModelBookmark }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 24) {
@@ -22,40 +19,12 @@ struct SetupSheet: View {
                     .foregroundColor(.secondary)
             }
 
-            // Folder picker
             if let url = selectedFolderURL {
                 pickerRow(icon: "folder.fill", primary: url.lastPathComponent,
                           secondary: url.path, changeAction: pickFolder)
             } else {
                 emptyPickerButton(icon: "folder.badge.plus",
                                   label: "Choose Photo Folder…", action: pickFolder)
-            }
-
-            // Model section — only show if not yet configured
-            if !modelAlreadyConfigured {
-                Divider()
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack {
-                        Text("CLIP Model")
-                            .font(.system(size: 13, weight: .semibold))
-                        Text("Optional")
-                            .font(.system(size: 11))
-                            .foregroundColor(.secondary)
-                            .padding(.horizontal, 7).padding(.vertical, 2)
-                            .background(Capsule().fill(Color.secondary.opacity(0.15)))
-                    }
-                    if let url = selectedModelURL {
-                        pickerRow(icon: "brain", primary: url.lastPathComponent,
-                                  secondary: url.path, changeAction: pickModel)
-                    } else {
-                        emptyPickerButton(icon: "brain",
-                                          label: "Locate clip-vit-base-patch32.mlpackage…",
-                                          action: pickModel)
-                        Text("Without the CLIP model, pairs use colour and geometry only.")
-                            .font(.system(size: 11))
-                            .foregroundColor(.secondary)
-                    }
-                }
             }
 
             HStack {
@@ -72,10 +41,6 @@ struct SetupSheet: View {
     }
 
     private func startIndexing() {
-        // Only store/rebuild model if user picked a new one
-        if let modelURL = selectedModelURL {
-            engine.storeModelBookmark(url: modelURL)
-        }
         if let folderURL = selectedFolderURL {
             isPresented = false
             engine.addFolder(url: folderURL)
@@ -127,19 +92,5 @@ struct SetupSheet: View {
         panel.allowsMultipleSelection = false
         panel.prompt = "Add Folder"
         if panel.runModal() == .OK { selectedFolderURL = panel.url }
-    }
-
-    private func pickModel() {
-        let panel = NSOpenPanel()
-        panel.canChooseFiles = true
-        panel.canChooseDirectories = false
-        panel.allowsMultipleSelection = false
-        panel.treatsFilePackagesAsDirectories = false
-        panel.prompt = "Select Model"
-        panel.message = "Locate clip-vit-base-patch32.mlpackage"
-        panel.allowedContentTypes = []
-        guard panel.runModal() == .OK, let url = panel.url,
-              url.pathExtension == "mlpackage" else { return }
-        selectedModelURL = url
     }
 }
