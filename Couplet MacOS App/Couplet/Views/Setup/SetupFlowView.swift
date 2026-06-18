@@ -368,8 +368,11 @@ private struct ModelDownloadRow: View {
                         .font(.system(size: 11)).foregroundColor(.appMutedForeground)
                 }
                 Spacer()
-                Text(sizeLabel)
-                    .font(.system(size: 12)).foregroundColor(.appMutedForeground)
+                // Show static size only before download starts — real size comes from the stream
+                if phase == .waiting {
+                    Text(sizeLabel)
+                        .font(.system(size: 12)).foregroundColor(.appMutedForeground)
+                }
                 phaseLabel
             }
             if case .downloading(let completed, let total) = phase, total > 0 {
@@ -383,6 +386,11 @@ private struct ModelDownloadRow: View {
                         Text(percentLabel(completed, total))
                             .font(.system(size: 11)).foregroundColor(.appMutedForeground)
                     }
+                }
+            } else if phase == .verifying {
+                HStack(spacing: 6) {
+                    ProgressView().controlSize(.mini).tint(.appMutedForeground)
+                    Text("Verifying…").font(.system(size: 11)).foregroundColor(.appMutedForeground)
                 }
             } else if phase == .configuring {
                 HStack(spacing: 6) {
@@ -436,6 +444,8 @@ private struct ModelDownloadRow: View {
             Text("Queued").font(.system(size: 12)).foregroundColor(.appMutedForeground)
         case .downloading:
             Text("Downloading").font(.system(size: 12, weight: .medium)).foregroundColor(.appPrimary)
+        case .verifying:
+            Text("Verifying").font(.system(size: 12, weight: .medium)).foregroundColor(.appPrimary)
         case .configuring:
             Text("Configuring").font(.system(size: 12, weight: .medium)).foregroundColor(.appPrimary)
         case .done:

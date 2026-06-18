@@ -7,13 +7,14 @@ import ConjunctEngine
 enum ModelRowPhase: Equatable {
     case waiting
     case downloading(completed: Int64, total: Int64)
-    case configuring  // ollama create (near-instant, post-download)
+    case verifying   // post-download: Ollama checking digest, writing manifest
+    case configuring // ollama create (near-instant, post-download)
     case done
     case failed(String)
 
     var isComplete: Bool { self == .done }
     var isBusy: Bool {
-        switch self { case .downloading, .configuring: true; default: false }
+        switch self { case .downloading, .verifying, .configuring: true; default: false }
     }
 }
 
@@ -102,6 +103,8 @@ final class OllamaSetupManager: ObservableObject {
         do {
             try await pullOllamaModel(model: "qwen2.5vl:7b") { [weak self] completed, total in
                 await self?.setCaptionPhase(.downloading(completed: completed, total: total))
+            } onVerifying: { [weak self] in
+                await self?.setCaptionPhase(.verifying)
             }
         } catch {
             captionModelPhase = .failed(error.localizedDescription)
@@ -131,6 +134,8 @@ final class OllamaSetupManager: ObservableObject {
         do {
             try await pullOllamaModel(model: "qwen2.5:14b-instruct") { [weak self] completed, total in
                 await self?.setThematicPhase(.downloading(completed: completed, total: total))
+            } onVerifying: { [weak self] in
+                await self?.setThematicPhase(.verifying)
             }
             thematicModelPhase = .done
         } catch {
@@ -147,7 +152,8 @@ final class OllamaSetupManager: ObservableObject {
 
 private func pullOllamaModel(
     model: String,
-    onProgress: @escaping (Int64, Int64) async -> Void
+    onProgress: @escaping (Int64, Int64) async -> Void,
+    onVerifying: @escaping () async -> Void = {}
 ) async throws {
     guard let url = URL(string: "http://127.0.0.1:11434/api/pull") else { return }
     var req = URLRequest(url: url)
@@ -169,15 +175,24 @@ private func pullOllamaModel(
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
         else { continue }
 
+        let hasCompleted = json["completed"] != nil
+        let hasTotal     = json["total"] != nil
+
         if let c = json["completed"] as? Int64 { completedBytes = c }
         else if let c = json["completed"] as? Int { completedBytes = Int64(c) }
         if let t = json["total"] as? Int64 { totalBytes = t }
         else if let t = json["total"] as? Int { totalBytes = Int64(t) }
 
-        if totalBytes > 0 {
-            await onProgress(completedBytes, totalBytes)
-        }
         if (json["status"] as? String) == "success" { return }
+
+        if totalBytes > 0 {
+            if hasCompleted || hasTotal {
+                await onProgress(completedBytes, totalBytes)
+            } else {
+                // Post-download status lines (verifying digest, writing manifest, etc.)
+                await onVerifying()
+            }
+        }
     }
 }
 
