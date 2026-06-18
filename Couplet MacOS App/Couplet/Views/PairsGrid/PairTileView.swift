@@ -9,6 +9,10 @@ import AppKit
 /// threshold after thematic clustering/scoring improvements (backlog #23).
 private let kPairCountBadgeThreshold = 100
 
+private let kMuted    = Color(red: 0x25/255.0, green: 0x25/255.0, blue: 0x25/255.0)
+private let kLikeFill = Color(red: 0xf4/255.0, green: 0xf4/255.0, blue: 0xf5/255.0)
+private let kLikeGlyph = Color(red: 0x0e/255.0, green: 0x0e/255.0, blue: 0x10/255.0)
+
 struct PairTileView: View {
 
     let pair: DisplayPair
@@ -45,6 +49,8 @@ struct PairTileView: View {
             if isHovered {
                 hoverActions
                     .transition(.opacity.animation(.easeIn(duration: 0.1)))
+            } else if pair.decision == .liked {
+                likedButton
             }
         }
         .clipped()   // prevent any child from overflowing the tile bounds
@@ -116,10 +122,13 @@ struct PairTileView: View {
             scorePill("A", value: pair.aestheticScore)
             scorePill("G", value: pair.geometricScore)
             scorePill("T", value: pair.thematicScore)
-            Spacer()
+            Text("·")
+                .font(.system(size: 10))
+                .foregroundColor(Color.appMutedForeground.opacity(0.6))
             Text(String(format: "%.3f", pair.compositeScore))
                 .font(.system(size: 10, design: .monospaced))
                 .foregroundColor(Color.appMutedForeground)
+            Spacer()
         }
         .padding(.horizontal, 8).padding(.vertical, 7)
     }
@@ -136,40 +145,39 @@ struct PairTileView: View {
         .foregroundColor(Color.appMutedForeground)
     }
 
-    // MARK: - Decision badge
+    // MARK: - Decision badge (rejected only — liked state expressed via the heart button)
 
     private var decisionBadge: some View {
         Group {
-            switch pair.decision {
-            case .liked:
-                Image(systemName: "heart.fill")
-                    .font(.system(size: 11)).foregroundColor(.white)
-                    .padding(5).background(Circle().fill(Color.pink.opacity(0.85)))
-                    .padding([.top, .leading], 7)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            case .rejected:
+            if pair.decision == .rejected {
                 Image(systemName: "eye.slash.fill")
                     .font(.system(size: 11)).foregroundColor(.white)
                     .padding(5).background(Circle().fill(Color.orange.opacity(0.85)))
                     .padding([.top, .leading], 7)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            default: EmptyView()
             }
         }
     }
 
-    // MARK: - Hover actions
+    // MARK: - Hover actions (eye · export · heart, left to right)
 
     private var hoverActions: some View {
-        let muted = Color(red: 0x25/255.0, green: 0x25/255.0, blue: 0x25/255.0)
-        return HStack(spacing: 6) {
-            TileActionButton(icon: pair.decision == .liked ? "heart.fill" : "heart",
-                             color: muted, action: onLike)
+        HStack(spacing: 6) {
             TileActionButton(icon: pair.decision == .rejected ? "eye" : "eye.slash",
-                             color: muted, action: onReject)
-            TileActionButton(icon: "square.and.arrow.up", color: muted, action: onExport)
+                             color: kMuted, action: onReject)
+            TileActionButton(icon: "square.and.arrow.up",
+                             color: kMuted, action: onExport)
+            TileActionButton(icon: "heart.fill",
+                             color: kLikeFill, iconColor: kLikeGlyph, action: onLike)
         }
         .padding(8)
+    }
+
+    // MARK: - Liked button (always visible when liked, not hovered)
+
+    private var likedButton: some View {
+        TileActionButton(icon: "heart.fill", color: kLikeFill, iconColor: kLikeGlyph, action: onLike)
+            .padding(8)
     }
 }
 
@@ -178,17 +186,16 @@ struct PairTileView: View {
 private struct TileActionButton: View {
     let icon: String
     let color: Color
+    var iconColor: Color = .white
     let action: () -> Void
-    @State private var isHovered = false
 
     var body: some View {
         Button(action: action) {
             Image(systemName: icon)
-                .font(.system(size: 12)).foregroundColor(.white)
+                .font(.system(size: 12)).foregroundColor(iconColor)
                 .padding(6)
                 .background(Circle().fill(color))
         }
         .buttonStyle(.plain)
-        .onHover { isHovered = $0 }
     }
 }
