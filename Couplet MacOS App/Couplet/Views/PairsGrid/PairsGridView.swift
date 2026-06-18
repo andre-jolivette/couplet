@@ -105,6 +105,10 @@ struct PairsGridView: View {
         .background(Color.appBackground)
         .overlay(alignment: .bottomTrailing) {
             VStack(alignment: .trailing, spacing: 8) {
+                DependencyHealthView(health: engine.dependencyHealth) {
+                    await engine.checkDependencyHealth()
+                }
+
                 if engine.isThematicV2Running {
                     HStack(spacing: 6) {
                         ProgressView()

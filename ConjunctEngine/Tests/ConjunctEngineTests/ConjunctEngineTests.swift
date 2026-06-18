@@ -566,3 +566,122 @@ final class DatabaseTests: XCTestCase {
         XCTAssertEqual(stored!.imageBID, 10)
     }
 }
+
+// ── DependencyHealthTests ──────────────────────────────────────────────────────
+// Pure unit tests for buildDependencyIssues(). No live Ollama required.
+// Decision #105.
+
+final class DependencyHealthTests: XCTestCase {
+
+    // MARK: - Helpers
+
+    private func reachable(with models: [String]) -> OllamaInventory {
+        OllamaInventory(reachable: true, availableModels: Set(models))
+    }
+
+    private func issues(
+        reachable: Bool = true,
+        models: [String] = [],
+        clip: CLIPStatus = .healthy
+    ) -> [DependencyIssue] {
+        let inv = OllamaInventory(reachable: reachable, availableModels: Set(models))
+        return buildDependencyIssues(ollamaInventory: inv, clipStatus: clip)
+    }
+
+    // MARK: - Ollama unreachable
+
+    func testOllamaDownProducesOneIssue() {
+        let result = issues(reachable: false)
+        XCTAssertEqual(result.count, 1)
+        XCTAssertEqual(result[0].title, "Background scoring paused")
+        XCTAssert(result[0].body.contains("Ollama is not running"))
+        XCTAssert(result[0].body.contains("aesthetic"))
+    }
+
+    func testOllamaDownSuppressesModelIssues() {
+        // When Ollama is unreachable, don't also enumerate missing models —
+        // the real problem is the server, not the individual models.
+        let result = issues(reachable: false, models: [])
+        XCTAssertEqual(result.count, 1, "Should report exactly one issue (server down)")
+    }
+
+    // MARK: - All models present
+
+    func testAllModelsHealthy() {
+        let result = issues(models: ["qwen2.5vl-caption", "qwen2.5:14b-instruct"])
+        XCTAssertTrue(result.isEmpty)
+    }
+
+    func testAllModelsHealthyWithVersionSuffix() {
+        // hasPrefix match: Ollama often appends ":latest" or a digest tag.
+        let result = issues(models: ["qwen2.5vl-caption:latest", "qwen2.5:14b-instruct:q4_K_M"])
+        XCTAssertTrue(result.isEmpty)
+    }
+
+    // MARK: - Missing models
+
+    func testMissingCaptionModel() {
+        let result = issues(models: ["qwen2.5:14b-instruct"])
+        XCTAssertEqual(result.count, 1)
+        XCTAssert(result[0].title.contains("Caption generation"))
+        XCTAssert(result[0].body.contains("qwen2.5vl-caption"))
+    }
+
+    func testMissingRoleThematicModel() {
+        let result = issues(models: ["qwen2.5vl-caption"])
+        XCTAssertEqual(result.count, 1)
+        XCTAssert(result[0].title.contains("Role matching"))
+        XCTAssert(result[0].body.contains("qwen2.5:14b-instruct"))
+    }
+
+    func testBothModelssMissing() {
+        let result = issues(models: [])
+        XCTAssertEqual(result.count, 2)
+    }
+
+    // MARK: - CLIP status
+
+    private static let allModels = ["qwen2.5vl-caption", "qwen2.5:14b-instruct"]
+
+    func testCLIPNotConfiguredProducesNoIssue() {
+        let result = issues(models: Self.allModels, clip: .notConfigured)
+        XCTAssertTrue(result.isEmpty)
+    }
+
+    func testCLIPHealthyProducesNoIssue() {
+        let result = issues(models: Self.allModels, clip: .healthy)
+        XCTAssertTrue(result.isEmpty)
+    }
+
+    func testCLIPBrokenProducesIssue() {
+        let result = issues(models: Self.allModels, clip: .broken)
+        XCTAssertEqual(result.count, 1)
+        XCTAssertEqual(result[0].title, "CLIP model unavailable")
+        XCTAssert(result[0].body.contains("previously located"))
+    }
+
+    // MARK: - Combined states
+
+    func testOllamaDownPlusCLIPBrokenProducesTwoIssues() {
+        // Ollama down = 1 issue; broken CLIP = 1 more = 2 total
+        let result = issues(reachable: false, clip: .broken)
+        XCTAssertEqual(result.count, 2)
+    }
+
+    func testMissingModelPlusCLIPBrokenProducesTwoIssues() {
+        // One missing model + broken CLIP = 2 issues
+        let result = issues(models: ["qwen2.5:14b-instruct"], clip: .broken)
+        XCTAssertEqual(result.count, 2)
+    }
+
+    // MARK: - DependencyHealth aggregate
+
+    func testHealthyIsHealthy() {
+        XCTAssertTrue(DependencyHealth.healthy.isHealthy)
+    }
+
+    func testWithIssuesIsNotHealthy() {
+        let health = DependencyHealth(issues: [DependencyIssue(title: "t", body: "b")])
+        XCTAssertFalse(health.isHealthy)
+    }
+}
