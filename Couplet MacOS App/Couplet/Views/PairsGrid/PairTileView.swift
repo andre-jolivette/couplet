@@ -161,12 +161,13 @@ struct PairTileView: View {
     // MARK: - Hover actions
 
     private var hoverActions: some View {
-        HStack(spacing: 6) {
+        let muted = Color(red: 0x25/255.0, green: 0x25/255.0, blue: 0x25/255.0)
+        return HStack(spacing: 6) {
             TileActionButton(icon: pair.decision == .liked ? "heart.fill" : "heart",
-                             color: .pink, action: onLike)
+                             color: muted, action: onLike)
             TileActionButton(icon: pair.decision == .rejected ? "eye" : "eye.slash",
-                             color: .orange, action: onReject)
-            TileActionButton(icon: "square.and.arrow.up", color: .blue, action: onExport)
+                             color: muted, action: onReject)
+            TileActionButton(icon: "square.and.arrow.up", color: muted, action: onExport)
         }
         .padding(8)
     }
