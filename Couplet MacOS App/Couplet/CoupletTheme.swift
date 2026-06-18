@@ -45,6 +45,7 @@ extension Color {
 // dragging while SwiftUI controls inside still receive their own events.
 private final class PassthroughHostingView<Content: View>: NSHostingView<Content> {
     override var mouseDownCanMoveWindow: Bool { true }
+    deinit {}
 }
 
 // MARK: - Window Configurator
