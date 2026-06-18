@@ -72,8 +72,9 @@ final class OllamaSetupManager: ObservableObject {
         step = .checkingDependencies
         let inventory = await OllamaInventory.check()
         guard inventory.reachable else {
-            // Record that the setup flow showed the install step — used by the
-            // Uninstall / Reset sheet to know whether to offer Ollama removal.
+            // Set here — when the step is first shown — not after a successful recheck,
+            // so the flag survives if the user quits mid-setup. The Uninstall / Reset sheet
+            // reads it to decide whether to offer Ollama removal.
             UserDefaults.standard.set(true, forKey: "com.toastbrigade.Couplet.coupletInstalledOllama")
             step = .installOllama
             return
