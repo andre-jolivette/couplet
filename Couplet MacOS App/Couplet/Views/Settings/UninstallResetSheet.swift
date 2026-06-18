@@ -24,7 +24,6 @@ struct UninstallResetSheet: View {
 
     @State private var removeModels = true
     @State private var removeOllama = false
-    @State private var showConfirm = false
     @State private var isResetting = false
     @State private var resetError: String? = nil
     @State private var ollamaAppURL: URL? = nil
@@ -84,7 +83,7 @@ struct UninstallResetSheet: View {
 
                 Spacer()
 
-                Button(action: { showConfirm = true }) {
+                Button(action: { Task { await performReset() } }) {
                     if isResetting {
                         HStack(spacing: 6) {
                             ProgressView().controlSize(.mini).tint(.white)
@@ -101,14 +100,6 @@ struct UninstallResetSheet: View {
         .padding(24)
         .frame(width: 480)
         .background(Color.appBackground)
-        .alert("Uninstall Couplet?", isPresented: $showConfirm) {
-            Button("Cancel", role: .cancel) {}
-            Button("Uninstall", role: .destructive) {
-                Task { await performReset() }
-            }
-        } message: {
-            Text(confirmMessage)
-        }
         .onAppear {
             if coupletInstalledOllama {
                 ollamaAppURL = NSWorkspace.shared.urlForApplication(
@@ -156,20 +147,6 @@ struct UninstallResetSheet: View {
                 .padding(.leading, 20)
             }
         }
-    }
-
-    // MARK: - Confirm message
-
-    private var confirmMessage: String {
-        var parts = ["Couplet's database and thumbnail cache"]
-        if removeModels { parts.append("the two Ollama models it uses") }
-        let joined: String
-        if parts.count == 1 {
-            joined = parts[0]
-        } else {
-            joined = parts.dropLast().joined(separator: ", ") + ", and " + parts.last!
-        }
-        return "This removes \(joined). Your original photos are never touched. The app will relaunch."
     }
 
     // MARK: - Reset
