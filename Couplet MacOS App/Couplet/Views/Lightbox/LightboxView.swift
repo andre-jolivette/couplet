@@ -316,7 +316,7 @@ struct LightboxView: View {
                     handleDecision(.rejected)
                 }
                 Rectangle()
-                    .fill(Color.white.opacity(0.18))
+                    .fill(Color.white.opacity(resting ? 0.07 : 0.18))
                     .frame(width: 1, height: 20)
                     .padding(.horizontal, 8)
                 Button {
