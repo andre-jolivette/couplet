@@ -33,3 +33,8 @@ Couplet MacOS App/Couplet/clip-vit-base-patch32.mlpackage/
 00-sample-llm/
 00-test-pairing-folder/
 00 - Archive/
+
+# Internal planning and research docs
+Planning docs/
+FINDINGS-*.md
+test_pair_vlm_v2.sh

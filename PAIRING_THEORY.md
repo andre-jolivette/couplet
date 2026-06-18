@@ -1,6 +1,6 @@
 # Couplet — Pairing Theory
 
-*A foundational document. Written after the keyword-cluster system reached its ceiling (decisions #45–#49) and before backlog #50 (caption prompt redesign). Purpose: define what we're actually trying to find, so we can evaluate whether the architecture can express it.*
+*A foundational document written mid-build, after the keyword-cluster system reached its ceiling (decisions #45–#49) and before the caption prompt redesign (#50). Its purpose: define what we're actually trying to find, so we can evaluate whether the architecture can express it. Some sections reference in-progress work that has since been completed or evolved — see [DECISIONS.md](DECISIONS.md) for the current state.*
 
 ---
 
