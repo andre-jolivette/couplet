@@ -104,7 +104,7 @@ final class OllamaSetupManager: ObservableObject {
             try await pullOllamaModel(model: "qwen2.5vl:7b") { [weak self] completed, total in
                 await self?.setCaptionPhase(.downloading(completed: completed, total: total))
             } onVerifying: { [weak self] in
-                await self?.setCaptionPhase(.verifying)
+                self?.setCaptionPhase(.verifying)
             }
         } catch {
             captionModelPhase = .failed(error.localizedDescription)
@@ -135,7 +135,7 @@ final class OllamaSetupManager: ObservableObject {
             try await pullOllamaModel(model: "qwen2.5:14b-instruct") { [weak self] completed, total in
                 await self?.setThematicPhase(.downloading(completed: completed, total: total))
             } onVerifying: { [weak self] in
-                await self?.setThematicPhase(.verifying)
+                self?.setThematicPhase(.verifying)
             }
             thematicModelPhase = .done
         } catch {
