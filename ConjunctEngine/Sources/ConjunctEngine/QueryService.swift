@@ -493,6 +493,9 @@ public actor QueryService {
                 sql: """
                     INSERT INTO userDecisions (pairID, decision, decidedAt)
                     VALUES (?, ?, ?)
+                    ON CONFLICT(pairID) DO UPDATE SET
+                        decision  = excluded.decision,
+                        decidedAt = excluded.decidedAt
                 """,
                 arguments: [pairID, decision, Date().timeIntervalSince1970]
             )
