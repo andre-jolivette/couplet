@@ -1,5 +1,7 @@
 # Couplet — Claude Code Reference
 
+> **What this file is:** This is the context prompt used with [Claude Code](https://claude.ai/code) throughout the development of Couplet. It tells Claude what the codebase does, how it's structured, and what invariants must not be broken. It's committed to the repo as a transparency artifact — this is literally how the app was built.
+
 ## On Genre and Assumptions
 
 **Do not use genre labels as design constraints.** The developer's personal library happens to contain a particular style of photography, but Couplet is designed for any single-photographer library. Genre vocabulary ("street photography," "documentary") is likely to pull reasoning in the wrong direction: it suggests a narrower set of subjects, aesthetics, and pairing expectations than the tool actually supports, and it may lead to calibration decisions that are only correct for one kind of library. When assessing scoring, surfacing, or design questions, reason from what is actually in the data and what the pairing theory says — not from assumptions about what "street photographers" typically shoot or value. See decision #79.

@@ -1,21 +1,15 @@
 # Couplet — Architectural Decisions & Current State
 
+> **What this file is:** A running log of every significant architectural decision made during development, in order. If you're trying to understand why something is built the way it is, start here. The architecture overview at the top was accurate early in the project; the individual decision entries further down are the authoritative record. The [CLAUDE.md](CLAUDE.md) file has the current operational summary.
+
 ## Project Brief
-Couplet is a macOS app (bundle ID `com.toastingmachine.Couplet`, deployment target macOS 14.0) for photographers. It discovers meaningful image pairs in a photo library — not duplicates or sequential shots, but conceptually resonant connections the photographer might not have noticed. The serendipity machine goal: surface pairs that reward a second look.
-
-**On genre and assumptions:** The developer's library happens to contain a particular style of photography, but Couplet is not designed for a specific genre. Genre labels are likely to impose unhelpful constraints — they narrow the expected subject range, aesthetic, and pairing logic in ways that may only be correct for one kind of library. Where decisions reference the library's characteristics (e.g. "urban_street fires on most images"), treat these as calibration observations about one dataset, not design axioms. See decision #79.
-
-## Repository Layout
-- Engine (Swift Package): `~/Documents/00-projects/_couplet/ConjunctEngine/`
-- App: `~/Documents/00-projects/_couplet/Couplet MacOS App/Couplet/`
-- CLIP model: `~/Documents/00-projects/_couplet/clip-vit-base-patch32.mlpackage`
-- Database: `~/Library/Containers/com.toastingmachine.Couplet/Data/Library/Application Support/Conjunct/conjunct.db` (app is sandboxed — all Conjunct data lives inside the app container)
+Couplet is a macOS app for photographers. It discovers meaningful image pairs in a photo library — not duplicates or sequential shots, but conceptually resonant connections the photographer might not have noticed.
 
 ---
 
-## Engine Architecture
+## Engine Architecture (early-build snapshot — see CLAUDE.md for current state)
 
-### Indexing Pipeline (5 phases)
+### Indexing Pipeline (5 phases as of early build; grown to 9+ phases — see decisions #64, #65, #82, #102, #103)
 1. **Scan** — FileScanner reads EXIF captureDate, colorProfile (color/bw) from CGImageSource
 2. **Duplicate detection** — dHash perceptual hashing, Hamming threshold=6, hero image selection
 3. **Thumbnails** — CGImageSourceCreateThumbnailAtIndex at 512px max (prevents IOSurface exhaustion)
