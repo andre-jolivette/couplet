@@ -8,8 +8,9 @@ xcuserdata/
 .build/
 Packages/
 
-# ML model (large binary, stored outside repo)
+# ML model (large binary, bundled in app but not committed)
 clip-vit-base-patch32.mlpackage/
+Couplet MacOS App/Couplet/clip-vit-base-patch32.mlpackage/
 
 # Database files
 *.db

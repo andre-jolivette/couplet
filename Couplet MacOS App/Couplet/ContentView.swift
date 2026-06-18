@@ -100,8 +100,6 @@ struct ContentView: View {
             Task { @MainActor in
                 engine.initialize()
                 await libraryVM.loadCollections(engine: engine)
-                try? await Task.sleep(nanoseconds: 800_000_000)
-                if !engine.hasModelBookmark { showSetupSheet = true }
             }
         }
     }

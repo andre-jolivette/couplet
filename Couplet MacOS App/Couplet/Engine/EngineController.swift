@@ -95,17 +95,10 @@ final class EngineController: ObservableObject {
 
     /// Runs a single GET /api/tags inventory check and refreshes `dependencyHealth`.
     /// Call at launch, before the ThematicV2 pass, and on manual recheck from the UI.
-    /// The CLIP status is derived from ModelBookmark + hasRealCLIP without a network call.
+    /// CLIP is bundled (#106) — status is healthy when loaded, broken when the build is broken.
     func checkDependencyHealth() async {
         let inventory = await OllamaInventory.check()
-        let clipStatus: CLIPStatus
-        if !ModelBookmark.hasBookmark {
-            clipStatus = .notConfigured
-        } else if hasRealCLIP {
-            clipStatus = .healthy
-        } else {
-            clipStatus = .broken
-        }
+        let clipStatus: CLIPStatus = hasRealCLIP ? .healthy : .broken
         let issues = buildDependencyIssues(ollamaInventory: inventory, clipStatus: clipStatus)
         dependencyHealth = DependencyHealth(issues: issues)
     }
@@ -633,24 +626,6 @@ final class EngineController: ObservableObject {
         return (result.pathA, result.pathB)
     }
 
-    // MARK: - CLIP model bookmark
-
-    var hasModelBookmark: Bool { ModelBookmark.hasBookmark }
-
-    func storeModelBookmark(url: URL) {
-        do {
-            try ModelBookmark.store(url: url)
-            // If already running real CLIP, no need to rebuild
-            guard !hasRealCLIP, let db else {
-                print("CLIP: bookmark stored, skipping rebuild (already loaded)")
-                return
-            }
-            startEngineBuild(db: db)
-        } catch {
-            print("CLIP: failed to store bookmark — \(error)")
-        }
-    }
-
     // MARK: - Private
 
     /// Starts a CLIP engine build, cancelling any previous in-flight build first.
@@ -857,28 +832,18 @@ final class EngineController: ObservableObject {
     }
 
     private func buildCLIPEngine() async -> any CLIPInferenceEngine {
-        // Resolve the bookmark on the main actor (UserDefaults access) before
-        // entering the detached task which runs off-actor.
-        let bookmarkURL: URL? = ModelBookmark.resolve()
-
         return await Task.detached(priority: .userInitiated) { [self] in
-            if let url = bookmarkURL {
-                _ = url.startAccessingSecurityScopedResource()
-                if let engine = try? CLIPCoreMLEngine(modelURL: url) {
-                    await MainActor.run { self.hasRealCLIP = true }
-                    print("CLIP: loaded via bookmark from \(url.lastPathComponent)")
-                    return engine as any CLIPInferenceEngine
-                }
-                url.stopAccessingSecurityScopedResource()
-            }
             let modelName = "clip-vit-base-patch32"
-            if let bundleURL = Bundle.main.url(forResource: modelName, withExtension: "mlpackage"),
-               let engine = try? CLIPCoreMLEngine(modelURL: bundleURL) {
+            // Xcode compiles .mlpackage to .mlmodelc in the bundle; try the compiled form
+            // first, then the package form (present when running unarchived in dev).
+            let bundleURL = Bundle.main.url(forResource: modelName, withExtension: "mlmodelc")
+                ?? Bundle.main.url(forResource: modelName, withExtension: "mlpackage")
+            if let bundleURL, let engine = try? CLIPCoreMLEngine(modelURL: bundleURL) {
                 await MainActor.run { self.hasRealCLIP = true }
-                print("CLIP: loaded from app bundle")
+                print("CLIP: loaded from app bundle (\(bundleURL.pathExtension))")
                 return engine as any CLIPInferenceEngine
             }
-            print("CLIP: model not found — using MockCLIPEngine")
+            print("CLIP: model not found in bundle — using MockCLIPEngine")
             return MockCLIPEngine(simulatedLatencyMs: 0) as any CLIPInferenceEngine
         }.value
     }

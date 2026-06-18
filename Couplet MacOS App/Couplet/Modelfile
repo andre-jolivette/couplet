@@ -1,0 +1,29 @@
+# Modelfile for qwen2.5vl-caption
+#
+# Registers a trimmed variant of qwen2.5vl:7b for use by OllamaCaptioningEngine.
+#
+# Why num_ctx 2048?
+# -----------------
+# qwen2.5vl:7b's default context window is 128,000 tokens. Ollama allocates KV
+# cache proportional to num_ctx at model load time — 128k costs ~2GB of extra
+# RAM and dominates inference even when actual token usage is tiny.
+#
+# OllamaCaptioningEngine resizes every image to 512px before encoding (same
+# ceiling as the CLIP pipeline). Measured token budget at 512px:
+#
+#   Vision tokens  ~200–250  (measured: 247 on a 12MB full-res camera JPEG)
+#   Prompt text    ~270      (the captioning paragraph prompt)
+#   Response cap    500      (num_predict in OllamaCaptioningEngine)
+#   ─────────────────────────
+#   Measured total ~1,020
+#
+# 2048 gives ~2.5× headroom above measured usage. For reference: sending the
+# same image at full resolution used 2,677 prompt tokens, exceeding this budget
+# entirely and causing degenerate output.
+#
+# Do not raise this casually — even 4096 doubles the KV cache cost for no
+# benefit at these input sizes. If you change num_predict or the prompt
+# substantially, re-measure with: ollama run qwen2.5vl:7b + check prompt_eval_count.
+
+FROM qwen2.5vl:7b
+PARAMETER num_ctx 2048

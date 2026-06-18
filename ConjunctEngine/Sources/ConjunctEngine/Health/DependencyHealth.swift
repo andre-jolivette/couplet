@@ -109,7 +109,7 @@ public nonisolated func buildDependencyIssues(
     if clipStatus == .broken {
         issues.append(DependencyIssue(
             title: "CLIP model unavailable",
-            body: "The CLIP model was previously located but can no longer be accessed. Re-open the CLIP model file to restore visual feature extraction."
+            body: "The bundled CLIP model failed to load. Reinstalling the app should restore visual feature extraction."
         ))
     }
 
