@@ -12,6 +12,7 @@
 
 import SwiftUI
 import AppKit
+import UniformTypeIdentifiers
 import ConjunctEngine
 
 // MARK: - Sheet
