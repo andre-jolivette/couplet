@@ -82,8 +82,9 @@ final class OllamaSetupManager: ObservableObject {
         let needsCaption  = !inventory.has(model: "qwen2.5vl-caption")
         let needsThematic = !inventory.has(model: "qwen2.5:14b-instruct")
         if needsCaption || needsThematic {
+            // Only set the step — PullingModelsView.onAppear calls startModelPull().
+            // Calling _pullAllModels() here too would double-fire ollamaCreate.
             step = .pullingModels
-            await _pullAllModels()
         } else {
             step = .done
         }
@@ -206,15 +207,18 @@ private func pullOllamaModel(
         if let t = json["total"] as? Int64 { totalBytes = t }
         else if let t = json["total"] as? Int { totalBytes = Int64(t) }
 
-        if (json["status"] as? String) == "success" { return }
+        let status = json["status"] as? String ?? ""
+        if status == "success" { return }
 
-        if totalBytes > 0 {
-            if hasCompleted || hasTotal {
+        if hasCompleted || hasTotal {
+            if totalBytes > 0 {
                 await onProgress(completedBytes, totalBytes)
-            } else {
-                // Post-download status lines (verifying digest, writing manifest, etc.)
-                await onVerifying()
             }
+        } else if status == "writing manifest" || status == "removing any unused layers" {
+            // These appear exactly once, after all layers finish — the real final-stage.
+            // "verifying digest" appears after every individual layer and is skipped here
+            // to avoid the progress-bar ↔ verifying-spinner stutter on multi-layer models.
+            await onVerifying()
         }
     }
 }
