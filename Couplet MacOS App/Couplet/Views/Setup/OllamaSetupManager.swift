@@ -7,13 +7,14 @@ import ConjunctEngine
 enum ModelRowPhase: Equatable {
     case waiting
     case downloading(completed: Int64, total: Int64)
-    case configuring  // ollama create (near-instant, post-download)
+    case verifying   // post-download: Ollama checking digest, writing manifest
+    case configuring // ollama create (near-instant, post-download)
     case done
     case failed(String)
 
     var isComplete: Bool { self == .done }
     var isBusy: Bool {
-        switch self { case .downloading, .configuring: true; default: false }
+        switch self { case .downloading, .verifying, .configuring: true; default: false }
     }
 }
 
@@ -51,12 +52,29 @@ final class OllamaSetupManager: ObservableObject {
         Task { await _pullAllModels() }
     }
 
+    func retryCaptionModel() {
+        Task {
+            await _pullCaptionModel()
+            if allModelsDone { step = .done }
+        }
+    }
+
+    func retryThematicModel() {
+        Task {
+            await _pullThematicModel()
+            if allModelsDone { step = .done }
+        }
+    }
+
     // MARK: - Dependency check
 
     private func _check() async {
         step = .checkingDependencies
         let inventory = await OllamaInventory.check()
         guard inventory.reachable else {
+            // Record that the setup flow showed the install step — used by the
+            // Uninstall / Reset sheet to know whether to offer Ollama removal.
+            UserDefaults.standard.set(true, forKey: "com.toastbrigade.Couplet.coupletInstalledOllama")
             step = .installOllama
             return
         }
@@ -78,6 +96,7 @@ final class OllamaSetupManager: ObservableObject {
             group.addTask { await self._pullCaptionModel() }
             group.addTask { await self._pullThematicModel() }
         }
+        if allModelsDone { step = .done }
     }
 
     // MARK: - Caption model (pull qwen2.5vl:7b + ollama create)
@@ -88,19 +107,30 @@ final class OllamaSetupManager: ObservableObject {
             captionModelPhase = .done
             return
         }
-        do {
-            try await pullOllamaModel(model: "qwen2.5vl:7b") { [weak self] completed, total in
-                await self?.setCaptionPhase(.downloading(completed: completed, total: total))
+        // Only pull the base model if it isn't already in Ollama.
+        // Ollama's model store lives outside the sandbox and survives app reinstalls,
+        // so re-pulling an existing model causes a spurious download flash.
+        if !inventory.has(model: "qwen2.5vl:7b") {
+            do {
+                try await pullOllamaModel(model: "qwen2.5vl:7b") { [weak self] completed, total in
+                    if let self, self.captionTotalBytes == 0 { self.captionTotalBytes = total }
+                    await self?.setCaptionPhase(.downloading(completed: completed, total: total))
+                } onVerifying: { [weak self] in
+                    self?.setCaptionPhase(.verifying)
+                }
+            } catch {
+                print("[setup] qwen2.5vl:7b pull failed: \(error)")
+                captionModelPhase = .failed(error.localizedDescription)
+                return
             }
-        } catch {
-            captionModelPhase = .failed(error.localizedDescription)
-            return
         }
+        print("[setup] qwen2.5vl:7b pull done — calling ollamaCreate")
         captionModelPhase = .configuring
         do {
             try await ollamaCreate(name: "qwen2.5vl-caption")
             captionModelPhase = .done
         } catch {
+            print("[setup] ollamaCreate failed: \(error)")
             captionModelPhase = .failed(error.localizedDescription)
         }
     }
@@ -119,13 +149,21 @@ final class OllamaSetupManager: ObservableObject {
         }
         do {
             try await pullOllamaModel(model: "qwen2.5:14b-instruct") { [weak self] completed, total in
+                if let self, self.thematicTotalBytes == 0 { self.thematicTotalBytes = total }
                 await self?.setThematicPhase(.downloading(completed: completed, total: total))
+            } onVerifying: { [weak self] in
+                self?.setThematicPhase(.verifying)
             }
             thematicModelPhase = .done
         } catch {
             thematicModelPhase = .failed(error.localizedDescription)
         }
     }
+
+    // MARK: - Real model size (extracted from first pull progress event)
+
+    @Published var captionTotalBytes: Int64 = 0
+    @Published var thematicTotalBytes: Int64 = 0
 
     private func setThematicPhase(_ phase: ModelRowPhase) {
         thematicModelPhase = phase
@@ -136,7 +174,8 @@ final class OllamaSetupManager: ObservableObject {
 
 private func pullOllamaModel(
     model: String,
-    onProgress: @escaping (Int64, Int64) async -> Void
+    onProgress: @escaping (Int64, Int64) async -> Void,
+    onVerifying: @escaping () async -> Void = {}
 ) async throws {
     guard let url = URL(string: "http://127.0.0.1:11434/api/pull") else { return }
     var req = URLRequest(url: url)
@@ -158,44 +197,51 @@ private func pullOllamaModel(
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
         else { continue }
 
+        let hasCompleted = json["completed"] != nil
+        let hasTotal     = json["total"] != nil
+
         if let c = json["completed"] as? Int64 { completedBytes = c }
         else if let c = json["completed"] as? Int { completedBytes = Int64(c) }
         if let t = json["total"] as? Int64 { totalBytes = t }
         else if let t = json["total"] as? Int { totalBytes = Int64(t) }
 
-        if totalBytes > 0 {
-            await onProgress(completedBytes, totalBytes)
-        }
         if (json["status"] as? String) == "success" { return }
+
+        if totalBytes > 0 {
+            if hasCompleted || hasTotal {
+                await onProgress(completedBytes, totalBytes)
+            } else {
+                // Post-download status lines (verifying digest, writing manifest, etc.)
+                await onVerifying()
+            }
+        }
     }
 }
 
-// MARK: - ollama create (via bundled Modelfile) — nonisolated
+// MARK: - ollama create (via POST /api/create) — sandbox-safe, no subprocess
+// Uses the structured Ollama API (from + parameters) rather than a raw Modelfile string.
+// Older Ollama versions used "modelfile"; newer versions require "from" — this is the current form.
 
 private func ollamaCreate(name: String) async throws {
-    guard let modelfileURL = Bundle.main.url(forResource: "Modelfile", withExtension: nil) else {
-        throw OllamaSetupError.modelfileNotFound
-    }
-    let modelfilePath = modelfileURL.path
-
-    return try await withCheckedThrowingContinuation { continuation in
-        func run(executablePath: String, onFailure: @escaping () -> Void) {
-            let proc = Process()
-            proc.executableURL = URL(fileURLWithPath: executablePath)
-            proc.arguments = ["create", name, "-f", modelfilePath]
-            proc.standardOutput = FileHandle.nullDevice
-            proc.standardError  = FileHandle.nullDevice
-            proc.terminationHandler = { p in
-                if p.terminationStatus == 0 { continuation.resume() }
-                else { onFailure() }
-            }
-            guard (try? proc.run()) != nil else { onFailure(); return }
-        }
-        run(executablePath: "/usr/local/bin/ollama") {
-            run(executablePath: "/opt/homebrew/bin/ollama") {
-                continuation.resume(throwing: OllamaSetupError.createFailed(name))
-            }
-        }
+    guard let url = URL(string: "http://127.0.0.1:11434/api/create") else { return }
+    var req = URLRequest(url: url)
+    req.httpMethod = "POST"
+    req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    req.httpBody = try JSONSerialization.data(withJSONObject: [
+        "model": name,
+        "from": "qwen2.5vl:7b",
+        "parameters": ["num_ctx": 2048],
+        "stream": false
+    ])
+    let session = URLSession(configuration: .ephemeral)
+    let (data, response) = try await session.data(for: req)
+    let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
+    print("[ollamaCreate] HTTP \(statusCode), body: \(String(data: data, encoding: .utf8) ?? "")")
+    guard statusCode == 200 else {
+        let ollamaError = (try? JSONSerialization.jsonObject(with: data) as? [String: Any])
+            .flatMap { $0["error"] as? String }
+            ?? "HTTP \(statusCode)"
+        throw OllamaSetupError.createFailed(ollamaError)
     }
 }
 
@@ -204,13 +250,16 @@ private func ollamaCreate(name: String) async throws {
 enum OllamaSetupError: LocalizedError {
     case badStatus
     case modelfileNotFound
-    case createFailed(String)
+    case createFailed(String) // raw Ollama error — shown only in debug print; UI uses plain message below
 
     var errorDescription: String? {
         switch self {
-        case .badStatus:           return "Ollama returned an unexpected status."
-        case .modelfileNotFound:   return "Modelfile not found in app bundle."
-        case .createFailed(let n): return "Failed to create model '\(n)'."
+        case .badStatus:
+            return "Couldn't reach Ollama. Make sure it's running and try again."
+        case .modelfileNotFound:
+            return "Modelfile not found in app bundle."
+        case .createFailed:
+            return "Couldn't configure the caption model. Quit Ollama from the menu bar, reopen it, then retry."
         }
     }
 }

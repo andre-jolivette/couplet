@@ -103,6 +103,23 @@ final class EngineController: ObservableObject {
         dependencyHealth = DependencyHealth(issues: issues)
     }
 
+    // MARK: - Reset
+
+    /// Cancels all running tasks and releases the database pool. Call before deleting
+    /// the underlying files (e.g. during the Uninstall / Reset flow). Safe to call
+    /// multiple times; subsequent calls are no-ops once the engine is torn down.
+    func prepareForReset() {
+        engineBuildTask?.cancel()
+        engineBuildTask = nil
+        indexStreamTask?.cancel()
+        indexStreamTask = nil
+        thematicV2PassTask?.cancel()
+        thematicV2PassTask = nil
+        indexingEngine = nil
+        queryService = nil
+        db = nil  // GRDB DatabasePool closes on dealloc
+    }
+
     // MARK: - Add folder
 
     func addFolder(url: URL) {
