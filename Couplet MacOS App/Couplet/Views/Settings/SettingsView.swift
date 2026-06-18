@@ -16,6 +16,9 @@ import ConjunctEngine
 struct SettingsView: View {
 
     @Bindable var store: SettingsStore
+    let engine: EngineController
+
+    @State private var showResetSheet = false
 
     var body: some View {
         Form {
@@ -156,6 +159,17 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
                     Spacer()
                 }
+
+                HStack {
+                    Spacer()
+                    Button("Uninstall / Reset Couplet\u{2026}") {
+                        showResetSheet = true
+                    }
+                    .buttonStyle(.plain)
+                    .font(.caption)
+                    .foregroundStyle(.red.opacity(0.7))
+                    Spacer()
+                }
             }
         }
         .formStyle(.grouped)
@@ -163,6 +177,9 @@ struct SettingsView: View {
         // Height flexes with content but stays reasonable on small screens
         .frame(minHeight: 720)
         .padding()
+        .sheet(isPresented: $showResetSheet) {
+            UninstallResetSheet(engine: engine)
+        }
     }
 
     // MARK: - Helpers (weight bindings)
@@ -194,5 +211,5 @@ struct SettingsView: View {
 // MARK: - Preview
 
 #Preview {
-    SettingsView(store: SettingsStore())
+    SettingsView(store: SettingsStore(), engine: EngineController(settings: SettingsStore()))
 }

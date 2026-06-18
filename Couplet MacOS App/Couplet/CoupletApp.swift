@@ -74,7 +74,7 @@ struct CoupletApp: App {
         }
 
         Settings {
-            SettingsView(store: settingsStore)
+            SettingsView(store: settingsStore, engine: engine)
         }
     }
 }

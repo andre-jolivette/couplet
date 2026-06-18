@@ -57,6 +57,9 @@ final class OllamaSetupManager: ObservableObject {
         step = .checkingDependencies
         let inventory = await OllamaInventory.check()
         guard inventory.reachable else {
+            // Record that the setup flow showed the install step — used by the
+            // Uninstall / Reset sheet to know whether to offer Ollama removal.
+            UserDefaults.standard.set(true, forKey: "com.toastbrigade.Couplet.coupletInstalledOllama")
             step = .installOllama
             return
         }
