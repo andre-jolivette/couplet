@@ -32,6 +32,9 @@ final class EngineController: ObservableObject {
     /// Increments by 1 every kThematicV2BatchSize pairs scored. Watched by PairsGridView
     /// to trigger incremental grid reloads mid-pass rather than waiting for completion.
     @Published private(set) var thematicV2BatchCount: Int = 0
+    /// Current dependency health. Empty issues = all healthy; hidden in UI when healthy.
+    /// Refreshed at launch, before each ThematicV2 pass, and on manual recheck.
+    @Published private(set) var dependencyHealth: DependencyHealth = .healthy
 
     // MARK: - Settings
 
@@ -86,6 +89,25 @@ final class EngineController: ObservableObject {
         } catch {
             print("EngineController init error: \(error)")
         }
+    }
+
+    // MARK: - Dependency health
+
+    /// Runs a single GET /api/tags inventory check and refreshes `dependencyHealth`.
+    /// Call at launch, before the ThematicV2 pass, and on manual recheck from the UI.
+    /// The CLIP status is derived from ModelBookmark + hasRealCLIP without a network call.
+    func checkDependencyHealth() async {
+        let inventory = await OllamaInventory.check()
+        let clipStatus: CLIPStatus
+        if !ModelBookmark.hasBookmark {
+            clipStatus = .notConfigured
+        } else if hasRealCLIP {
+            clipStatus = .healthy
+        } else {
+            clipStatus = .broken
+        }
+        let issues = buildDependencyIssues(ollamaInventory: inventory, clipStatus: clipStatus)
+        dependencyHealth = DependencyHealth(issues: issues)
     }
 
     // MARK: - Add folder
@@ -647,6 +669,12 @@ final class EngineController: ObservableObject {
                     roleExtractionEngine: roleExtraction
                 )
             }
+            // Fire after engine build so Ollama has already responded to the
+            // isAvailable() calls in buildCaptioningEngine / buildRoleExtractionEngine —
+            // avoids a false-positive from checking before Ollama finishes loading
+            // its model list (locally-created models like qwen2.5vl-caption appear
+            // in /api/tags slightly after startup).
+            await self.checkDependencyHealth()
         }
     }
 
@@ -869,6 +897,11 @@ final class EngineController: ObservableObject {
         // through thematicV2PassTask?.cancel() at line ~133, which bypasses this guard.
         guard !isThematicV2Running else { return }
         guard let db else { return }
+        // Refresh dependency health at each pass start so the indicator reflects current
+        // Ollama state. Fires as a concurrent task — does not block the synchronous start
+        // path or introduce async into this function (see decision #88 re: synchronous
+        // isThematicV2Running assignment below).
+        Task { await self.checkDependencyHealth() }
         // Set synchronously on @MainActor before creating the task. If isThematicV2Running
         // were set inside the detached task's first await MainActor.run instead, a second
         // call could arrive before the task body executes (due to .background scheduling
