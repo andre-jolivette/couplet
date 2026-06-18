@@ -32,7 +32,9 @@ struct ContentView: View {
                     )
                     .transition(.move(edge: .leading).combined(with: .opacity))
                 }
-                PairsGridView(gridVM: gridVM, libraryVM: libraryVM)
+                PairsGridView(gridVM: gridVM, libraryVM: libraryVM, onLikedCountChange: { delta in
+                    libraryVM.refreshPairCount(forCollection: LibraryViewModel.likedCollectionID, delta: delta)
+                })
             }
             .animation(.easeInOut(duration: 0.2), value: sidebarVisible)
             .onChange(of: libraryVM.selectedCollectionID) { _, _ in gridVM.clearFilters() }
@@ -62,7 +64,13 @@ struct ContentView: View {
                     allPairs: gridVM.allPairsForAnchor,
                     collections: libraryVM.collections,
                     onDecision: { id, decision in
+                        let oldDecision = gridVM.allPairs.first(where: { $0.id == id })?.decision
                         gridVM.applyDecision(id: id, decision: decision, engine: engine)
+                        if decision == .liked && oldDecision != .liked {
+                            libraryVM.refreshPairCount(forCollection: LibraryViewModel.likedCollectionID, delta: +1)
+                        } else if decision != .liked && oldDecision == .liked {
+                            libraryVM.refreshPairCount(forCollection: LibraryViewModel.likedCollectionID, delta: -1)
+                        }
                     },
                     onAddToCollection: { pairID, collectionID in
                         Task {

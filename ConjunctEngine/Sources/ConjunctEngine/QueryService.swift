@@ -111,8 +111,12 @@ public actor QueryService {
             args.append(contentsOf: [fid, fid])
         }
         if let cid = collectionID {
-            conditions.append("EXISTS (SELECT 1 FROM collectionPairs cp WHERE cp.pairID = p.id AND cp.collectionID = ?)")
-            args.append(cid)
+            if cid == -1 {
+                conditions.append("EXISTS (SELECT 1 FROM userDecisions ud WHERE ud.pairID = p.id AND ud.decision = 'liked')")
+            } else {
+                conditions.append("EXISTS (SELECT 1 FROM collectionPairs cp WHERE cp.pairID = p.id AND cp.collectionID = ?)")
+                args.append(cid)
+            }
         }
 
         let where_ = "WHERE " + conditions.joined(separator: " AND ")
@@ -249,8 +253,12 @@ public actor QueryService {
             args.append(contentsOf: [fid, fid])
         }
         if let cid = collectionID {
-            conditions.append("EXISTS (SELECT 1 FROM collectionPairs cp WHERE cp.pairID = p.id AND cp.collectionID = ?)")
-            args.append(cid)
+            if cid == -1 {
+                conditions.append("EXISTS (SELECT 1 FROM userDecisions ud WHERE ud.pairID = p.id AND ud.decision = 'liked')")
+            } else {
+                conditions.append("EXISTS (SELECT 1 FROM collectionPairs cp WHERE cp.pairID = p.id AND cp.collectionID = ?)")
+                args.append(cid)
+            }
         }
 
         let where_ = "WHERE " + conditions.joined(separator: " AND ")
@@ -315,8 +323,12 @@ public actor QueryService {
             args.append(contentsOf: [fid, fid])
         }
         if let cid = collectionID {
-            conditions.append("EXISTS (SELECT 1 FROM collectionPairs cp WHERE cp.pairID = p.id AND cp.collectionID = ?)")
-            args.append(cid)
+            if cid == -1 {
+                conditions.append("EXISTS (SELECT 1 FROM userDecisions ud WHERE ud.pairID = p.id AND ud.decision = 'liked')")
+            } else {
+                conditions.append("EXISTS (SELECT 1 FROM collectionPairs cp WHERE cp.pairID = p.id AND cp.collectionID = ?)")
+                args.append(cid)
+            }
         }
         if let aid = anchorImageID {
             conditions.append("(p.imageAID = ? OR p.imageBID = ?)")
@@ -520,6 +532,22 @@ public actor QueryService {
                     pairCount: intCol("pairCount")
                 )
             }
+        }
+    }
+
+    public nonisolated func fetchLikedPairsCount() throws -> Int {
+        try db.read { db in
+            let sql = """
+                SELECT COUNT(*) FROM pairs p
+                JOIN images a ON a.id = p.imageAID
+                JOIN images b ON b.id = p.imageBID
+                WHERE a.isActive = 1 AND b.isActive = 1
+                AND EXISTS (
+                    SELECT 1 FROM userDecisions ud
+                    WHERE ud.pairID = p.id AND ud.decision = 'liked'
+                )
+            """
+            return (try Int.fetchOne(db, sql: sql)) ?? 0
         }
     }
 

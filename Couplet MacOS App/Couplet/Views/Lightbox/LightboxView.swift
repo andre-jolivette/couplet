@@ -335,7 +335,7 @@ struct LightboxView: View {
                 .buttonStyle(.plain)
                 .popover(isPresented: $showCollectionPicker) {
                     CollectionPickerPopover(
-                        collections: collections,
+                        collections: collections.filter { !$0.isPermanent },
                         onSelect: { collectionID in
                             guard let pair = vm.currentPair else { return }
                             onAddToCollection(pair.id, collectionID)

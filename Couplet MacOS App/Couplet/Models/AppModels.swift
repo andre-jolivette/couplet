@@ -255,4 +255,5 @@ struct CollectionItem: Identifiable, Hashable {
     let id: Int
     var name: String
     var pairCount: Int
+    var isPermanent: Bool = false
 }

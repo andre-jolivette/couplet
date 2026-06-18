@@ -6,6 +6,10 @@ import Combine
 @MainActor
 final class LibraryViewModel: ObservableObject {
 
+    /// Sentinel collectionID for the permanent "Liked Pairs" collection.
+    /// Negative so it can never clash with a real SQLite AUTOINCREMENT id.
+    static let likedCollectionID = -1
+
     @Published var collections: [CollectionItem] = []
     @Published var selectedFolderID: Int? = nil
     @Published var selectedCollectionID: Int? = nil
@@ -25,7 +29,16 @@ final class LibraryViewModel: ObservableObject {
     }
 
     func loadCollections(engine: EngineController) async {
-        collections = await engine.fetchCollections()
+        async let likedCount = engine.likedPairsCount()
+        async let fetched   = engine.fetchCollections()
+        let (count, userCollections) = await (likedCount, fetched)
+        let liked = CollectionItem(
+            id: Self.likedCollectionID,
+            name: "Liked Pairs",
+            pairCount: count,
+            isPermanent: true
+        )
+        collections = [liked] + userCollections
     }
 
     func addCollection(name: String, engine: EngineController?) async {
