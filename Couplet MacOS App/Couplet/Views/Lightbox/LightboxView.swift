@@ -497,8 +497,9 @@ struct LightboxView: View {
             Image(systemName: direction == .left ? "chevron.left" : "chevron.right")
                 .font(.system(size: 18, weight: .semibold))
                 .foregroundColor(.white.opacity(canGo ? 0.80 : 0.18))
-                .frame(width: width, height: 44)
-                .background(Circle().fill(Color.white.opacity(canGo ? 0.10 : 0.03)))
+                .frame(width: 32, height: 44)
+                .background(RoundedRectangle(cornerRadius: 6).fill(Color.white.opacity(canGo ? 0.10 : 0.03)))
+                .frame(width: width)
                 .contentShape(Rectangle().size(width: width, height: 1000))
         }
         .buttonStyle(.plain)
