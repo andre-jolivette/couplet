@@ -39,7 +39,7 @@ struct UninstallResetSheet: View {
 
             // ── Title ─────────────────────────────────────────────────────
             VStack(alignment: .leading, spacing: 4) {
-                Text("Uninstall / Reset Couplet")
+                Text("Uninstall Couplet")
                     .font(.system(size: 17, weight: .semibold))
                     .foregroundColor(.appPrimary)
                 Text("Removes Couplet's database and cached thumbnails. Your original photos are never touched.")
@@ -50,23 +50,13 @@ struct UninstallResetSheet: View {
 
             Divider()
 
-            // ── Scope checkboxes ──────────────────────────────────────────
-            VStack(alignment: .leading, spacing: 12) {
-
-                CheckRow(
-                    isOn: .constant(true),
-                    disabled: true,
-                    label: "Database and thumbnail cache",
-                    sublabel: "conjunct.db and all cached thumbnails and previews"
-                )
-
-                CheckRow(
-                    isOn: $removeModels,
-                    disabled: false,
-                    label: "Ollama models",
-                    sublabel: "qwen2.5vl-caption and qwen2.5:14b-instruct"
-                )
-            }
+            // ── Scope checkbox ────────────────────────────────────────────
+            CheckRow(
+                isOn: $removeModels,
+                disabled: false,
+                label: "Also remove Ollama models",
+                sublabel: "qwen2.5vl-caption and qwen2.5:14b-instruct"
+            )
 
             // ── Ollama-itself section (only when Couplet installed it) ────
             if coupletInstalledOllama {
@@ -98,10 +88,10 @@ struct UninstallResetSheet: View {
                     if isResetting {
                         HStack(spacing: 6) {
                             ProgressView().controlSize(.mini).tint(.white)
-                            Text("Resetting…")
+                            Text("Uninstalling…")
                         }
                     } else {
-                        Text("Reset Couplet\u{2026}")
+                        Text("Uninstall Couplet\u{2026}")
                     }
                 }
                 .buttonStyle(DestructiveButtonStyle())
@@ -111,9 +101,9 @@ struct UninstallResetSheet: View {
         .padding(24)
         .frame(width: 480)
         .background(Color.appBackground)
-        .alert("Reset Couplet?", isPresented: $showConfirm) {
+        .alert("Uninstall Couplet?", isPresented: $showConfirm) {
             Button("Cancel", role: .cancel) {}
-            Button("Reset", role: .destructive) {
+            Button("Uninstall", role: .destructive) {
                 Task { await performReset() }
             }
         } message: {

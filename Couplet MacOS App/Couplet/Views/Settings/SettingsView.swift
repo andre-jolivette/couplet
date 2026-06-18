@@ -162,7 +162,7 @@ struct SettingsView: View {
 
                 HStack {
                     Spacer()
-                    Button("Uninstall / Reset Couplet\u{2026}") {
+                    Button("Uninstall Couplet\u{2026}") {
                         showResetSheet = true
                     }
                     .buttonStyle(.plain)
