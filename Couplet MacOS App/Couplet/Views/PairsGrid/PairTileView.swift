@@ -51,6 +51,8 @@ struct PairTileView: View {
                     .transition(.opacity.animation(.easeIn(duration: 0.1)))
             } else if pair.decision == .liked {
                 likedButton
+            } else if pair.decision == .rejected {
+                hiddenButton
             }
         }
         .clipped()   // prevent any child from overflowing the tile bounds
@@ -145,19 +147,9 @@ struct PairTileView: View {
         .foregroundColor(Color.appMutedForeground)
     }
 
-    // MARK: - Decision badge (rejected only — liked state expressed via the heart button)
+    // MARK: - Decision badge (unused — liked/rejected state expressed via action buttons)
 
-    private var decisionBadge: some View {
-        Group {
-            if pair.decision == .rejected {
-                Image(systemName: "eye.slash.fill")
-                    .font(.system(size: 11)).foregroundColor(.white)
-                    .padding(5).background(Circle().fill(Color.orange.opacity(0.85)))
-                    .padding([.top, .leading], 7)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            }
-        }
-    }
+    private var decisionBadge: some View { EmptyView() }
 
     // MARK: - Hover actions (eye · export · heart, left to right)
 
@@ -173,10 +165,15 @@ struct PairTileView: View {
         .padding(8)
     }
 
-    // MARK: - Liked button (always visible when liked, not hovered)
+    // MARK: - Persistent decision buttons (visible in resting state, not on hover)
 
     private var likedButton: some View {
         TileActionButton(icon: "heart.fill", color: kLikeFill, iconColor: kLikeGlyph, action: onLike)
+            .padding(8)
+    }
+
+    private var hiddenButton: some View {
+        TileActionButton(icon: "eye.slash.fill", color: kLikeFill, iconColor: kLikeGlyph, action: onReject)
             .padding(8)
     }
 }
