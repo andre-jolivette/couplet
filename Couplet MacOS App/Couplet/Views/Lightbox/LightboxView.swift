@@ -90,6 +90,7 @@ struct LightboxView: View {
         } // end outer HStack
         .background(Color(red: 0.07, green: 0.07, blue: 0.07))
         .focusable()
+        .focusEffectDisabled()
         .focused($isFocused)
         .onAppear { isFocused = true }
         .onContinuousHover { phase in
