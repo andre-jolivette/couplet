@@ -100,6 +100,16 @@ public actor IndexingEngine {
                             catch is CancellationError { /* superseded mid-run; newer index handles it */ }
                             catch { print("RoleCandidates: \(error.localizedDescription)") }
                         }
+                        // Gaze (directed-attention) candidates (#109) — same placement
+                        // rationale as role candidates: needs the final pairs table for
+                        // dedup, idempotent, re-runs if superseded.
+                        if Task.isCancelled {
+                            print("GazeCandidates: skipped — index superseded; newer index will regenerate")
+                        } else {
+                            do { try await self.generateGazeCandidates(weights: weights) }
+                            catch is CancellationError { /* superseded mid-run; newer index handles it */ }
+                            catch { print("GazeCandidates: \(error.localizedDescription)") }
+                        }
                         continuation.yield(IndexingProgress(
                             phase: .backgroundScoringComplete,
                             itemsComplete: 0, itemsTotal: 0
@@ -1383,6 +1393,127 @@ public actor IndexingEngine {
             }
         }
         print("RoleCandidates: \(inserted) new + \(updated) existing tagged of \(cands.count) joins (\(profiled.count) profiles)")
+    }
+
+    /// Geometric nomination of directed-attention "call and response" candidates
+    /// (backlog #72, decision #109). Runs in the cross-folder task after scoring and
+    /// `generateRoleCandidates`. Pairs a strong lateral looker (`|gazeDirectionX|`)
+    /// with a target whose subject sits toward the gutter (`weightCentroidX`) so the
+    /// look lands on it; orientation per the gaze convention (rightward-gazer = left).
+    /// Inserts NEW pairs as `selectedFor='gaze'` with axis scores via PairScorer and
+    /// `gazeJudgeScore` NULL (pending the vision judge — a later phase). The connection
+    /// is visual, not textual, so these never go through the text ThematicV2 judge.
+    ///
+    /// Phase-1 scope: NEW pairs only — a nominated diptych that already exists as a
+    /// pair (rare: gaze pairs are a fresh geometric relationship the four-pool topK
+    /// doesn't select for) is skipped, not tagged. Existing-pair tagging can follow
+    /// once the vision judge lands, mirroring the role pattern.
+    public func generateGazeCandidates(weights: ScoringWeights = .default) async throws {
+        try Task.checkCancellation()
+        struct GazeMeta { let id: Int64; let gaze: Double?; let centroidX: Double?; let captureDate: Double? }
+        let gazeRows: [GazeMeta] = try db.read { db in
+            let rows = try Row.fetchAll(db, sql: """
+                SELECT id, gazeDirectionX, weightCentroidX, captureDate FROM images
+                WHERE isActive = 1 AND isHero = 1
+            """)
+            return rows.compactMap { row -> GazeMeta? in
+                guard let id = row["id"] as? Int64 else { return nil }
+                return GazeMeta(
+                    id: id,
+                    gaze: row["gazeDirectionX"] as? Double,
+                    centroidX: row["weightCentroidX"] as? Double,
+                    captureDate: (row["captureDate"] as? Double) ?? (row["captureDate"] as? Int64).map(Double.init))
+            }
+        }
+        guard gazeRows.count > 1 else { return }
+
+        let candidates = GazeNominator.nominate(gazeRows.map {
+            GazeNominator.Image(id: $0.id, gaze: $0.gaze.map(Float.init),
+                                centroidX: $0.centroidX.map(Float.init), captureDate: $0.captureDate)
+        })
+        guard !candidates.isEmpty else { return }
+
+        // Vectors + metadata for axis scoring (reuse PairScorer); existing-pair set for dedup.
+        let vectors = try loadHeroVectors()
+        let vByID = Dictionary(uniqueKeysWithValues: vectors.map { ($0.imageID, $0) })
+        typealias ImageMeta = (captureDate: Double?, filename: String, caption: String,
+                               accentHue: Double?, accentSaturation: Double?,
+                               weightCentroidX: Double?, weightCentroidY: Double?,
+                               gazeDirectionX: Double?, colorProfile: String)
+        let heroIDs = vectors.map(\.imageID)
+        let meta: [Int64: ImageMeta] = try db.read { db in
+            guard !heroIDs.isEmpty else { return [:] }
+            let ids = heroIDs.map { "\($0)" }.joined(separator: ",")
+            let rows = try Row.fetchAll(db, sql: "SELECT id, captureDate, filename, caption, accentHue, accentSaturation, weightCentroidX, weightCentroidY, gazeDirectionX, colorProfile FROM images WHERE id IN (\(ids))")
+            var r = [Int64: ImageMeta]()
+            for row in rows {
+                let id = row["id"] as! Int64
+                r[id] = (
+                    captureDate: (row["captureDate"] as? Double) ?? (row["captureDate"] as? Int64).map(Double.init),
+                    filename: row["filename"] as? String ?? "",
+                    caption: row["caption"] as? String ?? "",
+                    accentHue: row["accentHue"] as? Double,
+                    accentSaturation: row["accentSaturation"] as? Double,
+                    weightCentroidX: row["weightCentroidX"] as? Double,
+                    weightCentroidY: row["weightCentroidY"] as? Double,
+                    gazeDirectionX: row["gazeDirectionX"] as? Double,
+                    colorProfile: row["colorProfile"] as? String ?? "color"
+                )
+            }
+            return r
+        }
+        let existing: Set<String> = try db.read { db in
+            let rows = try Row.fetchAll(db, sql: "SELECT imageAID, imageBID FROM pairs")
+            var s = Set<String>()
+            for row in rows {
+                guard let a = row["imageAID"] as? Int64, let b = row["imageBID"] as? Int64 else { continue }
+                let (lo, hi) = a < b ? (a, b) : (b, a)
+                s.insert("\(lo)_\(hi)")
+            }
+            return s
+        }
+
+        var inserted = 0
+        try db.write { db in
+            for c in candidates {
+                let (lo, hi) = c.leftID < c.rightID ? (c.leftID, c.rightID) : (c.rightID, c.leftID)
+                if existing.contains("\(lo)_\(hi)") { continue }            // Phase 1: new pairs only
+                let mL = meta[c.leftID]; let mR = meta[c.rightID]
+                if FilenameVariants.areVariants(mL?.filename ?? "", mR?.filename ?? "") { continue }
+                guard let vL = vByID[c.leftID], let vR = vByID[c.rightID] else { continue }
+                // Display orientation is fixed by the nominator (looker faces the gutter);
+                // PairScorer is used only for the symmetric axis scores. leftID stays imageAID.
+                let s = PairScorer.score(
+                    imageAID: c.leftID, vectorA: vL, imageBID: c.rightID, vectorB: vR,
+                    captureDateA: mL?.captureDate, captureDateB: mR?.captureDate,
+                    filenameA: mL?.filename ?? "", filenameB: mR?.filename ?? "",
+                    captionA: mL?.caption ?? "", captionB: mR?.caption ?? "",
+                    accentHueA: mL?.accentHue, accentSaturationA: mL?.accentSaturation,
+                    accentHueB: mR?.accentHue, accentSaturationB: mR?.accentSaturation,
+                    weightCentroidXA: mL?.weightCentroidX.map(Float.init), weightCentroidYA: mL?.weightCentroidY.map(Float.init),
+                    weightCentroidXB: mR?.weightCentroidX.map(Float.init), weightCentroidYB: mR?.weightCentroidY.map(Float.init),
+                    gazeDirectionXA: mL?.gazeDirectionX.map(Float.init), gazeDirectionXB: mR?.gazeDirectionX.map(Float.init),
+                    colorProfileA: mL?.colorProfile ?? "color", colorProfileB: mR?.colorProfile ?? "color",
+                    weights: weights
+                )
+                var rec = PairRecord(
+                    imageAID: c.leftID, imageBID: c.rightID,
+                    aestheticScore: Double(s.aestheticScore), aestheticSubmode: s.aestheticSubmode,
+                    geometricScore: Double(s.geometricScore),
+                    rawEdgeSim: Double(s.rawEdgeSim), rawGridSim: Double(s.rawGridSim),
+                    maxEdgePeakedness: Double(s.maxEdgePeakedness), maxGridVariance: Double(s.maxGridVariance),
+                    edgePeakednessMult: Double(s.edgePeakednessMult), gridVarianceMult: Double(s.gridVarianceMult),
+                    selectedFor: "gaze",
+                    thematicScore: Double(s.thematicScore), compositeScore: Double(s.compositeScore),
+                    rationale: "directed gaze: a figure looks toward the other image's subject — pending vision judge",
+                    geometricSubmode: s.geometricSubmode,
+                    roleHypothesis: nil
+                )
+                try rec.insert(db)
+                inserted += 1
+            }
+        }
+        print("GazeCandidates: \(inserted) new of \(candidates.count) nominated (\(gazeRows.count) heroes)")
     }
 
     /// Loads feature vectors for hero images only (one per duplicate stack).

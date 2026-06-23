@@ -353,6 +353,21 @@ public final class DatabaseManager: Sendable {
             )
         }
 
+        // ── v19: gaze vision-judge verdict on pairs (decision #109) ───────
+        // Directed-attention "call and response" pairs (backlog #72): a figure in
+        // one image looks toward something that is the SUBJECT of the other. This
+        // signal is visual/geometric — not in the captions — so it can't go through
+        // the text ThematicV2 judge. Candidates are nominated geometrically
+        // (selectedFor='gaze') and confirmed by a separate VISION judge that sees
+        // both images. These columns hold that verdict. NULL score on a
+        // selectedFor='gaze' pair = nominated but not yet vision-judged.
+        migrator.registerMigration("v19_gazeVisionJudge") { db in
+            try db.alter(table: "pairs") { t in
+                t.add(column: "gazeJudgeScore",     .real)
+                t.add(column: "gazeJudgeRationale", .text)
+            }
+        }
+
         try migrator.migrate(pool)
     }
 }
