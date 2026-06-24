@@ -57,6 +57,12 @@ public struct PairQueryResult: Sendable {
     /// used so a rejected role verdict (thematicV2Score == 0) falls back to the cluster
     /// thematicScore rather than demoting the pair to 0.
     public let roleHypothesis: String?
+    /// Gaze vision-judge verdict (#109, v19): geometry-derived clarity score when the
+    /// directed-attention look is confirmed VALID, 0 when rejected. Nil = not yet judged
+    /// (or not a `selectedFor='gaze'` pair).
+    public let gazeJudgeScore: Double?
+    /// One-sentence vision-judge rationale (what the look is aimed at). Nil when unjudged.
+    public let gazeJudgeRationale: String?
 }
 
 public struct FolderQueryResult: Sendable {

@@ -1,6 +1,7 @@
 import Foundation
 import Combine
 import SwiftUI
+import ImageIO
 import ConjunctEngine
 
 @MainActor
@@ -32,6 +33,10 @@ final class EngineController: ObservableObject {
     /// Increments by 1 every kThematicV2BatchSize pairs scored. Watched by PairsGridView
     /// to trigger incremental grid reloads mid-pass rather than waiting for completion.
     @Published private(set) var thematicV2BatchCount: Int = 0
+    /// True while the gaze vision-judge pass (#109) is running.
+    @Published private(set) var isGazeVisionRunning: Bool = false
+    @Published private(set) var gazeVisionJudged: Int = 0
+    @Published private(set) var gazeVisionTotal: Int = 0
     /// Current dependency health. Empty issues = all healthy; hidden in UI when healthy.
     /// Refreshed at launch, before each ThematicV2 pass, and on manual recheck.
     @Published private(set) var dependencyHealth: DependencyHealth = .healthy
@@ -51,6 +56,7 @@ final class EngineController: ObservableObject {
     private var indexStreamTask: Task<Void, Never>?
     /// Background LLM scoring pass — cancelled when a new index starts, restarted after page-0 load.
     private var thematicV2PassTask: Task<Void, Never>?
+    private var gazeVisionPassTask: Task<Void, Never>?
 
     /// Full cap-2-filtered representative pair list for the current folder/sort context.
     /// Populated on page-0 fetch; subsequent pages slice from this cache.
@@ -115,6 +121,8 @@ final class EngineController: ObservableObject {
         indexStreamTask = nil
         thematicV2PassTask?.cancel()
         thematicV2PassTask = nil
+        gazeVisionPassTask?.cancel()
+        gazeVisionPassTask = nil
         indexingEngine = nil
         queryService = nil
         db = nil  // GRDB DatabasePool closes on dealloc
@@ -172,6 +180,8 @@ final class EngineController: ObservableObject {
 
         thematicV2PassTask?.cancel()
         thematicV2PassTask = nil
+        gazeVisionPassTask?.cancel()
+        gazeVisionPassTask = nil
         indexStreamTask?.cancel()
         indexStreamTask = Task {
             _ = url.startAccessingSecurityScopedResource()
@@ -524,7 +534,10 @@ final class EngineController: ObservableObject {
                             self.imagePairCounts = pairCounts
                             self.representativePairsCache = finalSorted
                             self.representativePairsCacheKey = (folderID, collectionID, sortColumn)
-                            if capturedTriggerThematic { self.startThematicV2Pass() }
+                            if capturedTriggerThematic {
+                                self.startThematicV2Pass()
+                                self.startGazeVisionPass()
+                            }
                         }
                     }
                 } catch is CancellationError {
@@ -838,6 +851,8 @@ final class EngineController: ObservableObject {
             rationale: r.rationale,
             thematicV2Rationale: r.thematicV2Rationale,
             thematicV2RelationshipType: r.thematicV2RelationshipType,
+            gazeJudgeScore: r.gazeJudgeScore.map(Float.init),
+            gazeJudgeRationale: r.gazeJudgeRationale,
             pairCountA: imagePairCounts[Int(r.imageAID), default: 0],
             pairCountB: imagePairCounts[Int(r.imageBID), default: 0],
             thumbnailURLA: thumbnailURL(for: r.thumbnailPathA),
@@ -915,6 +930,61 @@ final class EngineController: ObservableObject {
             }
             await MainActor.run { self.isThematicV2Running = false }
         }
+    }
+
+    /// Starts the gaze vision-judge pass (#109) — judges `selectedFor='gaze'` candidates
+    /// via `qwen2.5vl` at 1024px (the resolution where the model perceives the gaze
+    /// target). Mirrors `startThematicV2Pass`'s synchronous-flag / re-entrancy guard
+    /// (decisions #87, #88). The image provider resolves the folder bookmark and renders
+    /// a 1024px JPEG from the original (mirrors MidResLoader but smaller, returns Data).
+    private func startGazeVisionPass() {
+        guard !isGazeVisionRunning else { return }
+        guard let db else { return }
+        isGazeVisionRunning = true
+        gazeVisionJudged = 0
+        gazeVisionTotal = 0
+        gazeVisionPassTask?.cancel()
+        gazeVisionPassTask = Task.detached(priority: .background) { [self] in
+            guard await GazeVisionJudge.isAvailable() else {
+                print("GazeVision: qwen2.5vl not available — pass skipped. Run: ollama pull qwen2.5vl:7b")
+                await MainActor.run { self.isGazeVisionRunning = false }
+                return
+            }
+            let pass = GazeVisionBackgroundPass(db: db, imageProvider: { id, path, folder in
+                await Self.render1024JPEG(imageID: id, path: path, folderPath: folder)
+            })
+            await pass.run { [self] judged, total in
+                await MainActor.run {
+                    self.gazeVisionJudged = judged
+                    self.gazeVisionTotal = total
+                }
+            }
+            await MainActor.run { self.isGazeVisionRunning = false }
+        }
+    }
+
+    /// Renders a ~1024px (long-edge) JPEG from the original file, resolving the folder's
+    /// security-scoped bookmark first. Reads bytes into Data before decoding to avoid the
+    /// IOSurface sandbox spam (same reasoning as MidResLoader). Returns nil if unreadable.
+    @Sendable private static func render1024JPEG(imageID: Int64, path: String, folderPath: String) async -> Data? {
+        guard !path.isEmpty else { return nil }
+        let folderURL = folderPath.isEmpty ? nil : FolderBookmarks.resolve(folderPath: folderPath)
+        return await Task.detached(priority: .background) {
+            if let folderURL { _ = folderURL.startAccessingSecurityScopedResource() }
+            defer { folderURL?.stopAccessingSecurityScopedResource() }
+            guard let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
+                  let src = CGImageSourceCreateWithData(data as CFData, nil),
+                  let cg = CGImageSourceCreateThumbnailAtIndex(src, 0, [
+                      kCGImageSourceCreateThumbnailFromImageAlways: true,
+                      kCGImageSourceCreateThumbnailWithTransform: true,
+                      kCGImageSourceThumbnailMaxPixelSize: 1024,
+                  ] as CFDictionary) else { return nil }
+            let out = NSMutableData()
+            guard let dest = CGImageDestinationCreateWithData(out, "public.jpeg" as CFString, 1, nil) else { return nil }
+            CGImageDestinationAddImage(dest, cg, [kCGImageDestinationLossyCompressionQuality: 0.85] as CFDictionary)
+            guard CGImageDestinationFinalize(dest) else { return nil }
+            return out as Data
+        }.value
     }
 
     private func detectDriveType(_ url: URL) -> FolderItem.DriveType {

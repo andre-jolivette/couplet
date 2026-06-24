@@ -124,6 +124,8 @@ nonisolated func convertToPairFree(
         rationale: r.rationale,
         thematicV2Rationale: r.thematicV2Rationale,
         thematicV2RelationshipType: r.thematicV2RelationshipType,
+        gazeJudgeScore: r.gazeJudgeScore.map(Float.init),
+        gazeJudgeRationale: r.gazeJudgeRationale,
         pairCountA: pairCounts[Int(r.imageAID), default: 0],
         pairCountB: pairCounts[Int(r.imageBID), default: 0],
         thumbnailURLA: thumbURL(r.thumbnailPathA),
@@ -141,6 +143,7 @@ nonisolated func pairSortComparator(for order: PairSortOrder) -> (DisplayPair, D
     case .thematic:  return { $0.thematicScore  > $1.thematicScore  }
     case .geometric: return { $0.geometricScore > $1.geometricScore }
     case .aesthetic: return { $0.aestheticScore > $1.aestheticScore }
+    case .gaze:      return { ($0.gazeJudgeScore ?? -1) > ($1.gazeJudgeScore ?? -1) }
     }
 }
 

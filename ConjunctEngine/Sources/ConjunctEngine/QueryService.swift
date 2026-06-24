@@ -137,6 +137,8 @@ public actor QueryService {
                 p.thematicV2RelationshipType,
                 p.thematicV2Rationale,
                 p.roleHypothesis,
+                p.gazeJudgeScore,
+                p.gazeJudgeRationale,
                 a.filename       AS filenameA,
                 a.thumbnailPath  AS thumbA,
                 a.path           AS imagePathA,
@@ -224,7 +226,9 @@ public actor QueryService {
                     thematicV2Score: row["thematicV2Score"] as? Double,
                     thematicV2RelationshipType: row["thematicV2RelationshipType"] as? String,
                     thematicV2Rationale: row["thematicV2Rationale"] as? String,
-                    roleHypothesis: row["roleHypothesis"] as? String
+                    roleHypothesis: row["roleHypothesis"] as? String,
+                    gazeJudgeScore: row["gazeJudgeScore"] as? Double,
+                    gazeJudgeRationale: row["gazeJudgeRationale"] as? String
                 ))
                 if chunk.count == chunkSize {
                     try process(chunk)
@@ -354,6 +358,8 @@ public actor QueryService {
                 p.thematicV2RelationshipType,
                 p.thematicV2Rationale,
                 p.roleHypothesis,
+                p.gazeJudgeScore,
+                p.gazeJudgeRationale,
                 a.filename       AS filenameA,
                 a.thumbnailPath  AS thumbA,
                 a.path           AS imagePathA,
@@ -442,7 +448,9 @@ public actor QueryService {
                     thematicV2Score: row["thematicV2Score"] as? Double,
                     thematicV2RelationshipType: row["thematicV2RelationshipType"] as? String,
                     thematicV2Rationale: row["thematicV2Rationale"] as? String,
-                    roleHypothesis: row["roleHypothesis"] as? String
+                    roleHypothesis: row["roleHypothesis"] as? String,
+                    gazeJudgeScore: row["gazeJudgeScore"] as? Double,
+                    gazeJudgeRationale: row["gazeJudgeRationale"] as? String
                 )
             }
         }

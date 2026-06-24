@@ -15,6 +15,10 @@ struct LightboxInfoRail: View {
     var body: some View {
         ScrollView(.vertical, showsIndicators: false) {
             VStack(alignment: .leading, spacing: 0) {
+                if pair.gazeJudgeScore != nil {
+                    gazeSection
+                    Divider().opacity(0.2).padding(.vertical, 8)
+                }
                 scoreSection(
                     label: "Aesthetic", letter: "A",
                     score: pair.aestheticScore,
@@ -45,6 +49,37 @@ struct LightboxInfoRail: View {
         }
         .background(Color(white: 0.10))
         .frame(width: Self.width)
+    }
+
+    // MARK: - Directed gaze (#109)
+
+    /// Shown only for `selectedFor='gaze'` pairs (gazeJudgeScore non-nil). Explains why
+    /// the pair surfaced via the directed-attention method and shows the vision judge's
+    /// reading of where the look lands. The score is geometry-derived clarity (how clearly
+    /// this is a real, well-aimed look) — NOT a quality score; quality is the viewer's call.
+    private var gazeSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text("DIRECTED GAZE")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundColor(.white.opacity(0.40))
+                Spacer()
+                if let s = pair.gazeJudgeScore {
+                    Text(String(format: "%.2f", s))
+                        .font(.system(size: 12, design: .monospaced))
+                        .foregroundColor(.white.opacity(0.70))
+                }
+            }
+            Text("A figure in one image looks toward the subject of the other — a “call and response.” Nominated by gaze geometry, confirmed by a vision check. The score reflects how clearly it’s a real, well-aimed look, not whether the pairing is good — that’s your call.")
+                .font(.system(size: 11))
+                .foregroundColor(.white.opacity(0.55))
+            if let r = pair.gazeJudgeRationale, !r.isEmpty {
+                Text(r)
+                    .font(.system(size: 12))
+                    .foregroundColor(.white.opacity(0.80))
+                    .padding(.top, 2)
+            }
+        }
     }
 
     // MARK: - Captions

@@ -34,6 +34,9 @@ enum PairSortOrder: String, CaseIterable, Identifiable {
     case thematic  = "Thematic"
     case geometric = "Geometric"
     case aesthetic = "Aesthetic"
+    /// Directed-attention pairs (#109), ranked by the gaze validity-clarity score.
+    /// Non-gaze pairs sort to the bottom (gazeJudgeScore is NULL → −1).
+    case gaze      = "Directed gaze"
     var id: String { rawValue }
 
     /// SQL ORDER BY expression (may be a column name or a full expression).
@@ -55,6 +58,8 @@ enum PairSortOrder: String, CaseIterable, Identifiable {
             return "p.geometricScore"
         case .aesthetic:
             return "p.aestheticScore"
+        case .gaze:
+            return "COALESCE(p.gazeJudgeScore, -1)"
         }
     }
 }
@@ -105,6 +110,12 @@ struct DisplayPair: Identifiable, Hashable {
     let thematicV2Rationale: String?
     /// Relationship type from ThematicScorerV2: complementary/contrastive/echo/ironic/tonal/none.
     let thematicV2RelationshipType: String?
+    /// Gaze vision-judge (#109) verdict: geometry-derived clarity when the directed look
+    /// is confirmed valid, 0 when rejected, nil when unjudged / not a gaze pair.
+    let gazeJudgeScore: Float? = nil
+    /// One-sentence vision-judge rationale (what the look is aimed at). Shown in the
+    /// lightbox info rail for `selectedFor='gaze'` pairs. Nil when unjudged.
+    let gazeJudgeRationale: String? = nil
     /// Total number of pairs for each image in the current folder context.
     /// Used for the dot badge in the grid (threshold: 100) and count labels in the lightbox.
     let pairCountA: Int
