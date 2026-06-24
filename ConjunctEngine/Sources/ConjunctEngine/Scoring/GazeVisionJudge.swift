@@ -1,5 +1,15 @@
 import Foundation
 
+/// Step-1 result: what the looker is actually looking at, and whether that look
+/// leaves their own frame. Determined from the LOOKER IMAGE ALONE — the model's
+/// single-image perception is reliable at 1024px, but in a two-image diptych call it
+/// degrades (it read a phone-in-hand as "a companion"). So egress is judged in
+/// isolation and amortized per looker. See decision #109.
+public struct LookerEgress: Sendable {
+    public let leavesFrame: Bool
+    public let target: String
+}
+
 /// Verdict from the vision judge for one directed-attention candidate.
 public struct GazeJudgeResult: Sendable {
     public let accepted: Bool
@@ -22,33 +32,41 @@ public struct GazeJudgeResult: Sendable {
 /// (a phone, a companion) whose look only coincidentally points toward the gutter.
 public actor GazeVisionJudge {
 
-    // Describe-first prompt: the model must commit to WHAT the looker is looking at
-    // (a `looker_target` + `leaves_frame` field) before the verdict — without this it
-    // rubber-stamps every pair. Internal gaze (a phone in hand, a companion) is the
-    // hardest reject and is only perceivable at PREVIEW resolution, not thumbnails —
-    // the pass must feed previews. See decision #109. Prompt still being tuned (it can
-    // over-reject borderline-resonant targets).
-    private static let kSystemPrompt = """
-You judge whether two photographs form a "call and response" gaze pair. IMAGE 1 is on the \
-LEFT, IMAGE 2 on the RIGHT. One image holds a person looking sideways toward the gutter; \
-the claim is that their look leaves their own frame and lands on the OTHER image's subject, \
-making one line of sight neither image carries alone.
+    // STEP 1 — egress, judged on the LOOKER IMAGE ALONE. Single-image perception is
+    // reliable at 1024px; the two-image call is not (it misreads a held phone as "a
+    // companion"). Internal gaze (looking at a held object / a person beside them) is
+    // the dominant failure, so this cheap per-looker check culls it up front. See #109.
+    private static let kEgressPrompt = """
+You are shown ONE photograph. A person in it is looking to one side. Determine what they \
+are actually looking at — look closely at their eyeline:
+- an object in their OWN hands (a phone, a camera, a cup),
+- another person or thing right NEXT TO them, inside this same frame,
+- or something OFF the edge of the frame, not visible in this photo.
 
-Work in this order and record it in the JSON:
-1. looker_target — look closely at the person in the looker image and name what they are \
-actually looking at: a phone or object in their hands, a companion right next to them, or \
-something off the edge of the frame.
-2. leaves_frame — true ONLY if the look exits their own frame (NOT a held object, NOT a \
-person beside them).
-3. accepted — true only if leaves_frame is true AND the other image's subject is a \
-plausible thing for that look to land on, creating a third meaning (not two unrelated \
-images side by side).
+Respond with exactly this JSON, no preamble or markdown:
+{"target": "what they are looking at, in a few words", "leaves_frame": true or false}
+
+leaves_frame is true ONLY if their look clearly exits this frame entirely — NOT a held \
+object, NOT someone beside them. When unsure, answer false.
+"""
+
+    // STEP 2 — resonance, judged on BOTH images. Egress (step 1) already confirmed the
+    // look leaves the looker's frame, so this call only weighs whether the OTHER image's
+    // subject is a resonant thing for that look to land on. Still tuning. See #109.
+    private static let kResonancePrompt = """
+Two photographs are shown side by side: IMAGE 1 on the LEFT, IMAGE 2 on the RIGHT. It is \
+already established that a person in one of them is looking OFF the edge of their own frame, \
+toward the other image. Your only job: decide whether the SUBJECT of the other image is a \
+plausible, resonant thing for that look to land on — so the two frames lock into one line \
+of sight that creates a meaning neither image carries alone — OR whether pairing them is \
+arbitrary (the look could not plausibly be directed at that subject, or it just places two \
+unrelated images side by side).
 
 Be skeptical; when unsure, reject. Respond with exactly this JSON, no preamble or markdown:
-{"looker_target": "...", "leaves_frame": true or false, "accepted": true or false, "confidence": 0.0 to 1.0, "rationale": "one sentence"}
+{"accepted": true or false, "confidence": 0.0 to 1.0, "rationale": "one sentence"}
 
-CONFIDENCE: 0.9–1.0 the look unmistakably reaches the other subject; 0.7–0.89 clear with \
-a moment's thought; 0.5–0.69 weak but real; below 0.5 set accepted=false.
+CONFIDENCE: 0.9–1.0 the look unmistakably completes on the other subject; 0.7–0.89 clear \
+with a moment's thought; 0.5–0.69 weak but real; below 0.5 set accepted=false.
 """
 
     private let endpoint: URL
@@ -70,22 +88,41 @@ a moment's thought; 0.5–0.69 weak but real; below 0.5 set accepted=false.
         self.timeoutSeconds = timeoutSeconds
     }
 
-    /// Judges one candidate. `lookerIsLeft` tells the model which image holds the looker
-    /// (the nominator oriented the diptych so the look points toward the gutter, but
-    /// stating it removes ambiguity). `leftJPEG`/`rightJPEG` are raw thumbnail bytes.
-    /// Same return/throw contract as ThematicScorerV2: nil on parse failure or
-    /// cancellation; throws on network/HTTP error.
-    public func judge(leftJPEG: Data, rightJPEG: Data, lookerIsLeft: Bool) async throws -> GazeJudgeResult? {
-        let lookerNum = lookerIsLeft ? 1 : 2, targetNum = lookerIsLeft ? 2 : 1
-        let prompt = """
-        The person looking sideways is in IMAGE \(lookerNum); the proposed target subject is in IMAGE \(targetNum). \
-        Does IMAGE \(lookerNum)'s look leave its own frame and land on the subject of IMAGE \(targetNum)?
-        """
+    /// STEP 1 — does the looker's gaze leave their own frame? Judged on the looker image
+    /// alone (`jpeg` ~1024px). Amortize per looker image, not per pair. Same nil/throw
+    /// contract as ThematicScorerV2.
+    public func analyzeLooker(jpeg: Data) async throws -> LookerEgress? {
         guard let raw = try await callOllama(
+            system: Self.kEgressPrompt,
+            prompt: "What is the person looking at, and does their look leave this frame?",
+            images: [jpeg.base64EncodedString()]
+        ) else { return nil }
+        guard let obj = parseJSON(from: raw) else { return nil }
+        let leaves = (obj["leaves_frame"] as? Bool) ?? false
+        let target = (obj["target"] as? String) ?? ""
+        return LookerEgress(leavesFrame: leaves, target: target)
+    }
+
+    /// STEP 2 — is the other image's subject a resonant target for the (already
+    /// frame-leaving) look? Judged on both images. `lookerIsLeft` = looker is imageAID.
+    public func judgeResonance(leftJPEG: Data, rightJPEG: Data, lookerIsLeft: Bool) async throws -> GazeJudgeResult? {
+        let lookerNum = lookerIsLeft ? 1 : 2, targetNum = lookerIsLeft ? 2 : 1
+        let prompt = "The person looking off-frame is in IMAGE \(lookerNum); judge whether the subject of IMAGE \(targetNum) is what their look lands on."
+        guard let raw = try await callOllama(
+            system: Self.kResonancePrompt,
             prompt: prompt,
             images: [leftJPEG.base64EncodedString(), rightJPEG.base64EncodedString()]
         ) else { return nil }
-        return parseResult(from: raw)
+        guard let parsed = parseJSON(from: raw) else { return nil }
+        guard let accepted = parsed["accepted"] as? Bool,
+              let rationale = parsed["rationale"] as? String else {
+            print("GazeVisionJudge: resonance missing fields — \(parsed.keys.joined(separator: ", "))")
+            return nil
+        }
+        let confidence: Double = (parsed["confidence"] as? Double)
+            ?? (parsed["confidence"] as? NSNumber)?.doubleValue
+            ?? (accepted ? 0.6 : 0.0)
+        return GazeJudgeResult(accepted: accepted, confidence: Float(confidence), rationale: rationale)
     }
 
     /// Reachable + model present. Gate the pass on this for a clean skip (mirrors ThematicScorerV2).
@@ -103,10 +140,10 @@ a moment's thought; 0.5–0.69 weak but real; below 0.5 set accepted=false.
 
     // MARK: - Private
 
-    private func callOllama(prompt: String, images: [String]) async throws -> String? {
+    private func callOllama(system: String, prompt: String, images: [String]) async throws -> String? {
         let body: [String: Any] = [
             "model": model,
-            "system": Self.kSystemPrompt,
+            "system": system,
             "prompt": prompt,
             "images": images,
             "stream": false,
@@ -143,8 +180,9 @@ a moment's thought; 0.5–0.69 weak but real; below 0.5 set accepted=false.
         return rawText
     }
 
-    /// Tolerant JSON extraction (mirrors ThematicScorerV2.parseResult).
-    private func parseResult(from raw: String) -> GazeJudgeResult? {
+    /// Tolerant JSON extraction (mirrors ThematicScorerV2.parseResult): strips a code
+    /// fence, isolates the outer object, and recovers an unclosed object.
+    private func parseJSON(from raw: String) -> [String: Any]? {
         var text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         if let fence = text.range(of: "```") { text = String(text[fence.upperBound...]) }
         if let start = text.firstIndex(of: "{") { text = String(text[start...]) }
@@ -155,27 +193,11 @@ a moment's thought; 0.5–0.69 weak but real; below 0.5 set accepted=false.
                   let o = try? JSONSerialization.jsonObject(with: d) as? [String: Any] else { return nil }
             return o
         }
-        var parsed = tryParse(text)
-        if parsed == nil, text.hasPrefix("{"), let lastQuote = text.lastIndex(of: "\"") {
-            parsed = tryParse(String(text[...lastQuote]) + "}")
+        if let obj = tryParse(text) { return obj }
+        if text.hasPrefix("{"), let lastQuote = text.lastIndex(of: "\"") {
+            if let obj = tryParse(String(text[...lastQuote]) + "}") { return obj }
         }
-        guard let parsed else {
-            print("GazeVisionJudge: failed to parse JSON — raw: \(raw)")
-            return nil
-        }
-        guard let rawAccepted = parsed["accepted"] as? Bool,
-              let rationale = parsed["rationale"] as? String else {
-            print("GazeVisionJudge: missing required fields — \(parsed.keys.joined(separator: ", "))")
-            return nil
-        }
-        // Enforce the perceptual gate: a look that does not leave its own frame can never
-        // be accepted, regardless of what the model put in `accepted`. Internal gaze is
-        // the dominant failure, so we hard-gate on the model's own `leaves_frame` reading.
-        let leavesFrame = (parsed["leaves_frame"] as? Bool) ?? true
-        let accepted = rawAccepted && leavesFrame
-        let confidence: Double = (parsed["confidence"] as? Double)
-            ?? (parsed["confidence"] as? NSNumber)?.doubleValue
-            ?? (accepted ? 0.6 : 0.0)
-        return GazeJudgeResult(accepted: accepted, confidence: Float(confidence), rationale: rationale)
+        print("GazeVisionJudge: failed to parse JSON — raw: \(raw)")
+        return nil
     }
 }
