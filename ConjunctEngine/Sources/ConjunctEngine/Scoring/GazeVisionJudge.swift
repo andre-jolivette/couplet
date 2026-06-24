@@ -37,44 +37,31 @@ public actor GazeVisionJudge {
     // companion"). Internal gaze (looking at a held object / a person beside them) is
     // the dominant failure, so this cheap per-looker check culls it up front. See #109.
     private static let kEgressPrompt = """
-You are shown ONE photograph. We need a person making a CLEAR, DELIBERATE sideways look — \
-their face and eyes visibly turned toward one edge of the frame, at something outside it. \
-Look closely at the main person and decide which case this is:
-- HELD: they are looking at something in their own hands (a phone, camera, cup).
-- BESIDE: they are looking at a person or thing right next to them, inside this same frame.
-- AWAY: they are facing away / back to camera / head down / eyes not visible / no \
-discernible eyeline — you cannot actually tell they are looking off-frame.
-- OFFFRAME: their visible eyeline clearly exits the frame toward something not pictured.
+You are shown ONE photograph. Decide whether the main person is making a clear, deliberate \
+look toward one SIDE of the frame, at something OUTSIDE it. Look closely at their face and eyes.
+
+First rule out the cases that DO NOT count (answer leaves_frame=false for any of these):
+- BACK/AWAY: you see the back or far side of their head, their face is turned away, their \
+eyes are not visible, or you simply cannot tell where they are looking. If you cannot \
+clearly see an eye pointed to one side, it does NOT count.
+- HELD: they are looking down at something in their own hands (a phone, camera, cup).
+- BESIDE: they are looking at a person or thing right next to them, within this same frame.
+
+Only if none of those apply: OFFFRAME — their visible eye(s) clearly point to the left or \
+right, off the edge of the frame, at something not pictured here.
 
 Respond with exactly this JSON, no preamble or markdown:
-{"target": "what they are looking at, in a few words", "leaves_frame": true or false}
+{"target": "where they are looking, e.g. 'off-frame to the right' or 'a phone in their hands'", "leaves_frame": true or false}
 
-leaves_frame is true ONLY for the OFFFRAME case — a deliberate, visible-eyeline look that \
-exits the frame. It is FALSE for HELD, BESIDE, and AWAY. When unsure, answer false.
+leaves_frame is true ONLY for OFFFRAME — a visible eye pointed off the edge of the frame. \
+False for BACK/AWAY, HELD, BESIDE. When you are unsure, answer false.
 """
 
-    // STEP 2 — VALIDITY / aim, judged on BOTH images. This is NOT a quality judgment:
-    // whether the pairing is interesting or resonant is the human's call (a local VLM
-    // can't make it — it either rejects on thematic relatedness or rubber-stamps a
-    // "spark" at a flat 0.9). The model only confirms the look could plausibly be AIMED
-    // at where the other subject sits. The numeric score is computed from geometry by
-    // the pass, not from the model. See decision #109.
-    private static let kAimPrompt = """
-Two photographs are shown side by side: IMAGE 1 on the LEFT, IMAGE 2 on the RIGHT. A person \
-in one of them is looking off the edge of their own frame, toward the other image.
-
-This is a VALIDITY check ONLY — do NOT judge whether the pairing is good, interesting, or \
-resonant (a human decides that; unrelated subjects are completely fine and expected).
-
-Answer one question: could the DIRECTION of that person's look plausibly be aimed at where \
-the other image's subject sits — i.e. is their look pointed toward the other image, at \
-roughly the right height/side — rather than clearly aimed elsewhere (up at the sky when the \
-subject is low, away from the other image, etc.)? Also reject if, on a closer look, the \
-person is not really looking off-frame at all (facing away, no visible eyeline).
-
-Respond with exactly this JSON, no preamble or markdown:
-{"valid": true or false, "rationale": "one sentence: where the look is aimed and whether it could reach the other image's subject"}
-"""
+    // NOTE: an earlier two-image "aim" step (does the look land on the other subject?)
+    // was removed (#109) — the nominator already guarantees aim geometrically (the target
+    // subject sits at the gutter where the gaze lands), and the VLM's two-image gaze-
+    // direction reads were unreliable (it misjudged which way people looked), rejecting
+    // good pairs for wrong reasons. Validity now rests on the single-image egress alone.
 
     private let endpoint: URL
     private let model: String
@@ -108,28 +95,6 @@ Respond with exactly this JSON, no preamble or markdown:
         let leaves = (obj["leaves_frame"] as? Bool) ?? false
         let target = (obj["target"] as? String) ?? ""
         return LookerEgress(leavesFrame: leaves, target: target)
-    }
-
-    /// STEP 2 — VALIDITY/aim check on both images. Returns whether the look could
-    /// plausibly be aimed at the other subject (binary) + a rationale. NOT a quality
-    /// score — the pass computes the numeric score from geometry. `lookerIsLeft` =
-    /// looker is imageAID. `valid`/`rationale` map to `accepted`/`rationale`;
-    /// `confidence` is unused here (left 0) and overwritten by the pass.
-    public func judgeAim(leftJPEG: Data, rightJPEG: Data, lookerIsLeft: Bool) async throws -> GazeJudgeResult? {
-        let lookerNum = lookerIsLeft ? 1 : 2, targetNum = lookerIsLeft ? 2 : 1
-        let prompt = "The person looking off-frame is in IMAGE \(lookerNum); could their look be aimed at the subject of IMAGE \(targetNum)?"
-        guard let raw = try await callOllama(
-            system: Self.kAimPrompt,
-            prompt: prompt,
-            images: [leftJPEG.base64EncodedString(), rightJPEG.base64EncodedString()]
-        ) else { return nil }
-        guard let parsed = parseJSON(from: raw) else { return nil }
-        guard let valid = parsed["valid"] as? Bool,
-              let rationale = parsed["rationale"] as? String else {
-            print("GazeVisionJudge: aim missing fields — \(parsed.keys.joined(separator: ", "))")
-            return nil
-        }
-        return GazeJudgeResult(accepted: valid, confidence: 0, rationale: rationale)
     }
 
     /// Reachable + model present. Gate the pass on this for a clean skip (mirrors ThematicScorerV2).

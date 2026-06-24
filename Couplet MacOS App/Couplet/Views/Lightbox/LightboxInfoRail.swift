@@ -70,9 +70,6 @@ struct LightboxInfoRail: View {
                         .foregroundColor(.white.opacity(0.70))
                 }
             }
-            Text("A figure in one image looks toward the subject of the other — a “call and response.” Nominated by gaze geometry, confirmed by a vision check. The score reflects how clearly it’s a real, well-aimed look, not whether the pairing is good — that’s your call.")
-                .font(.system(size: 11))
-                .foregroundColor(.white.opacity(0.55))
             if let r = pair.gazeJudgeRationale, !r.isEmpty {
                 Text(r)
                     .font(.system(size: 12))

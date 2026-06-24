@@ -100,41 +100,25 @@ public actor GazeVisionBackgroundPass {
                 }
             }
 
-            // Internal gaze (or unparseable egress) → reject this pair outright, no resonance call.
-            if egress?.leavesFrame != true {
-                let why = egress.map { "looker is looking at \($0.target) — does not leave the frame" }
-                    ?? "could not determine the looker's gaze"
-                if writeVerdict(pairID: c.pairID, score: 0, rationale: why) { done += 1; await onProgress?(done, candidates.count) }
+            // Egress is the whole verdict (#109): no second model call. A look that does
+            // not leave the frame (internal gaze / facing away) is rejected; a real
+            // off-frame look is VALID, scored by geometry. The nominator already aimed it
+            // (the target subject sits at the gutter where the gaze lands), so the model
+            // never sees the target — its two-image aim reads were unreliable.
+            guard let egress else {
+                // Unparseable egress — leave the pair NULL and retry next pass (don't cache).
                 continue
             }
-
-            // ── Step 2: resonance (both images) ──
-            guard let lookerBytes = await bytes(c.lookerID, c.lookerPath, c.lookerFolder),
-                  let targetBytes = await bytes(c.targetID, c.targetPath, c.targetFolder) else {
-                print("GazeVisionBackgroundPass: no image bytes for pair \(c.pairID) — skipping")
-                continue
+            let score: Float
+            let rationale: String
+            if egress.leavesFrame {
+                score = Float(Self.clarityScore(lookerGazeAbs: c.lookerGazeAbs, coherence: c.coherence))
+                rationale = "A clear off-frame look (\(egress.target)); the gaze geometry points toward this image's subject."
+            } else {
+                score = 0
+                rationale = "Not an off-frame look — the figure is looking at \(egress.target)."
             }
-            let (leftBytes, rightBytes) = c.lookerIsLeft ? (lookerBytes, targetBytes) : (targetBytes, lookerBytes)
-            let result: GazeJudgeResult?
-            do {
-                result = try await judge.judgeAim(leftJPEG: leftBytes, rightJPEG: rightBytes, lookerIsLeft: c.lookerIsLeft)
-                connectionFailures = 0
-            } catch {
-                if Task.isCancelled { return }
-                connectionFailures += 1
-                print("GazeVisionBackgroundPass: aim connection error (\(connectionFailures)/\(maxConnectionFailures))")
-                if connectionFailures >= maxConnectionFailures { print("GazeVisionBackgroundPass: aborting — server down"); return }
-                continue
-            }
-            guard let result else {
-                if Task.isCancelled { return }
-                print("GazeVisionBackgroundPass: unparseable aim verdict for pair \(c.pairID) — left NULL")
-                continue   // stays NULL, retried next pass
-            }
-            // VLM verdict is binary (valid/not); the SCORE is geometry-derived clarity, not
-            // the model's number — interestingness is the human's call. See decision #109.
-            let score = result.accepted ? Self.clarityScore(lookerGazeAbs: c.lookerGazeAbs, coherence: c.coherence) : 0
-            if writeVerdict(pairID: c.pairID, score: Float(score), rationale: result.rationale) {
+            if writeVerdict(pairID: c.pairID, score: score, rationale: rationale) {
                 done += 1; await onProgress?(done, candidates.count)
             }
         }
