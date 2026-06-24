@@ -368,6 +368,23 @@ public final class DatabaseManager: Sendable {
             }
         }
 
+        // ── v20: subject-clarity signals for the gaze nominator (decision #109) ──
+        // Live review of Phase-1 gaze candidates showed the dominant failure was
+        // multi-person/multi-subject images on either side (ambiguous or internal
+        // gaze; "which subject?"). These columns let the nominator require a single
+        // clear looker (faceCount == 1) and a single dominant target subject
+        // (subjectDominance). All three are extracted in Phase 7 from Vision requests
+        // that already run; NULL faceCount is the re-extract sentinel (forces a
+        // one-time saliency re-pass on existing images). humanCount kept for tuning
+        // headroom (e.g. the future "2 people, one dominant looker" loosening).
+        migrator.registerMigration("v20_subjectClarity") { db in
+            try db.alter(table: "images") { t in
+                t.add(column: "faceCount",        .integer)
+                t.add(column: "humanCount",       .integer)
+                t.add(column: "subjectDominance", .real)
+            }
+        }
+
         try migrator.migrate(pool)
     }
 }

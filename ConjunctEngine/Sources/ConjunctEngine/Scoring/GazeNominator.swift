@@ -27,15 +27,22 @@ public enum GazeNominator {
 
     /// Per-image geometry the nominator reads. `gaze`/`centroidX` are nil when the
     /// detector found no face / no salient subject — such images can't be lookers
-    /// / targets respectively.
+    /// / targets respectively. `faceCount` and `subjectDominance` gate ambiguous
+    /// multi-subject images out of both roles (decision #109, live-review feedback).
     public struct Image: Sendable, Equatable {
         public let id: Int64
         public let gaze: Float?
         public let centroidX: Float?
         public let captureDate: Double?
-        public init(id: Int64, gaze: Float?, centroidX: Float?, captureDate: Double?) {
+        public let faceCount: Int?
+        public let humanCount: Int?
+        public let subjectDominance: Float?
+        public init(id: Int64, gaze: Float?, centroidX: Float?, captureDate: Double?,
+                    faceCount: Int? = nil, humanCount: Int? = nil, subjectDominance: Float? = nil) {
             self.id = id; self.gaze = gaze; self.centroidX = centroidX
             self.captureDate = captureDate
+            self.faceCount = faceCount; self.humanCount = humanCount
+            self.subjectDominance = subjectDominance
         }
     }
 
@@ -52,10 +59,16 @@ public enum GazeNominator {
         }
     }
 
-    // Defaults are the calibrated values (dev library, 2026-06-23): ~435 candidates,
-    // 256 distinct images — same order as one ThematicV2 budget, good diversity.
-    public static let defaultThreshold: Float = 0.20    // |gaze| ≥ 0.20 → a clear lateral look
+    // Calibrated against the live thumbnails (2026-06-23, the cases Andre flagged):
+    // - threshold 0.22: the subject-clarity gates (below) remove the crowds that made
+    //   low thresholds noisy, so 0.22 is safe — it recovers good soft-gaze lookers
+    //   (L1007801 at 0.24) without dipping into the ~0.20 zone that "didn't read".
+    //   The 0.22→0.25 step is a cliff (23 lookers → 15); below 0.22 adds ~nothing.
+    // - dominanceMin 0.55: target distribution is p10=0.49 / p50=0.62; 0.55 cuts the
+    //   scattered-subject tail (DSF0343 at 0.43) while keeping clear subjects (0.61+).
+    public static let defaultThreshold: Float = 0.22    // |gaze| ≥ 0.22 → a clear lateral look
     public static let defaultCoherenceMin: Float = 0.05 // target subject at least slightly gutter-side
+    public static let defaultDominanceMin: Float = 0.55  // target has one dominant subject, not a scattered crowd
     public static let defaultCapPerLooker = 4
     public static let defaultCapPerTarget = 3
     public static let defaultBurstGapSeconds: Double = 300
@@ -68,18 +81,30 @@ public enum GazeNominator {
         _ images: [Image],
         threshold: Float = defaultThreshold,
         coherenceMin: Float = defaultCoherenceMin,
+        dominanceMin: Float = defaultDominanceMin,
         capPerLooker: Int = defaultCapPerLooker,
         capPerTarget: Int = defaultCapPerTarget,
         burstGapSeconds: Double = defaultBurstGapSeconds
     ) -> [Candidate] {
-        // Strongest lookers pick first; id tiebreaker for reproducibility.
+        // LOOKER: a clear lateral gaze AND a single unambiguous subject — exactly one
+        // face AND at most one human. Both are needed: in a crowd Vision often detects
+        // only ONE face but many humans (measured: a 7-person scene → faceCount 1,
+        // humanCount 7), so faceCount alone lets crowds through. The human gate is what
+        // catches them, and excludes looks that land on someone else inside the frame.
+        // (humanCount ≤ 1 also admits tight face-crops where no full human is detected.)
+        // Strongest gaze picks first. See decision #109.
         let lookers = images
-            .filter { ($0.gaze.map { abs($0) } ?? 0) >= threshold }
+            .filter {
+                ($0.gaze.map { abs($0) } ?? 0) >= threshold
+                    && $0.faceCount == 1 && ($0.humanCount ?? 99) <= 1
+            }
             .sorted { a, b in
                 let ga = abs(a.gaze ?? 0), gb = abs(b.gaze ?? 0)
                 return ga != gb ? ga > gb : a.id < b.id
             }
-        let targets = images.filter { $0.centroidX != nil }
+        // TARGET: a salient subject that is also DOMINANT (one clear thing for the
+        // gaze to land on, not a scattered crowd). A nil dominance fails the gate.
+        let targets = images.filter { $0.centroidX != nil && ($0.subjectDominance ?? 0) >= dominanceMin }
 
         func isBurst(_ a: Image, _ b: Image) -> Bool {
             guard let da = a.captureDate, let db = b.captureDate else { return false }

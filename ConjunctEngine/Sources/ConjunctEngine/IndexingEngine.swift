@@ -447,9 +447,11 @@ public actor IndexingEngine {
         ))
 
         let saliencyIDs: [Int64] = try db.read { db in
+            // `faceCount IS NULL` forces a one-time re-pass on images extracted before
+            // v20 (decision #109) so faceCount / humanCount / subjectDominance backfill.
             let rows = try Row.fetchAll(db, sql: """
                 SELECT id FROM images
-                WHERE isActive = 1 AND (weightCentroidX IS NULL OR gazeDirectionX IS NULL)
+                WHERE isActive = 1 AND (weightCentroidX IS NULL OR gazeDirectionX IS NULL OR faceCount IS NULL)
             """)
             return rows.compactMap { $0["id"] as? Int64 }
         }
@@ -469,12 +471,15 @@ public actor IndexingEngine {
                     try db.execute(
                         sql: """
                             UPDATE images
-                            SET weightCentroidX = ?, weightCentroidY = ?, gazeDirectionX = ?
+                            SET weightCentroidX = ?, weightCentroidY = ?, gazeDirectionX = ?,
+                                faceCount = ?, humanCount = ?, subjectDominance = ?
                             WHERE id = ?
                         """,
                         arguments: [
                             features?.centroid?.x, features?.centroid?.y,
                             features?.gazeDirectionX,
+                            features?.faceCount ?? 0, features?.humanCount ?? 0,
+                            features?.subjectDominance,
                             imageID
                         ]
                     )
@@ -1410,26 +1415,39 @@ public actor IndexingEngine {
     /// once the vision judge lands, mirroring the role pattern.
     public func generateGazeCandidates(weights: ScoringWeights = .default) async throws {
         try Task.checkCancellation()
-        struct GazeMeta { let id: Int64; let gaze: Double?; let centroidX: Double?; let captureDate: Double? }
+        // Re-runnable: clear prior UNJUDGED gaze candidates so a nominator re-tune
+        // regenerates cleanly without a full re-index (judged rows are preserved).
+        try db.write { db in
+            try db.execute(sql: "DELETE FROM pairs WHERE selectedFor = 'gaze' AND gazeJudgeScore IS NULL")
+        }
+        struct GazeMeta {
+            let id: Int64; let gaze: Double?; let centroidX: Double?; let captureDate: Double?
+            let faceCount: Int?; let humanCount: Int?; let dominance: Double?
+        }
         let gazeRows: [GazeMeta] = try db.read { db in
             let rows = try Row.fetchAll(db, sql: """
-                SELECT id, gazeDirectionX, weightCentroidX, captureDate FROM images
+                SELECT id, gazeDirectionX, weightCentroidX, captureDate, faceCount, humanCount, subjectDominance FROM images
                 WHERE isActive = 1 AND isHero = 1
             """)
+            func intCol(_ row: Row, _ c: String) -> Int? { (row[c] as? Int) ?? (row[c] as? Int64).map(Int.init) }
             return rows.compactMap { row -> GazeMeta? in
                 guard let id = row["id"] as? Int64 else { return nil }
                 return GazeMeta(
                     id: id,
                     gaze: row["gazeDirectionX"] as? Double,
                     centroidX: row["weightCentroidX"] as? Double,
-                    captureDate: (row["captureDate"] as? Double) ?? (row["captureDate"] as? Int64).map(Double.init))
+                    captureDate: (row["captureDate"] as? Double) ?? (row["captureDate"] as? Int64).map(Double.init),
+                    faceCount: intCol(row, "faceCount"), humanCount: intCol(row, "humanCount"),
+                    dominance: row["subjectDominance"] as? Double)
             }
         }
         guard gazeRows.count > 1 else { return }
 
         let candidates = GazeNominator.nominate(gazeRows.map {
             GazeNominator.Image(id: $0.id, gaze: $0.gaze.map(Float.init),
-                                centroidX: $0.centroidX.map(Float.init), captureDate: $0.captureDate)
+                                centroidX: $0.centroidX.map(Float.init), captureDate: $0.captureDate,
+                                faceCount: $0.faceCount, humanCount: $0.humanCount,
+                                subjectDominance: $0.dominance.map(Float.init))
         })
         guard !candidates.isEmpty else { return }
 

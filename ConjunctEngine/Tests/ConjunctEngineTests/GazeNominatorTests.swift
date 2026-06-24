@@ -6,8 +6,12 @@ import XCTest
 /// gaze threshold, the burst guard, and the degree caps.
 final class GazeNominatorTests: XCTestCase {
 
-    func img(_ id: Int64, gaze: Float?, cx: Float?, cd: Double? = nil) -> GazeNominator.Image {
-        .init(id: id, gaze: gaze, centroidX: cx, captureDate: cd)
+    // Lookers default to faceCount 1 / humanCount 1 (single clear subject); targets
+    // default to high dominance — so each test overrides only the field it exercises.
+    func img(_ id: Int64, gaze: Float?, cx: Float?, cd: Double? = nil,
+             faces: Int? = 1, humans: Int? = 1, dom: Float? = 1.0) -> GazeNominator.Image {
+        .init(id: id, gaze: gaze, centroidX: cx, captureDate: cd,
+              faceCount: faces, humanCount: humans, subjectDominance: dom)
     }
 
     func testRightwardLookerGoesLeftAndPointsIntoTarget() {
@@ -80,19 +84,52 @@ final class GazeNominatorTests: XCTestCase {
     }
 
     func testStrongestLookerPicksFirst() {
-        // Two lookers (strong 0.30, weak 0.21) compete for a single target capped at 1.
-        // The stronger looker wins the pick (processed first).
+        // Two lookers (strong 0.30, weaker 0.21) compete for a single target capped at 1.
+        // The stronger looker wins the pick (processed first). threshold 0.20 so both qualify.
         let c = GazeNominator.nominate([img(1, gaze: 0.21, cx: 0.5),
                                         img(2, gaze: 0.30, cx: 0.5),
                                         img(100, gaze: nil, cx: 0.1)],
-                                       capPerTarget: 1)
+                                       threshold: 0.20, capPerTarget: 1)
         XCTAssertEqual(c.count, 1)
         XCTAssertEqual(c[0].lookerID, 2)
     }
 
+    func testMultiFaceLookerExcluded() {
+        // A strong gaze but two faces → ambiguous looker (which face? gaze may land
+        // on the other person in-frame). Excluded.
+        let c = GazeNominator.nominate([img(1, gaze: 0.40, cx: 0.5, faces: 2),
+                                        img(2, gaze: nil, cx: 0.2)])
+        XCTAssertTrue(c.isEmpty)
+    }
+
+    func testCrowdLookerExcludedByHumanCount() {
+        // The decisive case: a crowd where Vision detects only ONE face but many
+        // humans (faceCount=1 passes, but humanCount=7 must exclude it).
+        let c = GazeNominator.nominate([img(1, gaze: 0.50, cx: 0.5, faces: 1, humans: 7),
+                                        img(2, gaze: nil, cx: 0.2)])
+        XCTAssertTrue(c.isEmpty)
+    }
+
+    func testTightFaceCropLookerAllowed() {
+        // A tight portrait: one face, zero full humans detected → still a valid looker.
+        let c = GazeNominator.nominate([img(1, gaze: 0.50, cx: 0.5, faces: 1, humans: 0),
+                                        img(2, gaze: nil, cx: 0.2)])
+        XCTAssertEqual(c.count, 1)
+        XCTAssertEqual(c[0].lookerID, 1)
+    }
+
+    func testLowDominanceTargetExcluded() {
+        // Target's attention is scattered (dominance below the gate) → no single thing
+        // for the look to land on. Excluded.
+        let c = GazeNominator.nominate([img(1, gaze: 0.40, cx: 0.5),
+                                        img(2, gaze: nil, cx: 0.2, dom: 0.10)],
+                                       dominanceMin: 0.35)
+        XCTAssertTrue(c.isEmpty)
+    }
+
     func testDeterministicAcrossInputOrder() {
-        let a = [img(1, gaze: 0.30, cx: 0.5), img(2, gaze: nil, cx: 0.2),
-                 img(3, gaze: -0.25, cx: 0.5), img(4, gaze: nil, cx: 0.7)]
+        let a = [img(1, gaze: 0.40, cx: 0.5), img(2, gaze: nil, cx: 0.2),
+                 img(3, gaze: -0.35, cx: 0.5), img(4, gaze: nil, cx: 0.7)]
         XCTAssertEqual(GazeNominator.nominate(a), GazeNominator.nominate(a.reversed()))
     }
 }
