@@ -37,36 +37,43 @@ public actor GazeVisionJudge {
     // companion"). Internal gaze (looking at a held object / a person beside them) is
     // the dominant failure, so this cheap per-looker check culls it up front. See #109.
     private static let kEgressPrompt = """
-You are shown ONE photograph. A person in it is looking to one side. Determine what they \
-are actually looking at — look closely at their eyeline:
-- an object in their OWN hands (a phone, a camera, a cup),
-- another person or thing right NEXT TO them, inside this same frame,
-- or something OFF the edge of the frame, not visible in this photo.
+You are shown ONE photograph. We need a person making a CLEAR, DELIBERATE sideways look — \
+their face and eyes visibly turned toward one edge of the frame, at something outside it. \
+Look closely at the main person and decide which case this is:
+- HELD: they are looking at something in their own hands (a phone, camera, cup).
+- BESIDE: they are looking at a person or thing right next to them, inside this same frame.
+- AWAY: they are facing away / back to camera / head down / eyes not visible / no \
+discernible eyeline — you cannot actually tell they are looking off-frame.
+- OFFFRAME: their visible eyeline clearly exits the frame toward something not pictured.
 
 Respond with exactly this JSON, no preamble or markdown:
 {"target": "what they are looking at, in a few words", "leaves_frame": true or false}
 
-leaves_frame is true ONLY if their look clearly exits this frame entirely — NOT a held \
-object, NOT someone beside them. When unsure, answer false.
+leaves_frame is true ONLY for the OFFFRAME case — a deliberate, visible-eyeline look that \
+exits the frame. It is FALSE for HELD, BESIDE, and AWAY. When unsure, answer false.
 """
 
-    // STEP 2 — resonance, judged on BOTH images. Egress (step 1) already confirmed the
-    // look leaves the looker's frame, so this call only weighs whether the OTHER image's
-    // subject is a resonant thing for that look to land on. Still tuning. See #109.
-    private static let kResonancePrompt = """
-Two photographs are shown side by side: IMAGE 1 on the LEFT, IMAGE 2 on the RIGHT. It is \
-already established that a person in one of them is looking OFF the edge of their own frame, \
-toward the other image. Your only job: decide whether the SUBJECT of the other image is a \
-plausible, resonant thing for that look to land on — so the two frames lock into one line \
-of sight that creates a meaning neither image carries alone — OR whether pairing them is \
-arbitrary (the look could not plausibly be directed at that subject, or it just places two \
-unrelated images side by side).
+    // STEP 2 — VALIDITY / aim, judged on BOTH images. This is NOT a quality judgment:
+    // whether the pairing is interesting or resonant is the human's call (a local VLM
+    // can't make it — it either rejects on thematic relatedness or rubber-stamps a
+    // "spark" at a flat 0.9). The model only confirms the look could plausibly be AIMED
+    // at where the other subject sits. The numeric score is computed from geometry by
+    // the pass, not from the model. See decision #109.
+    private static let kAimPrompt = """
+Two photographs are shown side by side: IMAGE 1 on the LEFT, IMAGE 2 on the RIGHT. A person \
+in one of them is looking off the edge of their own frame, toward the other image.
 
-Be skeptical; when unsure, reject. Respond with exactly this JSON, no preamble or markdown:
-{"accepted": true or false, "confidence": 0.0 to 1.0, "rationale": "one sentence"}
+This is a VALIDITY check ONLY — do NOT judge whether the pairing is good, interesting, or \
+resonant (a human decides that; unrelated subjects are completely fine and expected).
 
-CONFIDENCE: 0.9–1.0 the look unmistakably completes on the other subject; 0.7–0.89 clear \
-with a moment's thought; 0.5–0.69 weak but real; below 0.5 set accepted=false.
+Answer one question: could the DIRECTION of that person's look plausibly be aimed at where \
+the other image's subject sits — i.e. is their look pointed toward the other image, at \
+roughly the right height/side — rather than clearly aimed elsewhere (up at the sky when the \
+subject is low, away from the other image, etc.)? Also reject if, on a closer look, the \
+person is not really looking off-frame at all (facing away, no visible eyeline).
+
+Respond with exactly this JSON, no preamble or markdown:
+{"valid": true or false, "rationale": "one sentence: where the look is aimed and whether it could reach the other image's subject"}
 """
 
     private let endpoint: URL
@@ -103,26 +110,26 @@ with a moment's thought; 0.5–0.69 weak but real; below 0.5 set accepted=false.
         return LookerEgress(leavesFrame: leaves, target: target)
     }
 
-    /// STEP 2 — is the other image's subject a resonant target for the (already
-    /// frame-leaving) look? Judged on both images. `lookerIsLeft` = looker is imageAID.
-    public func judgeResonance(leftJPEG: Data, rightJPEG: Data, lookerIsLeft: Bool) async throws -> GazeJudgeResult? {
+    /// STEP 2 — VALIDITY/aim check on both images. Returns whether the look could
+    /// plausibly be aimed at the other subject (binary) + a rationale. NOT a quality
+    /// score — the pass computes the numeric score from geometry. `lookerIsLeft` =
+    /// looker is imageAID. `valid`/`rationale` map to `accepted`/`rationale`;
+    /// `confidence` is unused here (left 0) and overwritten by the pass.
+    public func judgeAim(leftJPEG: Data, rightJPEG: Data, lookerIsLeft: Bool) async throws -> GazeJudgeResult? {
         let lookerNum = lookerIsLeft ? 1 : 2, targetNum = lookerIsLeft ? 2 : 1
-        let prompt = "The person looking off-frame is in IMAGE \(lookerNum); judge whether the subject of IMAGE \(targetNum) is what their look lands on."
+        let prompt = "The person looking off-frame is in IMAGE \(lookerNum); could their look be aimed at the subject of IMAGE \(targetNum)?"
         guard let raw = try await callOllama(
-            system: Self.kResonancePrompt,
+            system: Self.kAimPrompt,
             prompt: prompt,
             images: [leftJPEG.base64EncodedString(), rightJPEG.base64EncodedString()]
         ) else { return nil }
         guard let parsed = parseJSON(from: raw) else { return nil }
-        guard let accepted = parsed["accepted"] as? Bool,
+        guard let valid = parsed["valid"] as? Bool,
               let rationale = parsed["rationale"] as? String else {
-            print("GazeVisionJudge: resonance missing fields — \(parsed.keys.joined(separator: ", "))")
+            print("GazeVisionJudge: aim missing fields — \(parsed.keys.joined(separator: ", "))")
             return nil
         }
-        let confidence: Double = (parsed["confidence"] as? Double)
-            ?? (parsed["confidence"] as? NSNumber)?.doubleValue
-            ?? (accepted ? 0.6 : 0.0)
-        return GazeJudgeResult(accepted: accepted, confidence: Float(confidence), rationale: rationale)
+        return GazeJudgeResult(accepted: valid, confidence: 0, rationale: rationale)
     }
 
     /// Reachable + model present. Gate the pass on this for a clean skip (mirrors ThematicScorerV2).

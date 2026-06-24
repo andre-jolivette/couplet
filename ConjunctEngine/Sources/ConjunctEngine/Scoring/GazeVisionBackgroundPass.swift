@@ -37,6 +37,20 @@ public actor GazeVisionBackgroundPass {
         let lookerIsLeft: Bool       // looker == imageAID (left display)
         let lookerPath: String, lookerFolder: String
         let targetPath: String, targetFolder: String
+        let lookerGazeAbs: Double    // |gazeDirectionX| of the looker
+        let coherence: Double        // how far the target subject sits toward the gutter
+    }
+
+    /// Score for a VALID pair, from geometry only (the VLM verdict is binary — its number
+    /// is discarded). Ranks valid pairs by how *clearly* this is a real, well-aimed
+    /// directed look: a strong lateral gaze (|gaze| up to ~0.6) landing on a subject that
+    /// hugs the gutter scores higher. NOT a quality score — interestingness is the human's
+    /// call. Lands in [0.60, 0.95]. See decision #109.
+    static func clarityScore(lookerGazeAbs: Double, coherence: Double) -> Double {
+        let gazeStrength = min(max((lookerGazeAbs - 0.22) / (0.60 - 0.22), 0), 1)
+        let coherenceNorm = min(max(coherence / 0.45, 0), 1)
+        let clarity = 0.5 * gazeStrength + 0.5 * coherenceNorm
+        return 0.60 + 0.35 * clarity
     }
 
     public func run(onProgress: (@Sendable (Int, Int) async -> Void)? = nil) async {
@@ -103,21 +117,24 @@ public actor GazeVisionBackgroundPass {
             let (leftBytes, rightBytes) = c.lookerIsLeft ? (lookerBytes, targetBytes) : (targetBytes, lookerBytes)
             let result: GazeJudgeResult?
             do {
-                result = try await judge.judgeResonance(leftJPEG: leftBytes, rightJPEG: rightBytes, lookerIsLeft: c.lookerIsLeft)
+                result = try await judge.judgeAim(leftJPEG: leftBytes, rightJPEG: rightBytes, lookerIsLeft: c.lookerIsLeft)
                 connectionFailures = 0
             } catch {
                 if Task.isCancelled { return }
                 connectionFailures += 1
-                print("GazeVisionBackgroundPass: resonance connection error (\(connectionFailures)/\(maxConnectionFailures))")
+                print("GazeVisionBackgroundPass: aim connection error (\(connectionFailures)/\(maxConnectionFailures))")
                 if connectionFailures >= maxConnectionFailures { print("GazeVisionBackgroundPass: aborting — server down"); return }
                 continue
             }
             guard let result else {
                 if Task.isCancelled { return }
-                print("GazeVisionBackgroundPass: unparseable resonance for pair \(c.pairID) — left NULL")
+                print("GazeVisionBackgroundPass: unparseable aim verdict for pair \(c.pairID) — left NULL")
                 continue   // stays NULL, retried next pass
             }
-            if writeVerdict(pairID: c.pairID, score: result.score, rationale: result.rationale) {
+            // VLM verdict is binary (valid/not); the SCORE is geometry-derived clarity, not
+            // the model's number — interestingness is the human's call. See decision #109.
+            let score = result.accepted ? Self.clarityScore(lookerGazeAbs: c.lookerGazeAbs, coherence: c.coherence) : 0
+            if writeVerdict(pairID: c.pairID, score: Float(score), rationale: result.rationale) {
                 done += 1; await onProgress?(done, candidates.count)
             }
         }
@@ -133,8 +150,8 @@ public actor GazeVisionBackgroundPass {
             // gutter; we recover which side that is from the stored gaze.
             let rows = try Row.fetchAll(db, sql: """
                 SELECT p.id AS pairID, p.imageAID AS aID, p.imageBID AS bID,
-                       a.gazeDirectionX AS aGaze, a.faceCount AS aFace, a.path AS aPath, fa.path AS aFolder,
-                       b.gazeDirectionX AS bGaze, b.faceCount AS bFace, b.path AS bPath, fb.path AS bFolder
+                       a.gazeDirectionX AS aGaze, a.faceCount AS aFace, a.weightCentroidX AS aCx, a.path AS aPath, fa.path AS aFolder,
+                       b.gazeDirectionX AS bGaze, b.faceCount AS bFace, b.weightCentroidX AS bCx, b.path AS bPath, fb.path AS bFolder
                 FROM pairs p
                 JOIN images a ON a.id = p.imageAID
                 JOIN images b ON b.id = p.imageBID
@@ -157,6 +174,10 @@ public actor GazeVisionBackgroundPass {
                 else if aQualifies { lookerIsLeft = true }
                 else if bQualifies { lookerIsLeft = false }
                 else { lookerIsLeft = abs(d(r, "aGaze")) >= abs(d(r, "bGaze")) }   // fallback: stronger gaze
+                // Coherence: the target subject's centroid distance toward the gutter side.
+                // Rightward looker (lookerIsLeft) → target on right, gutter is its left → 0.5 − cx.
+                let targetCx = lookerIsLeft ? d(r, "bCx") : d(r, "aCx")
+                let coherence = lookerIsLeft ? (0.5 - targetCx) : (targetCx - 0.5)
                 return Candidate(
                     pairID: pairID,
                     lookerID: lookerIsLeft ? aID : bID, targetID: lookerIsLeft ? bID : aID,
@@ -164,7 +185,9 @@ public actor GazeVisionBackgroundPass {
                     lookerPath: (lookerIsLeft ? r["aPath"] : r["bPath"]) as? String ?? "",
                     lookerFolder: (lookerIsLeft ? r["aFolder"] : r["bFolder"]) as? String ?? "",
                     targetPath: (lookerIsLeft ? r["bPath"] : r["aPath"]) as? String ?? "",
-                    targetFolder: (lookerIsLeft ? r["bFolder"] : r["aFolder"]) as? String ?? "")
+                    targetFolder: (lookerIsLeft ? r["bFolder"] : r["aFolder"]) as? String ?? "",
+                    lookerGazeAbs: abs(lookerIsLeft ? d(r, "aGaze") : d(r, "bGaze")),
+                    coherence: coherence)
             }
         }
     }
