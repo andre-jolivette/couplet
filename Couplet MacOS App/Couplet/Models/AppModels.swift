@@ -105,6 +105,12 @@ struct DisplayPair: Identifiable, Hashable {
     let thematicV2Rationale: String?
     /// Relationship type from ThematicScorerV2: complementary/contrastive/echo/ironic/tonal/none.
     let thematicV2RelationshipType: String?
+    /// Gaze vision-judge (#109) verdict: geometry-derived clarity when the directed look
+    /// is confirmed valid, 0 when rejected, nil when unjudged / not a gaze pair.
+    let gazeJudgeScore: Float?
+    /// One-sentence vision-judge rationale (what the look is aimed at). Shown in the
+    /// lightbox info rail for `selectedFor='gaze'` pairs. Nil when unjudged.
+    let gazeJudgeRationale: String?
     /// Total number of pairs for each image in the current folder context.
     /// Used for the dot badge in the grid (threshold: 100) and count labels in the lightbox.
     let pairCountA: Int
@@ -189,6 +195,7 @@ struct DisplayPair: Identifiable, Hashable {
         rationale: String,
         thematicV2Rationale: String? = nil,
         thematicV2RelationshipType: String? = nil,
+        gazeJudgeScore: Float? = nil, gazeJudgeRationale: String? = nil,
         pairCountA: Int = 0, pairCountB: Int = 0,
         thumbnailURLA: URL? = nil, thumbnailURLB: URL? = nil,
         pathA: String = "", pathB: String = "",
@@ -212,6 +219,7 @@ struct DisplayPair: Identifiable, Hashable {
         self.rationale = rationale
         self.thematicV2Rationale = thematicV2Rationale
         self.thematicV2RelationshipType = thematicV2RelationshipType
+        self.gazeJudgeScore = gazeJudgeScore; self.gazeJudgeRationale = gazeJudgeRationale
         self.pairCountA = pairCountA; self.pairCountB = pairCountB
         self.thumbnailURLA = thumbnailURLA; self.thumbnailURLB = thumbnailURLB
         self.pathA = pathA; self.pathB = pathB

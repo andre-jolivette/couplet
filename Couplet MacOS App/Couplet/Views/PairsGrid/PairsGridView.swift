@@ -69,6 +69,12 @@ struct PairsGridView: View {
             .onChange(of: settings.edgePeakednessFloor) { _, _ in reloadPairs() }
             .onChange(of: settings.gridVarianceFloor) { _, _ in reloadPairs() }
             .onChange(of: gridVM.sortOrder) { _, _ in reloadPairs() }
+            .onChange(of: gridVM.selectedSubmode) { _, _ in
+                // All submode filters use dedicated uncapped DB loads (not post-filters on
+                // the cap-2 grid), so any submode change — including entering/leaving nil —
+                // needs a full reload.
+                reloadPairs()
+            }
             .onAppear { gridVM.hideSequential = settings.hideSequential }
             .onChange(of: settings.hideSequential) { _, new in gridVM.hideSequential = new }
             .sheet(item: $exportingPair) { pair in
@@ -86,6 +92,11 @@ struct PairsGridView: View {
 
     private var contentView: some View {
         VStack(spacing: 0) {
+            // Submode filter row (#109) — lives here in the content area, not the
+            // fixed-height titlebar (which clips the overflow). Shown when a modality
+            // chip is selected.
+            SubmodeFilterBar(gridVM: gridVM)
+
             if gridVM.isAnchored {
                 gridAnchorStrip
             }
@@ -107,6 +118,26 @@ struct PairsGridView: View {
             VStack(alignment: .trailing, spacing: 8) {
                 DependencyHealthView(health: engine.dependencyHealth) {
                     await engine.checkDependencyHealth()
+                }
+
+                if engine.isGazeVisionRunning {
+                    HStack(spacing: 6) {
+                        ProgressView()
+                            .scaleEffect(0.6)
+                            .frame(width: 12, height: 12)
+                        let total = engine.gazeVisionTotal
+                        Text(total > 0
+                            ? "Checking directed gaze — \(engine.gazeVisionJudged) / \(total)"
+                            : "Checking directed gaze…")
+                            .font(.system(size: 11))
+                            .foregroundColor(Color.appMutedForeground)
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 7)
+                    .background(Color.appCard)
+                    .clipShape(Capsule())
+                    .overlay(Capsule().stroke(Color.appBorder, lineWidth: 1))
+                    .transition(.opacity.animation(.easeInOut(duration: 0.3)))
                 }
 
                 if engine.isThematicV2Running {

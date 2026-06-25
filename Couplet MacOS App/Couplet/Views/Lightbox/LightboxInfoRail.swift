@@ -219,6 +219,11 @@ struct LightboxInfoRail: View {
             case "opposing_diagonals":
                 return ("Diagonal tension",
                         "Dominant lines cut across each other through the diptych — each image carries a diagonal that angles toward its partner.")
+            case "directed_gaze":
+                // The directed-attention "call and response" (#109): a figure looks off-frame
+                // toward the other image's subject. Show the vision judge's one-line reading.
+                return ("Directed gaze",
+                        pair.gazeJudgeRationale ?? "A figure in one image looks off-frame toward the subject of the other — a call and response.")
             default:
                 return ("Compositional structure",
                         "Edge orientation and composition grid similarity. High scores indicate similar framing, subject placement, and visual weight distribution.")

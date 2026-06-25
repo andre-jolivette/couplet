@@ -82,6 +82,7 @@ struct FilterBarView: View {
             ModalityPill(label: "All",
                          isSelected: gridVM.selectedModality == nil) {
                 gridVM.selectedModality = nil
+                gridVM.selectedSubmode = nil
             }
             ForEach(PairingModality.allCases) { modality in
                 ModalityPill(
@@ -90,6 +91,7 @@ struct FilterBarView: View {
                 ) {
                     gridVM.selectedModality =
                         gridVM.selectedModality == modality ? nil : modality
+                    gridVM.selectedSubmode = nil   // submodes are modality-specific
                 }
             }
         }
@@ -105,6 +107,48 @@ struct FilterBarView: View {
         .labelsHidden()
         .pickerStyle(.menu)
         .fixedSize()
+    }
+}
+
+// MARK: - Submode Filter Bar (#109)
+
+/// Second filter row — rendered in the content area (NOT the fixed-height titlebar,
+/// which clips overflow) and only when a specific modality chip is selected. Reveals
+/// that modality's submode filters. "Directed gaze" triggers the VM's dedicated
+/// uncapped gaze load; the others post-filter the current grid.
+struct SubmodeFilterBar: View {
+    @ObservedObject var gridVM: PairsGridViewModel
+
+    var body: some View {
+        if let modality = gridVM.selectedModality {
+            HStack(spacing: 6) {
+                ModalityPill(label: "All \(modality.rawValue)", isSelected: gridVM.selectedSubmode == nil) {
+                    gridVM.selectedSubmode = nil
+                }
+                ForEach(submodes(for: modality), id: \.key) { sub in
+                    ModalityPill(label: sub.label, isSelected: gridVM.selectedSubmode == sub.key) {
+                        gridVM.selectedSubmode = gridVM.selectedSubmode == sub.key ? nil : sub.key
+                    }
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 14)
+            .padding(.bottom, 6)
+        }
+    }
+
+    private func submodes(for modality: PairingModality) -> [(key: String, label: String)] {
+        switch modality {
+        case .aesthetic:
+            return [("accent_echo", "Color echo"), ("harmony", "Tonal harmony"), ("contrast", "Colour contrast")]
+        case .geometric:
+            return [("directed_gaze", "Directed gaze"), ("gaze_conversation", "Eyes in conversation"),
+                    ("opposing_diagonals", "Diagonal tension")]
+        case .thematic:
+            return [("complementary", "Complementary"), ("contrastive", "Contrastive"),
+                    ("echo", "Echo"), ("ironic", "Ironic"), ("tonal", "Tonal")]
+        }
     }
 }
 

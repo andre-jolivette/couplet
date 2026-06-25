@@ -37,7 +37,20 @@ nonisolated func convertToPairFree(
     pairCounts: [Int: Int],
     thumbnailBase: URL
 ) -> DisplayPair {
-    let geoScore = adjustedGeometricScore
+    // Directed-gaze pairs (#109) are a geometric submode: a VALID gaze verdict replaces
+    // the incidental PairScorer geometric score (mirrors effectiveThematic, decision #82).
+    // The clarity score [0.60, 0.95] is mapped into the geometric range [0.50, 0.76] (the
+    // library's geometric ceiling) so directed-gaze competes fairly with other geometric
+    // submodes rather than leapfrogging them all.
+    let gazeValid = r.selectedFor == "gaze" && (r.gazeJudgeScore ?? 0) > 0
+    let geoScore: Float = {
+        if gazeValid, let g = r.gazeJudgeScore {
+            let mapped = 0.50 + (Float(g) - 0.60) / 0.35 * 0.26
+            return min(max(mapped, 0.50), 0.76)
+        }
+        return adjustedGeometricScore
+    }()
+    let effectiveGeometricSubmode = gazeValid ? "directed_gaze" : r.geometricSubmode
     // Use thematicV2Score when available (LLM-based pair scorer), falling back to
     // the cluster-based thematicScore. See decision #82. A REJECTED role-join
     // hypothesis (#102) returns thematicV2Score == 0; that verdict is about the
@@ -115,7 +128,7 @@ nonisolated func convertToPairFree(
         colorProfileA: r.colorProfileA, colorProfileB: r.colorProfileB,
         captionA: r.captionA, captionB: r.captionB,
         modality: modality, aestheticSubmode: r.aestheticSubmode,
-        geometricSubmode: r.geometricSubmode,
+        geometricSubmode: effectiveGeometricSubmode,
         accentHueA: r.accentHueA, accentSaturationA: r.accentSaturationA,
         accentHueB: r.accentHueB, accentSaturationB: r.accentSaturationB,
         compositeScore: displayComposite, axisScore: axisScore,
@@ -124,6 +137,8 @@ nonisolated func convertToPairFree(
         rationale: r.rationale,
         thematicV2Rationale: r.thematicV2Rationale,
         thematicV2RelationshipType: r.thematicV2RelationshipType,
+        gazeJudgeScore: r.gazeJudgeScore.map(Float.init),
+        gazeJudgeRationale: r.gazeJudgeRationale,
         pairCountA: pairCounts[Int(r.imageAID), default: 0],
         pairCountB: pairCounts[Int(r.imageBID), default: 0],
         thumbnailURLA: thumbURL(r.thumbnailPathA),

@@ -78,12 +78,15 @@ public actor QueryService {
     public nonisolated func fetchRepresentativePairs(
         folderID: Int64? = nil,
         collectionID: Int64? = nil,
-        sortColumn: String
+        sortColumn: String,
+        directedGazeOnly: Bool = false,
+        additionalCondition: String? = nil
     ) throws -> [PairQueryResult] {
         var results: [PairQueryResult] = []
         try streamRepresentativePairs(
             folderID: folderID, collectionID: collectionID,
-            sortColumn: sortColumn, chunkSize: Int.max
+            sortColumn: sortColumn, directedGazeOnly: directedGazeOnly,
+            additionalCondition: additionalCondition, chunkSize: Int.max
         ) { results.append(contentsOf: $0) }
         return results
     }
@@ -97,6 +100,8 @@ public actor QueryService {
         folderID: Int64? = nil,
         collectionID: Int64? = nil,
         sortColumn: String,
+        directedGazeOnly: Bool = false,
+        additionalCondition: String? = nil,
         chunkSize: Int = 20,
         process: ([PairQueryResult]) throws -> Void
     ) throws {
@@ -119,6 +124,18 @@ public actor QueryService {
             }
         }
 
+        // Directed-gaze review (#109): just the confirmed gaze pairs, ordered by the
+        // caller's sortColumn (the app passes p.gazeJudgeScore). No cap-2 downstream
+        // (fetchRepresentativePairs collects all) so the full set is reviewable.
+        if directedGazeOnly {
+            conditions.append("p.selectedFor = 'gaze' AND p.gazeJudgeScore > 0")
+        }
+
+        // Submode filter: caller-supplied SQL condition (not user input — always a
+        // hardcoded column = literal string from the app's submode routing table).
+        if let cond = additionalCondition {
+            conditions.append(cond)
+        }
         let where_ = "WHERE " + conditions.joined(separator: " AND ")
         let sql = """
             SELECT
@@ -137,6 +154,8 @@ public actor QueryService {
                 p.thematicV2RelationshipType,
                 p.thematicV2Rationale,
                 p.roleHypothesis,
+                p.gazeJudgeScore,
+                p.gazeJudgeRationale,
                 a.filename       AS filenameA,
                 a.thumbnailPath  AS thumbA,
                 a.path           AS imagePathA,
@@ -224,7 +243,9 @@ public actor QueryService {
                     thematicV2Score: row["thematicV2Score"] as? Double,
                     thematicV2RelationshipType: row["thematicV2RelationshipType"] as? String,
                     thematicV2Rationale: row["thematicV2Rationale"] as? String,
-                    roleHypothesis: row["roleHypothesis"] as? String
+                    roleHypothesis: row["roleHypothesis"] as? String,
+                    gazeJudgeScore: row["gazeJudgeScore"] as? Double,
+                    gazeJudgeRationale: row["gazeJudgeRationale"] as? String
                 ))
                 if chunk.count == chunkSize {
                     try process(chunk)
@@ -354,6 +375,8 @@ public actor QueryService {
                 p.thematicV2RelationshipType,
                 p.thematicV2Rationale,
                 p.roleHypothesis,
+                p.gazeJudgeScore,
+                p.gazeJudgeRationale,
                 a.filename       AS filenameA,
                 a.thumbnailPath  AS thumbA,
                 a.path           AS imagePathA,
@@ -442,7 +465,9 @@ public actor QueryService {
                     thematicV2Score: row["thematicV2Score"] as? Double,
                     thematicV2RelationshipType: row["thematicV2RelationshipType"] as? String,
                     thematicV2Rationale: row["thematicV2Rationale"] as? String,
-                    roleHypothesis: row["roleHypothesis"] as? String
+                    roleHypothesis: row["roleHypothesis"] as? String,
+                    gazeJudgeScore: row["gazeJudgeScore"] as? Double,
+                    gazeJudgeRationale: row["gazeJudgeRationale"] as? String
                 )
             }
         }

@@ -1,5 +1,6 @@
 import Vision
 import CoreGraphics
+import CoreVideo
 import Foundation
 
 /// Per-image spatial features extracted in a single Vision pass over the 512px thumbnail.
@@ -12,6 +13,25 @@ public struct ImageSpatialFeatures: Sendable {
     /// head yaw from nose/eye geometry (fallback). nil when no face detected or
     /// landmarks are unreliable. See decision #65.
     public let gazeDirectionX: Float?
+    /// Number of detected faces (VNDetectFaceLandmarksRequest). The gaze nominator
+    /// (#109) requires exactly 1 — a single unambiguous looker whose gaze belongs to
+    /// the sole face (gazeDirectionX is taken from the first face, so >1 is unreliable).
+    public let faceCount: Int
+    /// Number of detected humans (confidence ≥ 0.3). Tuning headroom for the
+    /// future "2 people, one dominant looker" loosening. See decision #109.
+    public let humanCount: Int
+    /// Concentration of the attention-saliency heatmap ∈ [0,1] — 1.0 = one tight
+    /// dominant subject, → 0 = attention spread across the frame (crowd / scattered
+    /// subjects). The nominator requires a high value on the TARGET so the gaze has
+    /// one clear thing to land on. nil when no saliency. See decision #109.
+    public let subjectDominance: Float?
+
+    public init(centroid: (x: Float, y: Float)?, gazeDirectionX: Float?,
+                faceCount: Int = 0, humanCount: Int = 0, subjectDominance: Float? = nil) {
+        self.centroid = centroid; self.gazeDirectionX = gazeDirectionX
+        self.faceCount = faceCount; self.humanCount = humanCount
+        self.subjectDominance = subjectDominance
+    }
 }
 
 public enum SaliencyAnalyser {
@@ -41,6 +61,10 @@ public enum SaliencyAnalyser {
         let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
         try handler.perform([humanRequest, saliencyRequest, faceRequest])
 
+        let saliencyObs = saliencyRequest.results?.first as? VNSaliencyImageObservation
+        let dominance = saliencyObs.flatMap { saliencyDominance($0) }
+        let faceCount = faceRequest.results?.count ?? 0
+
         // ── Centroid ────────────────────────────────────────────────────────
         // Primary: individual human bounding boxes, weighted by area.
         // Area weighting favours closer / larger subjects over background figures.
@@ -64,7 +88,7 @@ public enum SaliencyAnalyser {
             }
         } else {
             // Fallback: attention saliency for non-human subjects.
-            if let observation = saliencyRequest.results?.first as? VNSaliencyImageObservation,
+            if let observation = saliencyObs,
                let objects = observation.salientObjects,
                !objects.isEmpty {
                 let totalConf = objects.reduce(0.0) { $0 + Double($1.confidence) }
@@ -88,7 +112,50 @@ public enum SaliencyAnalyser {
         // Use the largest/highest-confidence face only — most prominent subject.
         let gaze = faceRequest.results?.first.flatMap { gazeFromLandmarks($0) }
 
-        return ImageSpatialFeatures(centroid: centroid, gazeDirectionX: gaze)
+        return ImageSpatialFeatures(centroid: centroid, gazeDirectionX: gaze,
+                                    faceCount: faceCount, humanCount: humans.count,
+                                    subjectDominance: dominance)
+    }
+
+    // MARK: - Subject dominance
+
+    /// Concentration of the attention-saliency heatmap ∈ [0,1]: 1.0 = all attention
+    /// in one tight region (a single dominant subject), → 0 = attention spread evenly
+    /// across the frame (a crowd or scattered subjects). Computed as 1 minus the
+    /// saliency-weighted spatial variance normalized by the uniform-spread variance
+    /// (≈ 1/6 over the unit square). One extra pass over the small (~68×68) heatmap.
+    private static func saliencyDominance(_ observation: VNSaliencyImageObservation) -> Float? {
+        let pb = observation.pixelBuffer
+        CVPixelBufferLockBaseAddress(pb, .readOnly)
+        defer { CVPixelBufferUnlockBaseAddress(pb, .readOnly) }
+        let w = CVPixelBufferGetWidth(pb), h = CVPixelBufferGetHeight(pb)
+        guard w > 0, h > 0, let base = CVPixelBufferGetBaseAddress(pb) else { return nil }
+        let stride = CVPixelBufferGetBytesPerRow(pb)
+
+        var mass = 0.0, sx = 0.0, sy = 0.0
+        for y in 0..<h {
+            let row = base.advanced(by: y * stride).assumingMemoryBound(to: Float.self)
+            for x in 0..<w {
+                let v = Double(max(0, row[x]))
+                mass += v; sx += v * Double(x); sy += v * Double(y)
+            }
+        }
+        guard mass > 0 else { return nil }
+        let cx = sx / mass, cy = sy / mass
+
+        var variance = 0.0
+        for y in 0..<h {
+            let row = base.advanced(by: y * stride).assumingMemoryBound(to: Float.self)
+            for x in 0..<w {
+                let v = Double(max(0, row[x]))
+                let dx = (Double(x) - cx) / Double(w)
+                let dy = (Double(y) - cy) / Double(h)
+                variance += v * (dx * dx + dy * dy)
+            }
+        }
+        variance /= mass
+        // Uniform spread over [0,1]² → variance ≈ 1/6; a tight blob → ~0.
+        return Float(max(0, 1.0 - min(1.0, variance / (1.0 / 6.0))))
     }
 
     // MARK: - Gaze extraction

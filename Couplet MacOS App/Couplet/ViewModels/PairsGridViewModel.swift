@@ -9,6 +9,10 @@ final class PairsGridViewModel: ObservableObject {
     @Published var isLoading: Bool = false
     @Published private(set) var isLoadingMore: Bool = false
     @Published var selectedModality: PairingModality? = nil
+    /// Submode filter within the selected modality (#109), e.g. "directed_gaze",
+    /// "accent_echo". Matched against aestheticSubmode / geometricSubmode /
+    /// thematicV2RelationshipType. "directed_gaze" triggers a dedicated uncapped load.
+    @Published var selectedSubmode: String? = nil
     @Published var showRejected: Bool = false
     @Published var hideSequential: Bool = false
     @Published var colorToneFilter: DisplayPair.ColorTone? = nil
@@ -52,6 +56,21 @@ final class PairsGridViewModel: ObservableObject {
             // This prevents rapid navigation from queueing multiple queries on the DB actor.
             try? await Task.sleep(for: .milliseconds(250))
             guard !Task.isCancelled else { return }
+            // Submode filters use a dedicated uncapped DB query so every pair for that
+            // submode is visible — the cap-2 grid hides most of them. Each submode
+            // routes to the appropriate axis sort column in EngineController.
+            if let sub = self.selectedSubmode {
+                let pairs: [DisplayPair]
+                if sub == "directed_gaze" {
+                    pairs = await engine.loadDirectedGazePairs(folderID: folderID, collectionID: collectionID)
+                } else {
+                    pairs = await engine.loadSubmodePairs(submode: sub, folderID: folderID, collectionID: collectionID)
+                }
+                guard !Task.isCancelled else { return }
+                self.allPairs = pairs
+                self.isLoading = false
+                return
+            }
             // streamPage0Pairs fetches in 20-row chunks and yields accepted batches as
             // they arrive so LazyVGrid can start rendering before the full query completes.
             // The stream also populates representativePairsCache on completion so that
@@ -61,7 +80,14 @@ final class PairsGridViewModel: ObservableObject {
             )
             for await batch in stream {
                 guard !Task.isCancelled else { break }
-                self.allPairs.append(contentsOf: batch)
+                // Dedup against the current allPairs before appending. silentRefresh
+                // can replace allPairs mid-stream (it's unblocked when isLoading
+                // goes false after the first batch), so later batches from this task
+                // would otherwise re-append IDs already in the fresh buffer — causing
+                // the "ForEach: ID used by multiple child views" warning and grid gaps.
+                let existingIDs = Set(self.allPairs.map(\.id))
+                let newItems = batch.filter { !existingIDs.contains($0.id) }
+                if !newItems.isEmpty { self.allPairs.append(contentsOf: newItems) }
                 // Show the grid as soon as the first batch arrives so LazyVGrid
                 // starts rendering while remaining chunks are still in flight.
                 if self.isLoading { self.isLoading = false }
@@ -85,14 +111,25 @@ final class PairsGridViewModel: ObservableObject {
             // frame) collapse into a single DB round-trip.
             try? await Task.sleep(for: .milliseconds(100))
             guard !Task.isCancelled else { return }
-            var buffer: [DisplayPair] = []
-            let stream = engine.streamPage0Pairs(
-                folderID: folderID, collectionID: collectionID, sortOrder: sortOrder,
-                triggerThematicPass: false
-            )
-            for await batch in stream {
-                guard !Task.isCancelled else { return }
-                buffer.append(contentsOf: batch)
+            var buffer: [DisplayPair]
+            if let sub = self.selectedSubmode {
+                // Submode views use dedicated uncapped loads — re-streaming the normal
+                // cap-2 grid would wipe them. Reload the correct submode set instead.
+                if sub == "directed_gaze" {
+                    buffer = await engine.loadDirectedGazePairs(folderID: folderID, collectionID: collectionID)
+                } else {
+                    buffer = await engine.loadSubmodePairs(submode: sub, folderID: folderID, collectionID: collectionID)
+                }
+            } else {
+                buffer = []
+                let stream = engine.streamPage0Pairs(
+                    folderID: folderID, collectionID: collectionID, sortOrder: sortOrder,
+                    triggerThematicPass: false
+                )
+                for await batch in stream {
+                    guard !Task.isCancelled else { return }
+                    buffer.append(contentsOf: batch)
+                }
             }
             guard !Task.isCancelled else { return }
             // Preserve any in-flight decision mutations the user made during this session.
@@ -138,12 +175,20 @@ final class PairsGridViewModel: ObservableObject {
     }
 
     var displayedPairs: [DisplayPair] {
-        var result = allPairs
+        // Safety-net dedup: if the stream-append race still slips through, strip
+        // duplicates before ForEach sees them to prevent the multi-ID SwiftUI warning.
+        var seen = Set<Int>()
+        var result = allPairs.filter { seen.insert($0.id).inserted }
         if !showRejected { result = result.filter { $0.decision != .rejected && $0.decision != .deleted } }
         if hideSequential { result = result.filter { !$0.isSequential } }
         if let tone = colorToneFilter { result = result.filter { $0.colorTone == tone } }
         if let id = anchorImageID { result = result.filter { $0.imageAID == id || $0.imageBID == id } }
         if let m = selectedModality { result = result.filter { $0.modality == m } }
+        if let sub = selectedSubmode {
+            result = result.filter {
+                $0.aestheticSubmode == sub || $0.geometricSubmode == sub || $0.thematicV2RelationshipType == sub
+            }
+        }
         if minimumConfidence > 0 { result = result.filter { $0.compositeScore >= minimumConfidence } }
         let q = searchText.trimmingCharacters(in: .whitespaces).lowercased()
         if !q.isEmpty { result = result.filter {
@@ -187,12 +232,12 @@ final class PairsGridViewModel: ObservableObject {
     func deletePair(id: Int, engine: EngineController? = nil) { applyDecision(id: id, decision: .deleted, engine: engine) }
 
     func clearFilters() {
-        selectedModality = nil; showRejected = false
+        selectedModality = nil; selectedSubmode = nil; showRejected = false
         colorToneFilter = nil; searchText = ""; sortOrder = .axis; minimumConfidence = 0.0
     }
 
     var hasActiveFilters: Bool {
-        selectedModality != nil || showRejected || colorToneFilter != nil ||
+        selectedModality != nil || selectedSubmode != nil || showRejected || colorToneFilter != nil ||
         !searchText.isEmpty || minimumConfidence > 0 || isAnchored
     }
 }
