@@ -78,12 +78,13 @@ public actor QueryService {
     public nonisolated func fetchRepresentativePairs(
         folderID: Int64? = nil,
         collectionID: Int64? = nil,
-        sortColumn: String
+        sortColumn: String,
+        directedGazeOnly: Bool = false
     ) throws -> [PairQueryResult] {
         var results: [PairQueryResult] = []
         try streamRepresentativePairs(
             folderID: folderID, collectionID: collectionID,
-            sortColumn: sortColumn, chunkSize: Int.max
+            sortColumn: sortColumn, directedGazeOnly: directedGazeOnly, chunkSize: Int.max
         ) { results.append(contentsOf: $0) }
         return results
     }
@@ -97,6 +98,7 @@ public actor QueryService {
         folderID: Int64? = nil,
         collectionID: Int64? = nil,
         sortColumn: String,
+        directedGazeOnly: Bool = false,
         chunkSize: Int = 20,
         process: ([PairQueryResult]) throws -> Void
     ) throws {
@@ -119,6 +121,12 @@ public actor QueryService {
             }
         }
 
+        // Directed-gaze review (#109): just the confirmed gaze pairs, ordered by the
+        // caller's sortColumn (the app passes p.gazeJudgeScore). No cap-2 downstream
+        // (fetchRepresentativePairs collects all) so the full set is reviewable.
+        if directedGazeOnly {
+            conditions.append("p.selectedFor = 'gaze' AND p.gazeJudgeScore > 0")
+        }
         let where_ = "WHERE " + conditions.joined(separator: " AND ")
         let sql = """
             SELECT

@@ -355,6 +355,28 @@ final class EngineController: ObservableObject {
     /// leaving hub images dominating the first page and ~44 pairs surviving.
     ///
     /// On page 0, also refreshes `imagePairCounts` for the given folder context.
+    /// Loads the confirmed directed-gaze pairs (#109) for the submode filter — ordered
+    /// by gaze clarity, with NO cap-2, so every one of a looker's pairs is reviewable
+    /// (the normal grid caps each image to 2, which hides most gaze candidates).
+    func loadDirectedGazePairs(folderID: Int64? = nil, collectionID: Int64? = nil) async -> [DisplayPair] {
+        guard let qs = queryService else { return [] }
+        let capturedWeights = settings.weights
+        let capturedPeakFloor = settings.edgePeakednessFloor
+        let capturedVarFloor = settings.gridVarianceFloor
+        let capturedThumbnailBase = thumbnailBaseURL
+        return await Task.detached(priority: .userInitiated) {
+            let r = (try? qs.fetchRepresentativePairs(
+                folderID: folderID, collectionID: collectionID,
+                sortColumn: "p.gazeJudgeScore", directedGazeOnly: true)) ?? []
+            return r.map { result in
+                let adjGeo = adjustedGeometricFree(result, peakFloor: capturedPeakFloor, varFloor: capturedVarFloor)
+                return convertToPairFree(result, adjustedGeometricScore: adjGeo,
+                                         weights: capturedWeights, pairCounts: [:],
+                                         thumbnailBase: capturedThumbnailBase)
+            }
+        }.value
+    }
+
     func fetchRepresentativePairs(
         folderID: Int64? = nil,
         collectionID: Int64? = nil,

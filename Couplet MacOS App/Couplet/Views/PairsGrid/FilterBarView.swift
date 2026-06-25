@@ -5,6 +5,17 @@ struct FilterBarView: View {
     @ObservedObject var gridVM: PairsGridViewModel
 
     var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            topRow
+            // Second row: submode filters for the selected modality (#109). Only shown
+            // when a specific modality chip is active.
+            if let modality = gridVM.selectedModality {
+                submodeRow(for: modality)
+            }
+        }
+    }
+
+    private var topRow: some View {
         HStack(spacing: 12) {
             // Modality pills — collapses to a dropdown when the window is too narrow
             ViewThatFits(in: .horizontal) {
@@ -82,6 +93,7 @@ struct FilterBarView: View {
             ModalityPill(label: "All",
                          isSelected: gridVM.selectedModality == nil) {
                 gridVM.selectedModality = nil
+                gridVM.selectedSubmode = nil
             }
             ForEach(PairingModality.allCases) { modality in
                 ModalityPill(
@@ -90,9 +102,40 @@ struct FilterBarView: View {
                 ) {
                     gridVM.selectedModality =
                         gridVM.selectedModality == modality ? nil : modality
+                    gridVM.selectedSubmode = nil   // submodes are modality-specific
                 }
             }
         }
+    }
+
+    // Submode filters per modality (#109). Keys match the stored submode / relationship
+    // values; "directed_gaze" triggers the VM's dedicated uncapped gaze load.
+    private func submodes(for modality: PairingModality) -> [(key: String, label: String)] {
+        switch modality {
+        case .aesthetic:
+            return [("accent_echo", "Color echo"), ("harmony", "Tonal harmony"), ("contrast", "Colour contrast")]
+        case .geometric:
+            return [("directed_gaze", "Directed gaze"), ("gaze_conversation", "Eyes in conversation"),
+                    ("opposing_diagonals", "Diagonal tension"), ("directional_complement", "Spatial tension")]
+        case .thematic:
+            return [("complementary", "Complementary"), ("contrastive", "Contrastive"),
+                    ("echo", "Echo"), ("ironic", "Ironic"), ("tonal", "Tonal")]
+        }
+    }
+
+    private func submodeRow(for modality: PairingModality) -> some View {
+        HStack(spacing: 6) {
+            ModalityPill(label: "All \(modality.rawValue)", isSelected: gridVM.selectedSubmode == nil) {
+                gridVM.selectedSubmode = nil
+            }
+            ForEach(submodes(for: modality), id: \.key) { sub in
+                ModalityPill(label: sub.label, isSelected: gridVM.selectedSubmode == sub.key) {
+                    gridVM.selectedSubmode = gridVM.selectedSubmode == sub.key ? nil : sub.key
+                }
+            }
+        }
+        .padding(.horizontal, 20)
+        .padding(.bottom, 2)
     }
 
     private var modalityDropdown: some View {

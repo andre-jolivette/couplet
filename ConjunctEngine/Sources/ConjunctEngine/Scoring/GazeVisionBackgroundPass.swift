@@ -53,6 +53,14 @@ public actor GazeVisionBackgroundPass {
         return 0.60 + 0.35 * clarity
     }
 
+    /// Maps the clarity score [0.60, 0.95] into the geometric axis range [0.50, 0.76]
+    /// (the library's geometric ceiling) so directed gaze competes fairly with other
+    /// geometric submodes instead of leapfrogging them (decision #109). Mirrored in the
+    /// app's convertToPairFree for display.
+    static func mapToGeometric(_ clarity: Double) -> Double {
+        min(max(0.50 + (clarity - 0.60) / 0.35 * 0.26, 0.50), 0.76)
+    }
+
     public func run(onProgress: (@Sendable (Int, Int) async -> Void)? = nil) async {
         let candidates: [Candidate]
         do { candidates = try fetchCandidates() }
@@ -111,14 +119,20 @@ public actor GazeVisionBackgroundPass {
             }
             let score: Float
             let rationale: String
+            var mappedGeometric: Double? = nil
             if egress.leavesFrame {
-                score = Float(Self.clarityScore(lookerGazeAbs: c.lookerGazeAbs, coherence: c.coherence))
+                let clarity = Self.clarityScore(lookerGazeAbs: c.lookerGazeAbs, coherence: c.coherence)
+                score = Float(clarity)
+                // Fold directed gaze into the geometric axis (#109): the clarity score is
+                // written to geometricScore so the pair participates in geometric/composite
+                // selection (otherwise its incidental ~0.45 gets it cut by the grid's cap).
+                mappedGeometric = Self.mapToGeometric(clarity)
                 rationale = "A clear off-frame look (\(egress.target)); the gaze geometry points toward this image's subject."
             } else {
                 score = 0
                 rationale = "Not an off-frame look — the figure is looking at \(egress.target)."
             }
-            if writeVerdict(pairID: c.pairID, score: score, rationale: rationale) {
+            if writeVerdict(pairID: c.pairID, score: score, rationale: rationale, mappedGeometric: mappedGeometric) {
                 done += 1; await onProgress?(done, candidates.count)
             }
         }
@@ -176,13 +190,23 @@ public actor GazeVisionBackgroundPass {
         }
     }
 
-    /// Writes a verdict. Returns true on success. score = confidence when accepted, 0 when rejected.
-    private func writeVerdict(pairID: Int64, score: Float, rationale: String) -> Bool {
+    /// Writes a verdict. Returns true on success. score = clarity when valid, 0 when rejected.
+    /// For valid pairs, also folds the mapped geometric + `directed_gaze` submode into the
+    /// pairs row so directed gaze participates in geometric selection/scoring (#109).
+    private func writeVerdict(pairID: Int64, score: Float, rationale: String, mappedGeometric: Double?) -> Bool {
         do {
             try db.write { db in
-                try db.execute(sql: """
-                    UPDATE pairs SET gazeJudgeScore = ?, gazeJudgeRationale = ? WHERE id = ?
-                """, arguments: [Double(score), String(rationale.prefix(300)), pairID])
+                if let geo = mappedGeometric {
+                    try db.execute(sql: """
+                        UPDATE pairs SET gazeJudgeScore = ?, gazeJudgeRationale = ?,
+                                         geometricScore = ?, geometricSubmode = 'directed_gaze'
+                        WHERE id = ?
+                    """, arguments: [Double(score), String(rationale.prefix(300)), geo, pairID])
+                } else {
+                    try db.execute(sql: """
+                        UPDATE pairs SET gazeJudgeScore = ?, gazeJudgeRationale = ? WHERE id = ?
+                    """, arguments: [Double(score), String(rationale.prefix(300)), pairID])
+                }
             }
             return true
         } catch {

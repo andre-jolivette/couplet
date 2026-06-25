@@ -9,6 +9,10 @@ final class PairsGridViewModel: ObservableObject {
     @Published var isLoading: Bool = false
     @Published private(set) var isLoadingMore: Bool = false
     @Published var selectedModality: PairingModality? = nil
+    /// Submode filter within the selected modality (#109), e.g. "directed_gaze",
+    /// "accent_echo". Matched against aestheticSubmode / geometricSubmode /
+    /// thematicV2RelationshipType. "directed_gaze" triggers a dedicated uncapped load.
+    @Published var selectedSubmode: String? = nil
     @Published var showRejected: Bool = false
     @Published var hideSequential: Bool = false
     @Published var colorToneFilter: DisplayPair.ColorTone? = nil
@@ -52,6 +56,15 @@ final class PairsGridViewModel: ObservableObject {
             // This prevents rapid navigation from queueing multiple queries on the DB actor.
             try? await Task.sleep(for: .milliseconds(250))
             guard !Task.isCancelled else { return }
+            // Directed-gaze submode (#109): a dedicated uncapped load of just the gaze
+            // pairs (the normal cap-2 grid hides most of them). No streaming/cap-2.
+            if self.selectedSubmode == "directed_gaze" {
+                let gaze = await engine.loadDirectedGazePairs(folderID: folderID, collectionID: collectionID)
+                guard !Task.isCancelled else { return }
+                self.allPairs = gaze
+                self.isLoading = false
+                return
+            }
             // streamPage0Pairs fetches in 20-row chunks and yields accepted batches as
             // they arrive so LazyVGrid can start rendering before the full query completes.
             // The stream also populates representativePairsCache on completion so that
@@ -144,6 +157,11 @@ final class PairsGridViewModel: ObservableObject {
         if let tone = colorToneFilter { result = result.filter { $0.colorTone == tone } }
         if let id = anchorImageID { result = result.filter { $0.imageAID == id || $0.imageBID == id } }
         if let m = selectedModality { result = result.filter { $0.modality == m } }
+        if let sub = selectedSubmode {
+            result = result.filter {
+                $0.aestheticSubmode == sub || $0.geometricSubmode == sub || $0.thematicV2RelationshipType == sub
+            }
+        }
         if minimumConfidence > 0 { result = result.filter { $0.compositeScore >= minimumConfidence } }
         let q = searchText.trimmingCharacters(in: .whitespaces).lowercased()
         if !q.isEmpty { result = result.filter {
@@ -187,12 +205,12 @@ final class PairsGridViewModel: ObservableObject {
     func deletePair(id: Int, engine: EngineController? = nil) { applyDecision(id: id, decision: .deleted, engine: engine) }
 
     func clearFilters() {
-        selectedModality = nil; showRejected = false
+        selectedModality = nil; selectedSubmode = nil; showRejected = false
         colorToneFilter = nil; searchText = ""; sortOrder = .axis; minimumConfidence = 0.0
     }
 
     var hasActiveFilters: Bool {
-        selectedModality != nil || showRejected || colorToneFilter != nil ||
+        selectedModality != nil || selectedSubmode != nil || showRejected || colorToneFilter != nil ||
         !searchText.isEmpty || minimumConfidence > 0 || isAnchored
     }
 }
