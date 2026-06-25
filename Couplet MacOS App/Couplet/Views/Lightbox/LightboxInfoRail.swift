@@ -15,10 +15,6 @@ struct LightboxInfoRail: View {
     var body: some View {
         ScrollView(.vertical, showsIndicators: false) {
             VStack(alignment: .leading, spacing: 0) {
-                if pair.gazeJudgeScore != nil {
-                    gazeSection
-                    Divider().opacity(0.2).padding(.vertical, 8)
-                }
                 scoreSection(
                     label: "Aesthetic", letter: "A",
                     score: pair.aestheticScore,
@@ -49,34 +45,6 @@ struct LightboxInfoRail: View {
         }
         .background(Color(white: 0.10))
         .frame(width: Self.width)
-    }
-
-    // MARK: - Directed gaze (#109)
-
-    /// Shown only for `selectedFor='gaze'` pairs (gazeJudgeScore non-nil). Explains why
-    /// the pair surfaced via the directed-attention method and shows the vision judge's
-    /// reading of where the look lands. The score is geometry-derived clarity (how clearly
-    /// this is a real, well-aimed look) — NOT a quality score; quality is the viewer's call.
-    private var gazeSection: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Text("DIRECTED GAZE")
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundColor(.white.opacity(0.40))
-                Spacer()
-                if let s = pair.gazeJudgeScore {
-                    Text(String(format: "%.2f", s))
-                        .font(.system(size: 12, design: .monospaced))
-                        .foregroundColor(.white.opacity(0.70))
-                }
-            }
-            if let r = pair.gazeJudgeRationale, !r.isEmpty {
-                Text(r)
-                    .font(.system(size: 12))
-                    .foregroundColor(.white.opacity(0.80))
-                    .padding(.top, 2)
-            }
-        }
     }
 
     // MARK: - Captions
@@ -251,6 +219,11 @@ struct LightboxInfoRail: View {
             case "opposing_diagonals":
                 return ("Diagonal tension",
                         "Dominant lines cut across each other through the diptych — each image carries a diagonal that angles toward its partner.")
+            case "directed_gaze":
+                // The directed-attention "call and response" (#109): a figure looks off-frame
+                // toward the other image's subject. Show the vision judge's one-line reading.
+                return ("Directed gaze",
+                        pair.gazeJudgeRationale ?? "A figure in one image looks off-frame toward the subject of the other — a call and response.")
             default:
                 return ("Compositional structure",
                         "Edge orientation and composition grid similarity. High scores indicate similar framing, subject placement, and visual weight distribution.")

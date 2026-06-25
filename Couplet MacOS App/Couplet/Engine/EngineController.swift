@@ -534,10 +534,11 @@ final class EngineController: ObservableObject {
                             self.imagePairCounts = pairCounts
                             self.representativePairsCache = finalSorted
                             self.representativePairsCacheKey = (folderID, collectionID, sortColumn)
-                            if capturedTriggerThematic {
-                                self.startThematicV2Pass()
-                                self.startGazeVisionPass()
-                            }
+                            // Serialize the two Ollama passes (decision #109): the gaze pass
+                            // (qwen2.5vl) runs first — it's small (~one call/looker) — then it
+                            // chains the ThematicV2 pass (qwen2.5:14b) on completion. Running them
+                            // concurrently made Ollama thrash swapping between the two models.
+                            if capturedTriggerThematic { self.startGazeVisionPass() }
                         }
                     }
                 } catch is CancellationError {
@@ -769,7 +770,16 @@ final class EngineController: ObservableObject {
     }
 
     private func convertToPair(_ r: PairQueryResult, adjustedGeometricScore: Float) -> DisplayPair {
-        let geoScore = adjustedGeometricScore
+        // Directed-gaze pairs (#109): a valid gaze verdict, mapped [0.60,0.95]→[0.50,0.76],
+        // becomes the geometric score (mirrors convertToPairFree / effectiveThematic).
+        let gazeValid = r.selectedFor == "gaze" && (r.gazeJudgeScore ?? 0) > 0
+        let geoScore: Float = {
+            if gazeValid, let g = r.gazeJudgeScore {
+                return min(max(0.50 + (Float(g) - 0.60) / 0.35 * 0.26, 0.50), 0.76)
+            }
+            return adjustedGeometricScore
+        }()
+        let effectiveGeometricSubmode = gazeValid ? "directed_gaze" : r.geometricSubmode
         // Use thematicV2Score when available (LLM-based pair scorer), falling back to
         // the cluster-based thematicScore. See decision #82. A REJECTED role-join
         // hypothesis (#102) returns thematicV2Score == 0; that verdict concerns the
@@ -842,7 +852,7 @@ final class EngineController: ObservableObject {
             colorProfileA: r.colorProfileA, colorProfileB: r.colorProfileB,
             captionA: r.captionA, captionB: r.captionB,
             modality: modality, aestheticSubmode: r.aestheticSubmode,
-            geometricSubmode: r.geometricSubmode,
+            geometricSubmode: effectiveGeometricSubmode,
             accentHueA: r.accentHueA, accentSaturationA: r.accentSaturationA,
             accentHueB: r.accentHueB, accentSaturationB: r.accentSaturationB,
             compositeScore: displayComposite, axisScore: axisScore,
@@ -959,7 +969,12 @@ final class EngineController: ObservableObject {
                     self.gazeVisionTotal = total
                 }
             }
-            await MainActor.run { self.isGazeVisionRunning = false }
+            // Chain the ThematicV2 (14b) pass now that the VLM pass is done — serialized so
+            // the two models don't contend (decision #109).
+            await MainActor.run {
+                self.isGazeVisionRunning = false
+                self.startThematicV2Pass()
+            }
         }
     }
 

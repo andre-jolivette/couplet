@@ -156,7 +156,6 @@ final class PairsGridViewModel: ObservableObject {
         case .thematic:  result.sort { $0.thematicScore  > $1.thematicScore  }
         case .geometric: result.sort { $0.geometricScore > $1.geometricScore }
         case .aesthetic: result.sort { $0.aestheticScore > $1.aestheticScore }
-        case .gaze:      result.sort { ($0.gazeJudgeScore ?? -1) > ($1.gazeJudgeScore ?? -1) }
         }
         return result
     }
