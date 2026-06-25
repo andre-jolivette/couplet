@@ -74,7 +74,14 @@ final class PairsGridViewModel: ObservableObject {
             )
             for await batch in stream {
                 guard !Task.isCancelled else { break }
-                self.allPairs.append(contentsOf: batch)
+                // Dedup against the current allPairs before appending. silentRefresh
+                // can replace allPairs mid-stream (it's unblocked when isLoading
+                // goes false after the first batch), so later batches from this task
+                // would otherwise re-append IDs already in the fresh buffer — causing
+                // the "ForEach: ID used by multiple child views" warning and grid gaps.
+                let existingIDs = Set(self.allPairs.map(\.id))
+                let newItems = batch.filter { !existingIDs.contains($0.id) }
+                if !newItems.isEmpty { self.allPairs.append(contentsOf: newItems) }
                 // Show the grid as soon as the first batch arrives so LazyVGrid
                 // starts rendering while remaining chunks are still in flight.
                 if self.isLoading { self.isLoading = false }
@@ -159,7 +166,10 @@ final class PairsGridViewModel: ObservableObject {
     }
 
     var displayedPairs: [DisplayPair] {
-        var result = allPairs
+        // Safety-net dedup: if the stream-append race still slips through, strip
+        // duplicates before ForEach sees them to prevent the multi-ID SwiftUI warning.
+        var seen = Set<Int>()
+        var result = allPairs.filter { seen.insert($0.id).inserted }
         if !showRejected { result = result.filter { $0.decision != .rejected && $0.decision != .deleted } }
         if hideSequential { result = result.filter { !$0.isSequential } }
         if let tone = colorToneFilter { result = result.filter { $0.colorTone == tone } }

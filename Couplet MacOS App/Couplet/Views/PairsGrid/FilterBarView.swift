@@ -133,7 +133,8 @@ struct SubmodeFilterBar: View {
                 Spacer(minLength: 0)
             }
             .padding(.horizontal, 20)
-            .padding(.vertical, 6)
+            .padding(.top, 10)
+            .padding(.bottom, 6)
         }
     }
 
