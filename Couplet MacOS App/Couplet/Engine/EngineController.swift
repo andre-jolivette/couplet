@@ -407,12 +407,14 @@ final class EngineController: ObservableObject {
             let r = (try? qs.fetchRepresentativePairs(
                 folderID: folderID, collectionID: collectionID,
                 sortColumn: sortColumn, additionalCondition: condition)) ?? []
-            return r.map { result in
+            var mapped = r.map { result -> DisplayPair in
                 let adjGeo = adjustedGeometricFree(result, peakFloor: capturedPeakFloor, varFloor: capturedVarFloor)
                 return convertToPairFree(result, adjustedGeometricScore: adjGeo,
                                          weights: capturedWeights, pairCounts: [:],
                                          thumbnailBase: capturedThumbnailBase)
             }
+            mapped = applyCap2Free(mapped)
+            return mapped
         }.value
     }
 
