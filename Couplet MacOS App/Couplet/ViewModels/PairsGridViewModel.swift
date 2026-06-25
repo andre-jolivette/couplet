@@ -98,14 +98,22 @@ final class PairsGridViewModel: ObservableObject {
             // frame) collapse into a single DB round-trip.
             try? await Task.sleep(for: .milliseconds(100))
             guard !Task.isCancelled else { return }
-            var buffer: [DisplayPair] = []
-            let stream = engine.streamPage0Pairs(
-                folderID: folderID, collectionID: collectionID, sortOrder: sortOrder,
-                triggerThematicPass: false
-            )
-            for await batch in stream {
-                guard !Task.isCancelled else { return }
-                buffer.append(contentsOf: batch)
+            var buffer: [DisplayPair]
+            if self.selectedSubmode == "directed_gaze" {
+                // Directed-gaze view (#109) is a dedicated uncapped load, not the normal
+                // stream — re-streaming here would wipe the gaze set and the filter would
+                // show nothing. Reload the gaze set instead (thematic scores don't affect it).
+                buffer = await engine.loadDirectedGazePairs(folderID: folderID, collectionID: collectionID)
+            } else {
+                buffer = []
+                let stream = engine.streamPage0Pairs(
+                    folderID: folderID, collectionID: collectionID, sortOrder: sortOrder,
+                    triggerThematicPass: false
+                )
+                for await batch in stream {
+                    guard !Task.isCancelled else { return }
+                    buffer.append(contentsOf: batch)
+                }
             }
             guard !Task.isCancelled else { return }
             // Preserve any in-flight decision mutations the user made during this session.

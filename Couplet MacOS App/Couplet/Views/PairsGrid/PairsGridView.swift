@@ -92,6 +92,11 @@ struct PairsGridView: View {
 
     private var contentView: some View {
         VStack(spacing: 0) {
+            // Submode filter row (#109) — lives here in the content area, not the
+            // fixed-height titlebar (which clips the overflow). Shown when a modality
+            // chip is selected.
+            SubmodeFilterBar(gridVM: gridVM)
+
             if gridVM.isAnchored {
                 gridAnchorStrip
             }
@@ -113,6 +118,26 @@ struct PairsGridView: View {
             VStack(alignment: .trailing, spacing: 8) {
                 DependencyHealthView(health: engine.dependencyHealth) {
                     await engine.checkDependencyHealth()
+                }
+
+                if engine.isGazeVisionRunning {
+                    HStack(spacing: 6) {
+                        ProgressView()
+                            .scaleEffect(0.6)
+                            .frame(width: 12, height: 12)
+                        let total = engine.gazeVisionTotal
+                        Text(total > 0
+                            ? "Checking directed gaze — \(engine.gazeVisionJudged) / \(total)"
+                            : "Checking directed gaze…")
+                            .font(.system(size: 11))
+                            .foregroundColor(Color.appMutedForeground)
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 7)
+                    .background(Color.appCard)
+                    .clipShape(Capsule())
+                    .overlay(Capsule().stroke(Color.appBorder, lineWidth: 1))
+                    .transition(.opacity.animation(.easeInOut(duration: 0.3)))
                 }
 
                 if engine.isThematicV2Running {
