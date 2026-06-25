@@ -377,6 +377,45 @@ final class EngineController: ObservableObject {
         }.value
     }
 
+    /// Loads all pairs for a specific submode, uncapped (no cap-2), sorted by the
+    /// relevant axis score. Used by submode filter chips so every pair for that
+    /// submode is reviewable — the normal cap-2 grid hides most of them.
+    ///
+    /// Maps submode key → (WHERE condition, sort column). Returns [] for unknown keys.
+    func loadSubmodePairs(submode: String, folderID: Int64? = nil, collectionID: Int64? = nil) async -> [DisplayPair] {
+        guard let qs = queryService else { return [] }
+        // Hardcoded routing table — never user input.
+        let route: (condition: String, sortColumn: String)? = switch submode {
+        case "accent_echo":          ("p.aestheticSubmode = 'accent_echo'",             "p.aestheticScore")
+        case "harmony":              ("p.aestheticSubmode = 'harmony'",                 "p.aestheticScore")
+        case "contrast":             ("p.aestheticSubmode = 'contrast'",                "p.aestheticScore")
+        case "gaze_conversation":    ("p.geometricSubmode = 'gaze_conversation'",       "p.geometricScore")
+        case "opposing_diagonals":   ("p.geometricSubmode = 'opposing_diagonals'",      "p.geometricScore")
+        case "complementary":        ("p.thematicV2RelationshipType = 'complementary'", "p.thematicV2Score")
+        case "contrastive":          ("p.thematicV2RelationshipType = 'contrastive'",   "p.thematicV2Score")
+        case "echo":                 ("p.thematicV2RelationshipType = 'echo'",          "p.thematicV2Score")
+        case "ironic":               ("p.thematicV2RelationshipType = 'ironic'",        "p.thematicV2Score")
+        case "tonal":                ("p.thematicV2RelationshipType = 'tonal'",         "p.thematicV2Score")
+        default: nil
+        }
+        guard let (condition, sortColumn) = route else { return [] }
+        let capturedWeights = settings.weights
+        let capturedPeakFloor = settings.edgePeakednessFloor
+        let capturedVarFloor = settings.gridVarianceFloor
+        let capturedThumbnailBase = thumbnailBaseURL
+        return await Task.detached(priority: .userInitiated) {
+            let r = (try? qs.fetchRepresentativePairs(
+                folderID: folderID, collectionID: collectionID,
+                sortColumn: sortColumn, additionalCondition: condition)) ?? []
+            return r.map { result in
+                let adjGeo = adjustedGeometricFree(result, peakFloor: capturedPeakFloor, varFloor: capturedVarFloor)
+                return convertToPairFree(result, adjustedGeometricScore: adjGeo,
+                                         weights: capturedWeights, pairCounts: [:],
+                                         thumbnailBase: capturedThumbnailBase)
+            }
+        }.value
+    }
+
     func fetchRepresentativePairs(
         folderID: Int64? = nil,
         collectionID: Int64? = nil,

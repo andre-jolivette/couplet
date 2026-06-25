@@ -133,7 +133,7 @@ struct SubmodeFilterBar: View {
                 Spacer(minLength: 0)
             }
             .padding(.horizontal, 20)
-            .padding(.top, 10)
+            .padding(.top, 14)
             .padding(.bottom, 6)
         }
     }
@@ -144,7 +144,7 @@ struct SubmodeFilterBar: View {
             return [("accent_echo", "Color echo"), ("harmony", "Tonal harmony"), ("contrast", "Colour contrast")]
         case .geometric:
             return [("directed_gaze", "Directed gaze"), ("gaze_conversation", "Eyes in conversation"),
-                    ("opposing_diagonals", "Diagonal tension"), ("directional_complement", "Spatial tension")]
+                    ("opposing_diagonals", "Diagonal tension")]
         case .thematic:
             return [("complementary", "Complementary"), ("contrastive", "Contrastive"),
                     ("echo", "Echo"), ("ironic", "Ironic"), ("tonal", "Tonal")]

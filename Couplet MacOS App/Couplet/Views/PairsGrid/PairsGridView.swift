@@ -69,11 +69,11 @@ struct PairsGridView: View {
             .onChange(of: settings.edgePeakednessFloor) { _, _ in reloadPairs() }
             .onChange(of: settings.gridVarianceFloor) { _, _ in reloadPairs() }
             .onChange(of: gridVM.sortOrder) { _, _ in reloadPairs() }
-            .onChange(of: gridVM.selectedSubmode) { old, new in
-                // Directed gaze (#109) uses a dedicated uncapped load; other submodes are
-                // reactive post-filters on the current grid, so only reload when gaze is
-                // involved (entering or leaving it).
-                if old == "directed_gaze" || new == "directed_gaze" { reloadPairs() }
+            .onChange(of: gridVM.selectedSubmode) { _, _ in
+                // All submode filters use dedicated uncapped DB loads (not post-filters on
+                // the cap-2 grid), so any submode change — including entering/leaving nil —
+                // needs a full reload.
+                reloadPairs()
             }
             .onAppear { gridVM.hideSequential = settings.hideSequential }
             .onChange(of: settings.hideSequential) { _, new in gridVM.hideSequential = new }

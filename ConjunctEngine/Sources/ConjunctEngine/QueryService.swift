@@ -79,12 +79,14 @@ public actor QueryService {
         folderID: Int64? = nil,
         collectionID: Int64? = nil,
         sortColumn: String,
-        directedGazeOnly: Bool = false
+        directedGazeOnly: Bool = false,
+        additionalCondition: String? = nil
     ) throws -> [PairQueryResult] {
         var results: [PairQueryResult] = []
         try streamRepresentativePairs(
             folderID: folderID, collectionID: collectionID,
-            sortColumn: sortColumn, directedGazeOnly: directedGazeOnly, chunkSize: Int.max
+            sortColumn: sortColumn, directedGazeOnly: directedGazeOnly,
+            additionalCondition: additionalCondition, chunkSize: Int.max
         ) { results.append(contentsOf: $0) }
         return results
     }
@@ -99,6 +101,7 @@ public actor QueryService {
         collectionID: Int64? = nil,
         sortColumn: String,
         directedGazeOnly: Bool = false,
+        additionalCondition: String? = nil,
         chunkSize: Int = 20,
         process: ([PairQueryResult]) throws -> Void
     ) throws {
@@ -126,6 +129,12 @@ public actor QueryService {
         // (fetchRepresentativePairs collects all) so the full set is reviewable.
         if directedGazeOnly {
             conditions.append("p.selectedFor = 'gaze' AND p.gazeJudgeScore > 0")
+        }
+
+        // Submode filter: caller-supplied SQL condition (not user input — always a
+        // hardcoded column = literal string from the app's submode routing table).
+        if let cond = additionalCondition {
+            conditions.append(cond)
         }
         let where_ = "WHERE " + conditions.joined(separator: " AND ")
         let sql = """

@@ -56,12 +56,18 @@ final class PairsGridViewModel: ObservableObject {
             // This prevents rapid navigation from queueing multiple queries on the DB actor.
             try? await Task.sleep(for: .milliseconds(250))
             guard !Task.isCancelled else { return }
-            // Directed-gaze submode (#109): a dedicated uncapped load of just the gaze
-            // pairs (the normal cap-2 grid hides most of them). No streaming/cap-2.
-            if self.selectedSubmode == "directed_gaze" {
-                let gaze = await engine.loadDirectedGazePairs(folderID: folderID, collectionID: collectionID)
+            // Submode filters use a dedicated uncapped DB query so every pair for that
+            // submode is visible — the cap-2 grid hides most of them. Each submode
+            // routes to the appropriate axis sort column in EngineController.
+            if let sub = self.selectedSubmode {
+                let pairs: [DisplayPair]
+                if sub == "directed_gaze" {
+                    pairs = await engine.loadDirectedGazePairs(folderID: folderID, collectionID: collectionID)
+                } else {
+                    pairs = await engine.loadSubmodePairs(submode: sub, folderID: folderID, collectionID: collectionID)
+                }
                 guard !Task.isCancelled else { return }
-                self.allPairs = gaze
+                self.allPairs = pairs
                 self.isLoading = false
                 return
             }
@@ -106,11 +112,14 @@ final class PairsGridViewModel: ObservableObject {
             try? await Task.sleep(for: .milliseconds(100))
             guard !Task.isCancelled else { return }
             var buffer: [DisplayPair]
-            if self.selectedSubmode == "directed_gaze" {
-                // Directed-gaze view (#109) is a dedicated uncapped load, not the normal
-                // stream — re-streaming here would wipe the gaze set and the filter would
-                // show nothing. Reload the gaze set instead (thematic scores don't affect it).
-                buffer = await engine.loadDirectedGazePairs(folderID: folderID, collectionID: collectionID)
+            if let sub = self.selectedSubmode {
+                // Submode views use dedicated uncapped loads — re-streaming the normal
+                // cap-2 grid would wipe them. Reload the correct submode set instead.
+                if sub == "directed_gaze" {
+                    buffer = await engine.loadDirectedGazePairs(folderID: folderID, collectionID: collectionID)
+                } else {
+                    buffer = await engine.loadSubmodePairs(submode: sub, folderID: folderID, collectionID: collectionID)
+                }
             } else {
                 buffer = []
                 let stream = engine.streamPage0Pairs(
