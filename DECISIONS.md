@@ -1,97 +1,17 @@
 # Couplet — Architectural Decisions & Current State
 
-> **What this file is:** A running log of every significant architectural decision made during development, in order. If you're trying to understand why something is built the way it is, start here. The architecture overview at the top was accurate early in the project; the individual decision entries further down are the authoritative record. The [CLAUDE.md](CLAUDE.md) file has the current operational summary.
+> **What this file is:** A running log of every significant architectural decision made during development, in order. If you're trying to understand why something is built the way it is, start here. The [CLAUDE.md](CLAUDE.md) file has the current operational summary; individual decision entries in this log are the authoritative record of what was built and why.
 
 ## Project Brief
 Couplet is a macOS app for photographers. It discovers meaningful image pairs in a photo library — not duplicates or sequential shots, but conceptually resonant connections the photographer might not have noticed.
 
 ---
 
-## Engine Architecture (early-build snapshot — see CLAUDE.md for current state)
+## Architecture
 
-### Indexing Pipeline (5 phases as of early build; grown to 9+ phases — see decisions #64, #65, #82, #102, #103)
-1. **Scan** — FileScanner reads EXIF captureDate, colorProfile (color/bw) from CGImageSource
-2. **Duplicate detection** — dHash perceptual hashing, Hamming threshold=6, hero image selection
-3. **Thumbnails** — CGImageSourceCreateThumbnailAtIndex at 512px max (prevents IOSurface exhaustion)
-4. **CLIP extraction** — CLIPCoreMLEngine, 224px input, cosine similarity embeddings
-5. **Captioning** — OllamaCaptioningEngine → moondream via localhost:11434. Captions ALL uncaptioned active images in DB (not just current scan batch). Clears malformed captions with label prefixes on each run.
-6. **Pair scoring** — PairScorer with dual topK (composite + thematic), then DELETE+INSERT to replace stale pairs
+Couplet is built as a sandboxed macOS app (Swift, macOS 14.0) with a Swift package (`ConjunctEngine`) handling all indexing, scoring, and database work, wired to a SwiftUI front-end via an `@MainActor` `EngineController` bridge. The core pipeline is an 8-phase indexing engine (scan → duplicates → thumbnails → CLIP → captioning → role extraction → accent/saliency → pair scoring) feeding a SQLite/GRDB database, with LLM background passes (`GazeVisionBackgroundPass`, `ThematicV2BackgroundPass`) that run after the grid loads. Three scoring axes — aesthetic (0.40), geometric (0.20), and thematic (0.40) — drive pair selection via a four-pool topK (composite top-150 + thematic top-50 + geometric top-5 + aesthetic top-5).
 
-### Scoring (PairScorer.swift)
-- **Aesthetic** — HSL histogram intersection (harmony) vs LAB palette contrast
-- **Geometric** — edge orientation cosine similarity + composition grid cosine similarity
-- **Thematic** — ConceptClusters vocabulary matching on moondream captions; Dice coefficient on matched cluster sets; falls back to CLIP cosine similarity if no captions
-- **Composite weights** — aesthetic×0.40 + geometric×0.20 + thematic×0.40 (thematic boosted to 0.60 when score ≥0.20)
-- **Penalties** — sequential shots (≤30s: ×0.40, ≤60s: ×0.55, ≤5min: ×0.85), filename-base duplicates (zeroed), CLIP similarity ceiling >0.88 (×0.40), cluster saturation: weight-based gate (weightedSharedSum > 5.0 → zeroed; previously count > 3)
-- **Dual topK** — top-50 by composite per image + top-10 by thematic score per image (minimum 0.20)
-
-### ConceptClusters (ConceptClusters.swift)
-29 semantic clusters: skilled_performance, sound_music, sensory_overwhelm, bodily_gesture, tenderness_care, isolation_solitude, community_gathering, tension_conflict, joy_celebration, grief_sorrow, labor_effort, movement_energy, stillness_rest, ritual_ceremony, urban_street, vulnerability_exposure, power_dominance, looking_watching, devotion_belief, confinement_freedom, youth_age, waiting_anticipation, transformation_change, nature_landscape, humor_absurdity, uncanny_ordinary, economic_precarity, solitude_in_crowd, domestic_intimacy
-
-Tokenizer strips common suffixes (ation, tion, ance, ence, ing, ed, er, etc.) before matching.
-Thematic score uses **Dice coefficient** (not Jaccard) — less harsh when one image has many clusters.
-Two-signal clusters (require ≥1 keyword hit from each of two vocabulary groups): humor_absurdity, uncanny_ordinary, solitude_in_crowd, domestic_intimacy, economic_precarity.
-
-### Database Schema (GRDB, SQLite WAL)
-- `images` — path, contentHash, filename, folderID, captureDate (Double, Unix timestamp), colorProfile ("color"/"bw"), caption (TEXT), dHash, duplicateGroupID, isHero, isActive
-- `pairs` — imageAID, imageBID, aestheticScore, geometricScore, thematicScore, compositeScore, rationale, rawEdgeSim, rawGridSim, maxEdgePeakedness, maxGridVariance, edgePeakednessMult, gridVarianceMult
-- Migrations: v1_initial, v2_duplicates, v3_captions, v4_colorProfile, v5_geometricStats, v6_distinctivenessMultipliers
-
----
-
-## App Architecture
-
-### Key files
-- `EngineController.swift` — @MainActor bridge. Builds CLIP + captioning engines in cancellable Task. fetchPairs: fetches 2000 from DB, applies per-image cap of 15, trims to 750
-- `PairScorer` modality labeling — thematic if thematicScore ≥0.25 AND thematicScore > geometricScore; otherwise geometric if geometric ≥ aesthetic
-- `LightboxInfoRail.swift` — right rail showing captions, cluster breakdown, score bars, composite breakdown. Opened by clicking score block in lightbox top bar
-
-### UI State
-- Grid: 750 pairs displayed, per-image cap of 15
-- Filters: All/Aesthetic/Geometric/Thematic pills, Sort dropdown (Composite/Thematic/Geometric/Aesthetic), All tones/Color/B&W/Mixed picker, Show hidden toggle, Search
-- Sort is display-time only — independent of modality filter pills; combine freely (e.g. filter to Thematic, sort by geometric score)
-- Hide sequential pairs: moved to Settings (Display section), persisted via UserDefaults, synced into PairsGridViewModel at display time
-- Lightbox: score block (A/G/T + composite) clickable → slides in info rail
-- Score pills: opacity scales with score value; color-coded (blue=aesthetic, green=geometric, orange=thematic)
-
----
-
-## Known Issues / Active Work
-
-### Title bar frosted glass — RESOLVED (see backlog #30)
-
----
-
-### Thematic scoring problems
-- **Labeling bias**: geometric scores (0.80+) dominate because most street photography has strong structural similarity. Thematic scores (0.20–0.45) rarely beat geometric despite being meaningful. Needs Option B (store selection reason at index time) and Option D (improve geometric scorer)
-- **Score ceiling**: confirmed Jaccard hard-caps at 0.60 given the asymmetry + saturation gates. Switched to Dice — new ceiling 0.75. Existing DB pairs retain old Jaccard scores until re-indexed.
-- **Cluster weight equity**: all cluster matches currently count equally, but `urban_street` overlap is far less meaningful than `grief_sorrow` overlap. Weighted Dice is the next step (see backlog #17).
-- **Vocabulary gaps**: clusters covering sound/music and sensory experience added; violin+ear-covering pair now scores thematic=0.25. More gaps likely exist
-- **Caption quality**: moondream (1.8B) describes surface action accurately but misses subtext, irony, cultural references. Acceptable for cluster matching; not good enough for nuanced semantic understanding
-
-### Pending improvements (prioritised)
-1. **Option B** — store `selected_for` flag ('thematic'/'composite') in pairs table at scoring time; use for labeling instead of post-hoc score comparison
-2. **Option C** — already done (three score pills + info rail)
-3. **Option D** — improve geometric scorer to be more selective; currently rewards any two street photos with similar subject scale
-4. **Color tone filter** — ✅ Fixed. Three-tier detection: Gray color model → ICC profile name → pixel-level chroma sampling (catches RGB B&W JPEG exports from Lightroom). Backfill runs for all active images on every re-index (same pattern as caption backfill), so a single re-index of any folder corrects the whole library.
-5. **Collections** — not yet wired to database
-6. **Diptych export** — not yet implemented
-7. **Settings view** — ✅ modality weight triangle picker + thematic threshold slider implemented and wired. Duplicate threshold not yet UI-accessible.
-
-### Double CLIP build issue
-On some launches two engine builds start simultaneously (one finds ollama unavailable, one finds it available). Root cause: `initialize()` and sometimes `storeModelBookmark()` both trigger `startEngineBuild`. The `engineBuildTask?.cancel()` pattern should prevent this but the timing window is narrow. Monitor — hasn't caused crashes recently.
-
----
-
-## Ollama / Captioning Setup
-- Install: `brew install ollama`, then `ollama pull qwen2.5vl:7b`
-- Register the trimmed context variant: `ollama create qwen2.5vl-caption -f ConjunctEngine/Modelfile`
-- Run: `ollama serve` (or `brew services start ollama` for auto-start)
-- Current model: `qwen2.5vl-caption` — qwen2.5vl:7b with num_ctx capped at 2048 (see ConjunctEngine/Modelfile). Prompt v2 (#50/#97): single flowing paragraph, physical facts first (hands, feet, gaze target, precise objects, apparent gender), direction of every significant action, emotional register only as a conclusion from named visible evidence, ban on freestanding mood phrases. No structured scaffolding.
-- Input: 768px max-dimension thumbnail (raised from 512px in #97 — small subject-defining details were missed at 512px). Decoding: greedy (temperature 0, top_k 1) for determinism and to suppress run-to-run fabrication; repeat_penalty 1.15 retained as loop insurance.
-- Timeout: 120s per image; URLSession ceiling 150s. Actual caption time ~3–6s/image on M1 Max.
-- num_predict: 500 tokens (raised 250 → 400 → 500; see decisions log). The v2 prompt typically completes in 140–190 tokens; 500 is headroom. Budget: image ≤750 + prompt ≈460 + output 500 ≈ 1,710 of num_ctx 2048.
-- **Do NOT run the Ollama server with `OLLAMA_KV_CACHE_TYPE=q8_0` (or any quantized KV cache)** — it corrupts qwen2.5vl generation into systematic article/function-word garbling ("a aftermath", "He phone") even at greedy decoding, while llama3.2 tolerates it, so the breakage is silent and model-specific. `OLLAMA_FLASH_ATTENTION=1` alone is fine. The Homebrew service plist (`/opt/homebrew/opt/ollama/homebrew.mxcl.ollama.plist`) had both set — remove the KV cache line if it reappears (e.g. after editing the plist or reinstalling). See decision #97.
+Current architecture is documented in [CLAUDE.md](CLAUDE.md). Individual decision entries in the log below are the authoritative record of what was built and why.
 
 ---
 
