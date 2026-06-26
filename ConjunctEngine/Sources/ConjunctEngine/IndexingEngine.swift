@@ -1272,20 +1272,42 @@ public actor IndexingEngine {
         }
         guard profiled.count > 1 else { return }
 
-        // Corpus-derived non-discriminating concepts, then capped joins over all pairs.
-        let generic = RoleJoins.genericConcepts(profiled.map(\.profile))
-        let cap = 4
-        var degree: [String: Int] = [:]
+        // Cap redesign (decision #113): greedy-by-specificity admission with per-join-type
+        // caps, replacing the fragile first-come-by-id cap. Each candidate is scored by
+        // corpus rarity (rarer matched key = more discriminating); we admit globally
+        // best-first under a per-priority cap, so a meaningful pair is never evicted by an
+        // arbitrary lower-id one and adding/altering a join can't silently drop anchors.
+        // Validated in the offline harness against the golden + anchor pairs
+        // (KNOWN_GOOD_PAIRS.md): surfaces G16, holds G4/G6/G7, ~1.2k candidates.
+        let freq = RoleJoins.CorpusFreq.build(profiled.map(\.profile))
         struct Cand { let a: Int64; let b: Int64; let join: RoleJoins.Candidate }
-        var cands: [Cand] = []
+        var all: [Cand] = []
         for i in 0..<profiled.count {
             for j in (i + 1)..<profiled.count {
-                guard let c = RoleJoins.join(profiled[i].profile, profiled[j].profile, generic: generic) else { continue }
-                let ka = "\(profiled[i].id)#\(c.priority)", kb = "\(profiled[j].id)#\(c.priority)"
-                if (degree[ka] ?? 0) < cap && (degree[kb] ?? 0) < cap {
-                    cands.append(Cand(a: profiled[i].id, b: profiled[j].id, join: c))
-                    degree[ka, default: 0] += 1; degree[kb, default: 0] += 1
-                }
+                guard let c = RoleJoins.join(profiled[i].profile, profiled[j].profile, freq: freq) else { continue }
+                all.append(Cand(a: profiled[i].id, b: profiled[j].id, join: c))
+            }
+        }
+        guard !all.isEmpty else { return }
+        // Deterministic global order: priority asc, specificity desc, then stable id keys
+        // (so the admitted set is reproducible regardless of pair-evaluation order).
+        all.sort { l, r in
+            if l.join.priority != r.join.priority { return l.join.priority < r.join.priority }
+            if l.join.specificity != r.join.specificity { return l.join.specificity > r.join.specificity }
+            if l.a != r.a { return l.a < r.a }
+            return l.b < r.b
+        }
+        // Per-join-type caps (harness-validated): join1 source/receiver 8, join2 claim 8,
+        // join3 object real-vs-alt 5 (the flood monster — ~9k uncapped), join4 claim↔object 12.
+        let caps: [Int: Int] = [1: 8, 2: 8, 3: 5, 4: 12]
+        var degree: [String: Int] = [:]
+        var cands: [Cand] = []
+        for c in all {
+            let cap = caps[c.join.priority] ?? 8
+            let ka = "\(c.a)#\(c.join.priority)", kb = "\(c.b)#\(c.join.priority)"
+            if (degree[ka] ?? 0) < cap && (degree[kb] ?? 0) < cap {
+                cands.append(c)
+                degree[ka, default: 0] += 1; degree[kb, default: 0] += 1
             }
         }
         guard !cands.isEmpty else { return }
