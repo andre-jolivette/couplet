@@ -38,3 +38,4 @@ Couplet MacOS App/Couplet/clip-vit-base-patch32.mlpackage/
 Planning docs/
 FINDINGS-*.md
 test_pair_vlm_v2.sh
+KNOWN_GOOD_PAIRS.md
