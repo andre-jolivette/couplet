@@ -20,9 +20,10 @@ private struct V2Candidate: Sendable {
 /// images have non-empty captions. Pure-color accent-echo pairs (aestheticSubmode
 /// = 'accent_echo' with no thematic or geometric substance) are excluded as
 /// spurious (decisions #91, #95); other accent-echo pairs stay eligible but are
-/// deprioritised to the tail of the ordering. Candidates are ordered by holistic
-/// compositeScore (decision #95) — which includes the thematic axis — rather than
-/// raw aesthetic/geometric strength. Limit: 750 pairs.
+/// deprioritised into their own low-weight tail bucket. Non-role candidates are
+/// selected via fixed compositeScore-band stratified sampling, not a straight
+/// compositeScore-ordered queue — see the `nonRoleBucket*` doc comments below for
+/// why (decision #115, backlog #93). Limit: 750 pairs.
 ///
 /// Sequential execution is intentional — Ollama handles one request at a time,
 /// and concurrent calls would not reduce wall-clock time.
@@ -130,6 +131,85 @@ public actor ThematicV2BackgroundPass {
     /// (decision #102). Role candidates still get priority within their cap.
     private static let roleBudget = 500
 
+    /// Stratified sampling for the non-role pool (decision #115, backlog #93).
+    ///
+    /// Straight `compositeScore DESC` ordering is circular: an unjudged pair's composite
+    /// falls back to the weak cluster `thematicScore` — exactly the signal ThematicV2
+    /// exists to correct — so pairs whose only weakness is a low cluster-Dice score (the
+    /// exact case ThematicV2 fixes) never reach the front of the ~250-slot/pass judge
+    /// queue against ~119k eligible candidates. Confirmed on the live DB (#90): four golden
+    /// Mode-1 pairs sat at ranks 89k–108k, structurally unreachable.
+    ///
+    /// Fix: bucket the eligible pool by fixed `compositeScore` bands and give every band a
+    /// guaranteed non-zero slot share each pass, instead of one global score-ordered queue.
+    /// Bands are fixed score VALUES, not equal-population quartiles — quartiles were tried
+    /// first and rejected: the live distribution is dense in the middle (compositeScore
+    /// 0.40–0.50 alone holds ~62% of the eligible pool) with a sparse low tail, so an
+    /// equal-population bottom quartile would still contain ~30k pairs, unreachable at
+    /// ~250 slots/pass. Fixed value bands are narrow exactly where the pool is sparse
+    /// (0.15–0.40, where under-scored-by-Dice pairs live) and wide where it's dense.
+    /// `nonRoleBucketWeights[i]` is the slot weight for band
+    /// `[nonRoleBucketBounds[i-1], nonRoleBucketBounds[i])` (band 0 is `< nonRoleBucketBounds[0]`,
+    /// the last band is `>= nonRoleBucketBounds.last`). accent_echo pairs (decision #100's
+    /// tail-deprioritization) go to their own dedicated lowest-weight tail band regardless
+    /// of score, preserving that intent under the new scheme.
+    ///
+    /// Within a band, candidates are ordered by `pairID ASC`, not `compositeScore DESC`.
+    /// This matters: bands are narrow enough that score-ordering within a band still
+    /// systematically starves whichever pair happens to sit at the bottom of its own band
+    /// forever (verified in simulation — one golden pair sat at rank 10,687 of 10,949
+    /// *within* its band, worse than four-digit passes to reach). `pairID` is unrelated to
+    /// score, so every candidate in a band gets a turn as higher-id members ahead of it are
+    /// judged and drop out of the `thematicV2Score IS NULL` pool each pass — no extra
+    /// "last considered" column needed.
+    ///
+    /// Weights were tuned empirically against the live DB (2026-07-07, ~119,354 eligible
+    /// candidates) so: (a) every band gets ≥1 slot every pass — verified no band was ever
+    /// starved while candidates remained in it; (b) the 0.40–0.50 band (the pool's dense
+    /// core, previously exclusively favored) keeps the single largest weight, so
+    /// previously-strong candidates aren't starved in the other direction; (c) the four
+    /// golden pairs from #90 (composite 0.158–0.346) land in bands that reach them within
+    /// a multi-pass horizon of tens of passes, not hundreds — simulated result: passes
+    /// 40 / 46 / 56 / 74 respectively at a steady ~250 slots/pass. Re-tune these constants
+    /// if a future pass over the live DB shows drift from this distribution.
+    private static let nonRoleBucketBounds: [Double] = [0.10, 0.15, 0.20, 0.25, 0.30, 0.35, 0.40, 0.50]
+    private static let nonRoleBucketWeights: [Int] = [1, 3, 25, 48, 10, 40, 25, 57, 36]
+    private static let nonRoleAccentEchoTailWeight = 5
+    private static let nonRoleAccentEchoTailBucket = nonRoleBucketWeights.count
+
+    /// SQL CASE expression assigning each candidate row to a bucket index, per
+    /// `nonRoleBucketBounds`/`nonRoleAccentEchoTailBucket` above.
+    private static func nonRoleBucketCaseSQL() -> String {
+        var clauses = ["WHEN p.aestheticSubmode = 'accent_echo' THEN \(nonRoleAccentEchoTailBucket)"]
+        for (i, bound) in nonRoleBucketBounds.enumerated() {
+            clauses.append("WHEN p.compositeScore < \(bound) THEN \(i)")
+        }
+        clauses.append("ELSE \(nonRoleBucketWeights.count - 1)")
+        return "CASE " + clauses.joined(separator: " ") + " END"
+    }
+
+    /// Per-bucket slot count for this pass, scaled from `nonRoleBucketWeights` +
+    /// `nonRoleAccentEchoTailWeight` proportionally to the actual remaining budget (which
+    /// varies pass to pass with the role-candidate backlog). Every bucket gets ≥1 slot
+    /// whenever `remaining > 0`; any rounding overflow is trimmed from the largest buckets
+    /// first so the total never meaningfully exceeds `remaining`.
+    private static func nonRoleBucketSlots(remaining: Int) -> [Int] {
+        let weights = nonRoleBucketWeights + [nonRoleAccentEchoTailWeight]
+        guard remaining > 0 else { return Array(repeating: 0, count: weights.count) }
+        let total = weights.reduce(0, +)
+        var slots = weights.map { max(1, Int((Double($0) / Double(total) * Double(remaining)).rounded())) }
+        var overflow = slots.reduce(0, +) - remaining
+        var i = 0
+        while overflow > 0 {
+            if slots[i] > 1 {
+                slots[i] -= 1
+                overflow -= 1
+            }
+            i = (i + 1) % slots.count
+        }
+        return slots
+    }
+
     private func fetchCandidates() throws -> [V2Candidate] {
         try db.read { db in
             // captureDate filter in SQL: identical captureDates mean burst/sequential shots.
@@ -172,35 +252,51 @@ public actor ThematicV2BackgroundPass {
                     hypothesis: (row["hypothesis"] as? String) ?? ""))
             }
 
-            // ── Non-role pool (decision #95/#100) — cold score(), fills remaining budget ──
-            // Narrow pure-color guard (replaces #91's blanket accent_echo exclusion) +
-            // composite ordering with accent_echo deprioritised to the tail. Excludes
-            // role rows (judged above).
+            // ── Non-role pool (decision #95/#100, stratified #115) — cold score(), fills
+            // remaining budget. Narrow pure-color guard (replaces #91's blanket accent_echo
+            // exclusion) still applies as a hard exclusion before bucketing. Excludes role
+            // rows (judged above). See nonRoleBucketBounds/-Weights doc comments for why
+            // straight compositeScore ordering was replaced with fixed-band stratified
+            // sampling (decision #115, backlog #93).
             let remaining = Self.budget - out.count
             if remaining > 0 {
+                let slots = Self.nonRoleBucketSlots(remaining: remaining)
+                let bucketFilter = slots.enumerated()
+                    .filter { $0.element > 0 }
+                    .map { "(bucket = \($0.offset) AND rankInBucket <= \($0.element))" }
+                    .joined(separator: " OR ")
                 let nonRoleSQL = """
-                    SELECT p.id AS pairID,
-                           COALESCE(a.caption, '') AS captionA,
-                           COALESCE(b.caption, '') AS captionB,
-                           COALESCE(a.filename, '') AS filenameA,
-                           COALESCE(b.filename, '') AS filenameB
-                    FROM pairs p
-                    JOIN images a ON a.id = p.imageAID
-                    JOIN images b ON b.id = p.imageBID
-                    WHERE p.thematicV2Score IS NULL
-                      AND p.roleHypothesis IS NULL
-                      AND (p.aestheticScore > 0.3 OR p.geometricScore > 0.3)
-                      AND COALESCE(a.caption, '') != ''
-                      AND COALESCE(b.caption, '') != ''
-                      AND a.isActive = 1
-                      AND b.isActive = 1
-                      AND (a.captureDate IS NULL OR b.captureDate IS NULL OR ABS(a.captureDate - b.captureDate) > 300)
-                      AND NOT (p.aestheticSubmode = 'accent_echo'
-                               AND p.thematicScore < 0.15
-                               AND p.geometricScore < 0.30)
-                    ORDER BY (CASE WHEN p.aestheticSubmode = 'accent_echo' THEN 1 ELSE 0 END) ASC,
-                             p.compositeScore DESC
-                    LIMIT \(remaining)
+                    WITH eligible AS (
+                        SELECT p.id AS pairID,
+                               COALESCE(a.caption, '') AS captionA,
+                               COALESCE(b.caption, '') AS captionB,
+                               COALESCE(a.filename, '') AS filenameA,
+                               COALESCE(b.filename, '') AS filenameB,
+                               \(Self.nonRoleBucketCaseSQL()) AS bucket
+                        FROM pairs p
+                        JOIN images a ON a.id = p.imageAID
+                        JOIN images b ON b.id = p.imageBID
+                        WHERE p.thematicV2Score IS NULL
+                          AND p.roleHypothesis IS NULL
+                          AND (p.aestheticScore > 0.3 OR p.geometricScore > 0.3)
+                          AND COALESCE(a.caption, '') != ''
+                          AND COALESCE(b.caption, '') != ''
+                          AND a.isActive = 1
+                          AND b.isActive = 1
+                          AND (a.captureDate IS NULL OR b.captureDate IS NULL OR ABS(a.captureDate - b.captureDate) > 300)
+                          AND NOT (p.aestheticSubmode = 'accent_echo'
+                                   AND p.thematicScore < 0.15
+                                   AND p.geometricScore < 0.30)
+                    ),
+                    ranked AS (
+                        SELECT *,
+                               ROW_NUMBER() OVER (PARTITION BY bucket ORDER BY pairID ASC) AS rankInBucket
+                        FROM eligible
+                    )
+                    SELECT pairID, captionA, captionB, filenameA, filenameB
+                    FROM ranked
+                    WHERE \(bucketFilter)
+                    ORDER BY bucket ASC, rankInBucket ASC
                 """
                 for row in try Row.fetchAll(db, sql: nonRoleSQL) {
                     guard let pairID = row["pairID"] as? Int64 else { continue }
