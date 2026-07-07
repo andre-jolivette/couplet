@@ -96,6 +96,34 @@ public enum RoleJoins {
         "weapon": "weapon", "gun": "weapon"
     ]
 
+    /// Small curated claim → embodiment/subversion concept bridge for join 2 (decision
+    /// #116). Raw token matching (`rawMatch`) misses pairs that are semantically linked
+    /// but lexically disjoint — a claim "miss" against enacted `['hold hands',
+    /// 'tenderness']` (G14). This is intentionally NOT a general synonym/thesaurus
+    /// system: it is sized exactly to concept pairs evidenced in KNOWN_GOOD_PAIRS.md,
+    /// one-directional (claim key → embodiment concept, never the reverse), so it
+    /// cannot silently widen beyond an audited list. Matched on the WHOLE claim/
+    /// embodiment string (exact, case-insensitive) rather than `tokens()` overlap —
+    /// harness testing found token-level matching false-fires on a claim that merely
+    /// *contains* the bridge word as one part of a longer phrase (a "Miss Rodeo" sash
+    /// claim spuriously bridged to an unrelated "tenderness" embodiment via the shared
+    /// "miss" token). A prior attempt at a broader smile↔speak bridge (for G8) was
+    /// found, offline, to flood the "smile" claim's cap-8 window without even getting
+    /// G8 admitted (598 still loses the cap-8 race) — omitted; do not re-add it
+    /// without re-running that eviction/flood check against KNOWN_GOOD_PAIRS.md.
+    static let claimEmbodimentBridge: [String: Set<String>] = [
+        "miss": ["tenderness"],
+    ]
+
+    /// Directional bridge check for join 2 only: does the WHOLE `claim` string
+    /// (exact, case-insensitive) map via the curated table above to the WHOLE
+    /// `embodiment` (enact/subvert) string? Deliberately not token-level — see the
+    /// table's doc comment.
+    static func bridgeMatch(_ claim: String, _ embodiment: String) -> Bool {
+        guard let bridged = claimEmbodimentBridge[claim.lowercased()] else { return false }
+        return bridged.contains(embodiment.lowercased())
+    }
+
     static func tokens(_ s: String) -> Set<String> {
         Set(s.lowercased()
             .split(whereSeparator: { !$0.isLetter })
@@ -154,14 +182,14 @@ public enum RoleJoins {
             freq.map { f in tokens(claim).map { f.spec(f.concept, $0) }.max() ?? 0 } ?? 0
         }
         for ca in a.claims {
-            for cb in b.enacts + b.subverts where rawMatch(ca, cb) {
+            for cb in b.enacts + b.subverts where rawMatch(ca, cb) || bridgeMatch(ca, cb) {
                 return Candidate(priority: 2, relationshipType: "ironic",
                     hypothesis: "ironic: a sign or text announces or demands ‘\(ca)’, while the other image's subject literally embodies or contradicts that very idea",
                     specificity: claimSpec(ca))
             }
         }
         for ca in b.claims {
-            for cb in a.enacts + a.subverts where rawMatch(ca, cb) {
+            for cb in a.enacts + a.subverts where rawMatch(ca, cb) || bridgeMatch(ca, cb) {
                 return Candidate(priority: 2, relationshipType: "ironic",
                     hypothesis: "ironic: a sign or text announces or demands ‘\(ca)’, while the other image's subject literally embodies or contradicts that very idea",
                     specificity: claimSpec(ca))
