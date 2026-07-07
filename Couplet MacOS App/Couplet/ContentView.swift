@@ -97,8 +97,10 @@ struct ContentView: View {
             lightboxVM.open(pairs: gridVM.displayedPairs, startingAt: gridVM.lightboxStartIndex)
         }
         .onAppear {
+            // Engine is already initialized by CoupletApp's launch `.task`, which runs
+            // unconditionally before ContentView is ever shown (see #8) — do not call
+            // engine.initialize() here again.
             Task { @MainActor in
-                engine.initialize()
                 await libraryVM.loadCollections(engine: engine)
             }
         }
