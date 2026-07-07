@@ -134,4 +134,23 @@ final class RoleJoinsTests: XCTestCase {
         let s = RoleJoins.join(violinist, ears, freq: common)?.specificity ?? 0
         XCTAssertGreaterThan(s, 0)
     }
+
+    // MARK: join-2 synonym bridge (decision #116)
+
+    lazy var missSign     = RoleProfile(subjects: ["woman"], claims: ["miss"])
+    lazy var handHolding  = RoleProfile(subjects: ["mannequin","mannequin"], enacts: ["hold hands", "tenderness"])
+    lazy var missRodeo    = RoleProfile(subjects: ["woman"], claims: ["Miss Rodeo"])
+
+    func testBridgeConnectsMissClaimToTendernessEmbodiment() {
+        // G14: raw token match alone can't bridge "miss" to "hold hands"/"tenderness".
+        let j = RoleJoins.join(missSign, handHolding)
+        XCTAssertEqual(j?.priority, 2)
+        XCTAssertEqual(j?.relationshipType, "ironic")
+    }
+
+    func testBridgeDoesNotFireOnSubstringWithinLongerClaim() {
+        // "Miss Rodeo" is a pageant-sash title, not the longing claim "miss" — the
+        // bridge must match on the whole claim string, not a token contained in it.
+        XCTAssertNil(RoleJoins.join(missRodeo, handHolding))
+    }
 }
