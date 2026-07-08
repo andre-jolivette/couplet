@@ -49,10 +49,20 @@ public enum ConceptClusters {
             "support", "cling", "shelt", "guard", "devot"
         ]),
 
+        // #120 (2026-07-08) collision removals: "quiet" (57% of 130 firings —
+        // boilerplate, often "quiet interaction between two people" = anti-isolation;
+        // quiet stays in stillness_rest where the register fits), "still" (32% —
+        // "standing still" ≠ solitude; stays in stillness_rest), "apart" (7/7 "legs
+        // apart"). Reachability: the cluster could not match its own name — "solitud"
+        // never matched "solitude" (10 captions), "solitar" never matched "solitary"
+        // (5), "empt" never matched "empty" (6). "contemplat"/"introspect" left
+        // as-is (near-dead) — deliberately NOT fixed to "contempl"/"introspective":
+        // those are captioner mood-summary boilerplate (79/16 captions) and would
+        // recreate the calm/relax problem.
         Cluster(name: "isolation_solitude", keywords: [
-            "alone", "solitar", "empt", "quiet", "still", "silent", "lone",
-            "isol", "distant", "apart", "withdrawn", "contemplat", "reflec",
-            "ponder", "introspect", "solitud", "separatd", "outsid", "margin",
+            "alone", "solitary", "empty", "silent", "lone",
+            "isol", "distant", "withdrawn", "contemplat", "reflec",
+            "ponder", "introspect", "solitude", "separatd", "outsid", "margin",
             "exclud", "ignor", "invisible", "unnoticed", "detach"
         ]),
 
@@ -153,10 +163,16 @@ public enum ConceptClusters {
             "meadow", "bloom", "wildernes", "foliag", "canopi", "grove"
         ]),
 
+        // #120 (2026-07-08) collision removals: "open" (45% of 188 firings — "mouth
+        // open", car doors), "strip" (40% — striped clothing; the SAME stem collision
+        // #96 removed from transformation_change but missed here). "vulnerabl" could
+        // never match bare "vulnerable" (stems to itself) → "vulnerable" (inert on
+        // this corpus but correct, #96 obscure-class). "bare"/"reveal" kept — bare
+        // feet/back and revealing-outfit senses are genuine exposure here.
         Cluster(name: "vulnerability_exposure", keywords: [
-            "vulnerabl", "expos", "bare", "raw", "open", "unguard",
+            "vulnerable", "expos", "bare", "raw", "unguard",
             "unprotect", "fragil", "delic", "susceptibl", "naked",
-            "wound", "broken", "weak", "strip", "reveal", "unshield",
+            "wound", "broken", "weak", "reveal", "unshield",
             "defenceless", "tender", "shaking", "trembl"
         ]),
 
