@@ -385,6 +385,48 @@ public final class DatabaseManager: Sendable {
             }
         }
 
+        // ── v21: expression indexes for grid sort orders (decision #117) ──
+        // None of PairSortOrder's five dbColumn expressions (AppModels.swift) match a
+        // plain indexed column: .axis and .composite are MAX(...)/COALESCE(...) formulas,
+        // .thematic is a COALESCE, and .geometric/.aesthetic are plain columns that were
+        // never individually indexed (only compositeScore was, via idx_pairs_score, which
+        // nothing sorts by directly anymore). Every grid load — folderID/collectionID both
+        // nil, the default "All Photos" view — therefore forced SQLite into "USE TEMP
+        // B-TREE FOR ORDER BY": materialize and sort the entire matching row set before
+        // emitting row 1, even though the streaming path is written to consume rows
+        // incrementally. Measured on a 1,028-image / 121,589-pair library: first-row
+        // latency 559–999ms, full drain 1.4–1.9s.
+        //
+        // SQLite supports indexes on arbitrary deterministic expressions and keeps them
+        // in sync automatically on every write — no application-level maintenance needed,
+        // unlike a persisted/denormalized score column. Each index below is the exact text
+        // of one PairSortOrder.dbColumn case (bare column names; SQLite matches these
+        // against the query's `p.`-aliased ORDER BY expression). With these in place,
+        // SQLite scans the index directly ("SCAN p USING INDEX ...") and streams rows in
+        // score order without materializing the full table first — first-row latency
+        // dropped to ~1–2ms and full drain to ~1.0s in the same measurement. If any
+        // PairSortOrder.dbColumn expression changes, update the matching index here (or a
+        // future migration) or it silently reverts to the temp b-tree path.
+        migrator.registerMigration("v21_pairSortIndexes") { db in
+            try db.execute(sql: """
+                CREATE INDEX idx_pairs_axis ON pairs (
+                    MAX(compositeScore, 0.6 * MAX(aestheticScore, geometricScore * 0.8, COALESCE(thematicV2Score, thematicScore)) + 0.4 * (aestheticScore * 0.4 + geometricScore * 0.2 + COALESCE(thematicV2Score, thematicScore) * 0.4))
+                )
+                """)
+            try db.execute(sql: """
+                CREATE INDEX idx_pairs_compositeEffective ON pairs (
+                    MAX(compositeScore, aestheticScore * 0.4 + geometricScore * 0.2 + COALESCE(thematicV2Score, thematicScore) * 0.4)
+                )
+                """)
+            try db.execute(sql: """
+                CREATE INDEX idx_pairs_thematicEffective ON pairs (
+                    COALESCE(thematicV2Score, thematicScore)
+                )
+                """)
+            try db.create(index: "idx_pairs_geometricScore", on: "pairs", columns: ["geometricScore"])
+            try db.create(index: "idx_pairs_aestheticScore", on: "pairs", columns: ["aestheticScore"])
+        }
+
         try migrator.migrate(pool)
     }
 }

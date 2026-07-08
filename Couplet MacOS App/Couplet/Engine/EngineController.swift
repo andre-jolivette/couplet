@@ -511,7 +511,8 @@ final class EngineController: ObservableObject {
                         try qs.fetchImagePairCounts(folderID: folderID, collectionID: collectionID)
                     }
 
-                    // Stream rows via GRDB cursor. SQLite walks idx_pairs_score in
+                    // Stream rows via GRDB cursor. SQLite walks the sortColumn's matching
+                    // expression index (decision #117, migration v21_pairSortIndexes) in
                     // descending order and emits matching rows as it goes — the first
                     // 20-row chunk arrives within milliseconds without waiting for the
                     // full result set. pairCounts are not yet available (counts run
