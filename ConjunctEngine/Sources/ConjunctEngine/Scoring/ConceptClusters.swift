@@ -93,10 +93,13 @@ public enum ConceptClusters {
             "station", "remain", "idle", "languid"
         ]),
 
+        // "observ" removed (#96 pass 2, 2026-07-07): stem collision with "observing"
+        // (photographic watching), not "observance" — 77% of this cluster's judged-pool
+        // firings were this collision. Watching is already covered by looking_watching.
         Cluster(name: "ritual_ceremony", keywords: [
             "ritual", "ceremoni", "traditi", "sacr", "prayer", "worship",
             "bless", "anoint", "consecrat", "solemn", "formal", "inaugur",
-            "initiat", "rite", "observ", "ceremonial", "devout", "kneel",
+            "initiat", "rite", "ceremonial", "devout", "kneel",
             "bow", "vow", "oath", "incens", "altar", "procession", "march"
         ]),
 
