@@ -269,12 +269,21 @@ public enum ConceptClusters {
             "pledge", "vow", "commit", "convict", "passion", "passionate", "fervent"
         ]),
 
+        // #120 (2026-07-08) — worst collision density in the system: 12 keywords removed.
+        // "behind" (63% of 550 firings — bare spatial preposition, enrichment 1% < base),
+        // "wall" (18% — background scenery), "open" (16% — "mouth open"), "wide"
+        // ("wide-brimmed hat"), "fence" (rodeo-arena/background fences; cf #114's
+        // incidental-fence finding), "door"/"free"/"through"/"beyond"/"bar"/"break"
+        // (scenery, "her hand is free", "taking a break", nightclub bars).
+        // Reachability: bare "barrier" stems to "barri" via the -er strip (14 captions —
+        // glass/concrete barriers, the cluster's genuine core); "freedom" was unreachable
+        // via the removed "free". Cluster becomes rare-but-correct (~41 firings).
         Cluster(name: "confinement_freedom", keywords: [
-            "cage", "fence", "wall", "bar", "lock", "bound", "trap",
-            "confin", "restrict", "limit", "enclos", "behind",
-            "free", "open", "escape", "break", "through", "beyond",
-            "vast", "wide", "expand", "liberat", "releas", "flee",
-            "border", "threshold", "door", "gate", "barrier"
+            "cage", "lock", "bound", "trap",
+            "confin", "restrict", "limit", "enclos",
+            "freedom", "escape",
+            "vast", "expand", "liberat", "releas", "flee",
+            "border", "threshold", "gate", "barri"
         ]),
 
         // ── Photographer-influence clusters (#15) ─────────────────────────
