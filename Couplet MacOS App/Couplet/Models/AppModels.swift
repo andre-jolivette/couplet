@@ -101,6 +101,11 @@ struct DisplayPair: Identifiable, Hashable {
     let geometricScore: Float
     let thematicScore: Float
     let rationale: String
+    /// Human-readable explanation of why this is a thematic pair, derived from captions.
+    /// Computed once in `init` (not a computed property) so it doesn't get recomputed —
+    /// and its cluster tie-break potentially re-resolved differently — on every SwiftUI
+    /// re-render (e.g. hover-driven chrome show/hide in the lightbox). See decision #118.
+    let thematicRationale: String
     /// One-sentence LLM explanation of the thematic connection. Nil when not yet scored by ThematicScorerV2.
     let thematicV2Rationale: String?
     /// Relationship type from ThematicScorerV2: complementary/contrastive/echo/ironic/tonal/none.
@@ -146,9 +151,11 @@ struct DisplayPair: Identifiable, Hashable {
         return .mixed
     }
 
-    /// Human-readable explanation of why this is a thematic pair.
-    /// Computed live from captions so it's always current, never stale.
-    var thematicRationale: String {
+    /// Builds the human-readable thematic rationale from captions. Pure function of
+    /// its inputs — called once from `init` and cached in `thematicRationale`.
+    private static func buildThematicRationale(
+        modality: PairingModality, captionA: String, captionB: String, rationale: String
+    ) -> String {
         guard modality == .thematic else { return rationale }
         let cA = captionA.isEmpty ? Set<String>() : ConjunctConceptClusters.matchedClusters(for: captionA)
         let cB = captionB.isEmpty ? Set<String>() : ConjunctConceptClusters.matchedClusters(for: captionB)
@@ -161,8 +168,8 @@ struct DisplayPair: Identifiable, Hashable {
             .map { $0.replacingOccurrences(of: "_", with: " ") }
             .sorted().joined(separator: ", ")
         let contrastParts = [
-            onlyA.first.map { "one image brings \($0.replacingOccurrences(of: "_", with: " "))" },
-            onlyB.first.map { "the other brings \($0.replacingOccurrences(of: "_", with: " "))" }
+            ConjunctConceptClusters.representativeCluster(in: onlyA).map { "one image brings \($0.replacingOccurrences(of: "_", with: " "))" },
+            ConjunctConceptClusters.representativeCluster(in: onlyB).map { "the other brings \($0.replacingOccurrences(of: "_", with: " "))" }
         ].compactMap { $0 }
         let contrast = contrastParts.isEmpty ? "" : " — " + contrastParts.joined(separator: ", ")
         return "Both images share a sense of \(sharedReadable)\(contrast)."
@@ -217,6 +224,9 @@ struct DisplayPair: Identifiable, Hashable {
         self.aestheticScore = aestheticScore
         self.geometricScore = geometricScore; self.thematicScore = thematicScore
         self.rationale = rationale
+        self.thematicRationale = Self.buildThematicRationale(
+            modality: modality, captionA: captionA, captionB: captionB, rationale: rationale
+        )
         self.thematicV2Rationale = thematicV2Rationale
         self.thematicV2RelationshipType = thematicV2RelationshipType
         self.gazeJudgeScore = gazeJudgeScore; self.gazeJudgeRationale = gazeJudgeRationale

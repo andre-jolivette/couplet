@@ -7,4 +7,8 @@ enum ConjunctConceptClusters {
     static func matchedClusters(for caption: String) -> Set<String> {
         ConceptClusters.matchedClusters(for: caption)
     }
+
+    static func representativeCluster(in clusters: Set<String>) -> String? {
+        ConceptClusters.representativeCluster(in: clusters)
+    }
 }
