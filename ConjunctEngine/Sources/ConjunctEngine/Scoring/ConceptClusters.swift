@@ -288,13 +288,18 @@ public enum ConceptClusters {
                 // describing halo effects and dreamlike light quality.
                 "surreal", "surrealism", "unsettl", "eerie", "ghost", "haunt", "dreamlike", "mysterio",
                 // G2: specific visual mechanism (mirroring, concealment, unawareness)
-                "mirror", "echo", "obscure", "oblivio", "unaware", "synchro", "double"
+                // "obscur" not "obscure" (#96 pass 3, 2026-07-07): matchedClusters compares
+                // stemmed caption tokens against these RAW keyword strings — "obscured" stems
+                // to "obscur", so the dictionary-word "obscure" never matched. Verified inert
+                // on the current corpus (0 of 86 obscur-containing images also satisfy G1),
+                // but a genuine latent defect independent of that rarity.
+                "mirror", "echo", "obscur", "oblivio", "unaware", "synchro", "double"
             ],
             requiredGroups: [
                 // G1 — eerie/dreamlike register
                 ["surreal", "surrealism", "unsettl", "eerie", "ghost", "haunt", "dreamlike", "mysterio"],
                 // G2 — specific visual mechanism: mirroring, concealment, unawareness
-                ["mirror", "echo", "obscure", "oblivio", "unaware", "synchro", "double"]
+                ["mirror", "echo", "obscur", "oblivio", "unaware", "synchro", "double"]
             ]
         ),
 
