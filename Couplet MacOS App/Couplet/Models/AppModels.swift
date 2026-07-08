@@ -153,7 +153,9 @@ struct DisplayPair: Identifiable, Hashable {
 
     /// Builds the human-readable thematic rationale from captions. Pure function of
     /// its inputs — called once from `init` and cached in `thematicRationale`.
-    private static func buildThematicRationale(
+    /// nonisolated: called from the nonisolated init (see decision #41/#118 — Swift
+    /// infers @MainActor here otherwise, same inference chain as colorA/colorB).
+    private nonisolated static func buildThematicRationale(
         modality: PairingModality, captionA: String, captionB: String, rationale: String
     ) -> String {
         guard modality == .thematic else { return rationale }
