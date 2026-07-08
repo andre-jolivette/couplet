@@ -149,10 +149,13 @@ public enum ConceptClusters {
             "horizon", "listen", "alert", "ready", "brac", "tension"
         ]),
 
+        // "strip" removed (#96 pass 2, 2026-07-07): stem collision with "striped"
+        // clothing description, not "strip away" — 78% of this cluster's judged-pool
+        // firings were this collision. Change sense retained via shed/reveal/transform.
         Cluster(name: "transformation_change", keywords: [
             "transform", "chang", "becom", "evolv", "shift", "transit",
             "convert", "alter", "adapt", "emerg", "begin",
-            "end", "dissolv", "collaps", "shed", "strip", "reveal",
+            "end", "dissolv", "collaps", "shed", "reveal",
             "renew", "born", "die", "pass", "grown", "ripen"
         ]),
 
