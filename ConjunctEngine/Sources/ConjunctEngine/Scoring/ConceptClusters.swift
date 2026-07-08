@@ -61,7 +61,9 @@ public enum ConceptClusters {
         Cluster(name: "joy_celebration", keywords: [
             "smil", "laugh", "celebrat", "joy", "happi", "excit", "cheer",
             "delight", "elat", "triumphant", "festiv", "jubilant", "grin",
-            "beam", "gleam", "exuber", "playful", "danc", "jump", "raise",
+            // "rais" not "raise" — same keyword-reachability fix as bodily_gesture
+            // above (#96 pass 3, 2026-07-07): "raise" never matched stemmed "rais".
+            "beam", "gleam", "exuber", "playful", "danc", "jump", "rais",
             "toast", "applaud", "chant", "sing"
         ]),
 
@@ -93,10 +95,13 @@ public enum ConceptClusters {
             "station", "remain", "idle", "languid"
         ]),
 
+        // "observ" removed (#96 pass 2, 2026-07-07): stem collision with "observing"
+        // (photographic watching), not "observance" — 77% of this cluster's judged-pool
+        // firings were this collision. Watching is already covered by looking_watching.
         Cluster(name: "ritual_ceremony", keywords: [
             "ritual", "ceremoni", "traditi", "sacr", "prayer", "worship",
             "bless", "anoint", "consecrat", "solemn", "formal", "inaugur",
-            "initiat", "rite", "observ", "ceremonial", "devout", "kneel",
+            "initiat", "rite", "ceremonial", "devout", "kneel",
             "bow", "vow", "oath", "incens", "altar", "procession", "march"
         ]),
 
@@ -146,10 +151,13 @@ public enum ConceptClusters {
             "horizon", "listen", "alert", "ready", "brac", "tension"
         ]),
 
+        // "strip" removed (#96 pass 2, 2026-07-07): stem collision with "striped"
+        // clothing description, not "strip away" — 78% of this cluster's judged-pool
+        // firings were this collision. Change sense retained via shed/reveal/transform.
         Cluster(name: "transformation_change", keywords: [
             "transform", "chang", "becom", "evolv", "shift", "transit",
             "convert", "alter", "adapt", "emerg", "begin",
-            "end", "dissolv", "collaps", "shed", "strip", "reveal",
+            "end", "dissolv", "collaps", "shed", "reveal",
             "renew", "born", "die", "pass", "grown", "ripen"
         ]),
 
@@ -218,8 +226,12 @@ public enum ConceptClusters {
 
         Cluster(name: "bodily_gesture", keywords: [
             // hands
+            // "rais" not "raise" (#96 pass 3, 2026-07-07): matchedClusters compares
+            // stemmed caption tokens against these RAW keyword strings — "raised"/
+            // "raising" stem to "rais", so the dictionary-word "raise" never matched.
+            // Verified: 170 corpus hits, all genuinely about raising a hand/arm/sign.
             "hand", "fist", "finger", "grip", "point", "reach",
-            "raise", "open", "spread", "clasp", "wave", "gesture",
+            "rais", "open", "spread", "clasp", "wave", "gesture",
             // arms and body
             "arm", "shoulder", "back", "chest", "lean", "stretch",
             "extend", "fold", "cross", "hunch", "arch",
@@ -282,13 +294,18 @@ public enum ConceptClusters {
                 // describing halo effects and dreamlike light quality.
                 "surreal", "surrealism", "unsettl", "eerie", "ghost", "haunt", "dreamlike", "mysterio",
                 // G2: specific visual mechanism (mirroring, concealment, unawareness)
-                "mirror", "echo", "obscure", "oblivio", "unaware", "synchro", "double"
+                // "obscur" not "obscure" (#96 pass 3, 2026-07-07): matchedClusters compares
+                // stemmed caption tokens against these RAW keyword strings — "obscured" stems
+                // to "obscur", so the dictionary-word "obscure" never matched. Verified inert
+                // on the current corpus (0 of 86 obscur-containing images also satisfy G1),
+                // but a genuine latent defect independent of that rarity.
+                "mirror", "echo", "obscur", "oblivio", "unaware", "synchro", "double"
             ],
             requiredGroups: [
                 // G1 — eerie/dreamlike register
                 ["surreal", "surrealism", "unsettl", "eerie", "ghost", "haunt", "dreamlike", "mysterio"],
                 // G2 — specific visual mechanism: mirroring, concealment, unawareness
-                ["mirror", "echo", "obscure", "oblivio", "unaware", "synchro", "double"]
+                ["mirror", "echo", "obscur", "oblivio", "unaware", "synchro", "double"]
             ]
         ),
 
