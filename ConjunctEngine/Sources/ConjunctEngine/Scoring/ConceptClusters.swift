@@ -241,12 +241,20 @@ public enum ConceptClusters {
             "kneel", "crouch", "sprawl", "press", "push", "pull"
         ]),
 
+        // #120 (2026-07-08) collision removals: "sign" (65% of the cluster's 373 corpus
+        // firings — literal bus-stop/storefront/street signs, not religious/political
+        // signage), "cross" (23% — "arms crossed"/"crossing the street", never a
+        // religious cross), "banner" (sponsor/rodeo banners). "flag" KEPT deliberately:
+        // 18% judged-pair enrichment vs 2.4% base — genuinely political in a
+        // protest-heavy library. Reachability fixes: "passionat" matched nothing
+        // (nothing stems to it) → "passion"/"passionate"; "holi" never matched bare
+        // "holy" (stems to itself) → "holy".
         Cluster(name: "devotion_belief", keywords: [
             "faith", "believ", "devout", "pious", "spirit", "soul",
-            "sacred", "holi", "divin", "pray", "worship", "cross",
+            "sacred", "holy", "divin", "pray", "worship",
             "church", "temple", "mosque", "shrine", "altar",
-            "sign", "symbol", "icon", "flag", "banner", "emblem",
-            "pledge", "vow", "commit", "convict", "passionat", "fervent"
+            "symbol", "icon", "flag", "emblem",
+            "pledge", "vow", "commit", "convict", "passion", "passionate", "fervent"
         ]),
 
         Cluster(name: "confinement_freedom", keywords: [
