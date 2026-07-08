@@ -30,11 +30,23 @@ public enum ConceptClusters {
             "stag", "act", "present"
         ]),
 
+        // #120 (2026-07-08) collision removals: "hold" (85% of the cluster's 662 corpus
+        // firings; 45-sample review ≈90% instrumental — phones/signs/cups/cigarettes;
+        // only 62/565 hold-captions contain any tender register word; judged-pair
+        // enrichment 4% = base; explicit hand-holding is carried by the role pipeline,
+        // #116/G14), "lean" (15% — physical leaning on railings/walls), "shield"
+        // (13/15 "shielding eyes from sun"; the sensory sense lives in
+        // sensory_overwhelm). Reachability fixes: "gentl" matched NOTHING — "gently"
+        // stems to "gent" (36 captions of genuinely tender language were invisible),
+        // "gentle" to itself; "affection" stems to "affec"; bare "embrace"/"shelter"
+        // stem to "embrace"/"shelt". "touch"/"child"/"support" kept (mixed but below
+        // the ~80% artifact bar; see #120 verdict table).
         Cluster(name: "tenderness_care", keywords: [
-            "hold", "embrac", "comfort", "gentl", "care", "nurtur", "protect",
-            "tend", "cradl", "hug", "kiss", "touch", "sooth", "love", "affection",
+            "embrac", "embrace", "comfort", "gent", "gentle", "care", "nurtur", "protect",
+            "tend", "cradl", "hug", "kiss", "touch", "sooth", "love",
+            "affec", "affectionate",
             "parent", "child", "mother", "father", "tender", "stroking", "caress",
-            "support", "lean", "cling", "shelter", "shield", "guard", "devot"
+            "support", "cling", "shelt", "guard", "devot"
         ]),
 
         Cluster(name: "isolation_solitude", keywords: [
