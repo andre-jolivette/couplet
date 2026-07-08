@@ -100,11 +100,22 @@ public enum ConceptClusters {
             "pivot", "spin", "wheel", "burst", "flash"
         ]),
 
+        // #120 (2026-07-08) collision removals: "rest" (47% of 590 firings — ≈90%
+        // "hand rests on hip/lap" posture idiom, enrichment 4% = base), "relax" (37% —
+        // captioner boilerplate "mood is casual and relaxed", enrichment 0%), "calm"
+        // (28% — "calm and serene atmosphere" boilerplate), "sit" (near-inert: only
+        // bare "sit" matched — "sits"/"sitting" stem to "sits"/"sitt"; ENABLING it
+        // would add 226 scene-description firings, so removed instead), "station"
+        // ("gas station"). Reachability: bare "pause" stems to itself (9 captions);
+        // "stationary" added for the genuine still sense. "peac" left as-is (dead:
+        // "peaceful" stems to "peace" — not added, it's "peaceful protest" + mood
+        // boilerplate). Do NOT change "settl" to "sett": "setting" stems to "sett"
+        // (490 captions!). "lean"/"quiet"/"still" kept — genuine rest postures/register.
         Cluster(name: "stillness_rest", keywords: [
-            "sit", "rest", "paus", "calm", "still", "wait", "sleep",
-            "quiet", "serene", "peac", "relax", "linger", "dwell", "reclin",
+            "paus", "pause", "still", "wait", "sleep",
+            "quiet", "serene", "peac", "linger", "dwell", "reclin",
             "settl", "repos", "lean", "slouch", "crouch", "kneel", "perch",
-            "station", "remain", "idle", "languid"
+            "stationary", "remain", "idle", "languid"
         ]),
 
         // "observ" removed (#96 pass 2, 2026-07-07): stem collision with "observing"
