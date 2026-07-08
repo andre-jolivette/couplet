@@ -79,11 +79,18 @@ public enum ConceptClusters {
             "toast", "applaud", "chant", "sing"
         ]),
 
+        // #120 (2026-07-08): the cluster had only 21 corpus firings and 16 were
+        // collisions — "bow" (48%: hair bows + violin bows, never bowing in grief)
+        // and "numb" (29%: matches "number" via the -er strip — bus route 77, jersey
+        // 16). "cri" matched nothing ("crying"/"cries" survive stemming intact due to
+        // the length guard) → "crying"; "somber" was absent (stems to itself, 4
+        // captions). Post-cleanup ≈9 genuine firings — rare-but-correct is the
+        // tier-1.0 design intent.
         Cluster(name: "grief_sorrow", keywords: [
-            "cri", "mourn", "grief", "sorrow", "pain", "sad", "weep",
+            "crying", "mourn", "grief", "sorrow", "pain", "sad", "weep",
             "lament", "despair", "anguish", "desolat", "heartbreak", "loss",
             "tear", "mournful", "somber", "distress", "agoni", "suffer",
-            "bow", "slump", "hollow", "numb", "bereft", "griev"
+            "slump", "hollow", "bereft", "griev"
         ]),
 
         Cluster(name: "labor_effort", keywords: [
