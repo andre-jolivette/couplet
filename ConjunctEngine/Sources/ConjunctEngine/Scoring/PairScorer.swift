@@ -235,7 +235,7 @@ public enum PairScorer {
             let cB = ConceptClusters.matchedClusters(for: captionB)
             let shared = cA.intersection(cB)
             let meaningfulShared = shared.filter { (ConceptClusters.weights[$0] ?? 0) >= 0.75 }
-            if let theme = meaningfulShared.first {
+            if let theme = ConceptClusters.representativeCluster(in: meaningfulShared) {
                 let readable = theme.replacingOccurrences(of: "_", with: " ")
                 rationaleText = "Thematic resonance — both images share a sense of \(readable)."
             } else if let axis = ConceptClusters.axisPairs.first(where: { axis in
@@ -309,8 +309,8 @@ public enum PairScorer {
         let cB = ConceptClusters.matchedClusters(for: captionB)
         let shared = cA.intersection(cB)
 
-        if !shared.isEmpty {
-            let theme = shared.first!.replacingOccurrences(of: "_", with: " ")
+        if let representative = ConceptClusters.representativeCluster(in: shared) {
+            let theme = representative.replacingOccurrences(of: "_", with: " ")
             return "Thematic resonance — both images share a sense of \(theme)."
         } else if thematic < 0.15 {
             return "Conceptual contrast — the subjects inhabit different worlds but share a visual or emotional register."
