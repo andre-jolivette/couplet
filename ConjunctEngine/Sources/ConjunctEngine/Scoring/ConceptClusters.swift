@@ -138,11 +138,16 @@ public enum ConceptClusters {
         // "observ" removed (#96 pass 2, 2026-07-07): stem collision with "observing"
         // (photographic watching), not "observance" — 77% of this cluster's judged-pool
         // firings were this collision. Watching is already covered by looking_watching.
+        // #120 (2026-07-08) collision removals: "kneel" (36% of the remaining 39
+        // firings — mundane kneeling: holding a phone, tying shoelaces, playful;
+        // stays in bodily_gesture/stillness_rest where it's genuine) and "bow"
+        // (26% — hair/violin bows, same collision as grief_sorrow). Post-cleanup
+        // ≈15 genuine firings (ceremonial/solemn/march/procession).
         Cluster(name: "ritual_ceremony", keywords: [
             "ritual", "ceremoni", "traditi", "sacr", "prayer", "worship",
             "bless", "anoint", "consecrat", "solemn", "formal", "inaugur",
-            "initiat", "rite", "ceremonial", "devout", "kneel",
-            "bow", "vow", "oath", "incens", "altar", "procession", "march"
+            "initiat", "rite", "ceremonial", "devout",
+            "vow", "oath", "incens", "altar", "procession", "march"
         ]),
 
         Cluster(name: "urban_street", keywords: [
