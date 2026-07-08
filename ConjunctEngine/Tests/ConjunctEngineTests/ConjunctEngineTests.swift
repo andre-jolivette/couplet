@@ -429,6 +429,33 @@ final class ConceptClustersTests: XCTestCase {
         )
     }
 
+    // Decision #118: representativeCluster must be a deterministic tie-break
+    // (weight desc, name asc), never bare Set.first — which is stable within a
+    // process but varies across app launches due to Swift's per-process hash
+    // seed, causing the lightbox description to show a different cluster label
+    // for the same pair from one launch to the next.
+    func testRepresentativeClusterPicksHighestWeightThenAlphabetical() {
+        // grief_sorrow (1.0) beats joy_celebration (0.75) regardless of set order.
+        XCTAssertEqual(
+            ConceptClusters.representativeCluster(in: ["joy_celebration", "grief_sorrow"]),
+            "grief_sorrow"
+        )
+        // Equal weight (both 0.75) breaks alphabetically.
+        XCTAssertEqual(
+            ConceptClusters.representativeCluster(in: ["skilled_performance", "joy_celebration"]),
+            "joy_celebration"
+        )
+        XCTAssertNil(ConceptClusters.representativeCluster(in: []))
+    }
+
+    func testRepresentativeClusterIsStableAcrossRepeatedCalls() {
+        let clusters: Set<String> = ["joy_celebration", "skilled_performance", "urban_street"]
+        let first = ConceptClusters.representativeCluster(in: clusters)
+        for _ in 0..<500 {
+            XCTAssertEqual(ConceptClusters.representativeCluster(in: clusters), first)
+        }
+    }
+
     // Spot-check one cluster from each tier to catch accidental value changes.
     func testTierAssignments() {
         // Tier 1.0 — emotional / high-specificity

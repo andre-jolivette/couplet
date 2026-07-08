@@ -525,6 +525,21 @@ public enum ConceptClusters {
         return matched
     }
 
+    /// Picks a single representative cluster name from a set, deterministically:
+    /// highest weight first, then alphabetical. Never rely on bare `Set.first` for
+    /// display purposes — its iteration order depends on Swift's per-process hash
+    /// seed and is stable within a run but not guaranteed across app launches
+    /// (confirmed: repeated `swift test` invocations against identical input picked
+    /// different elements). See decision #118.
+    public static func representativeCluster(in clusters: Set<String>) -> String? {
+        clusters.sorted { a, b in
+            let wa = weights[a] ?? 0
+            let wb = weights[b] ?? 0
+            if wa != wb { return wa > wb }
+            return a < b
+        }.first
+    }
+
     public static func thematicScore(captionA: String, captionB: String) -> Float {
         let cA = matchedClusters(for: captionA)
         let cB = matchedClusters(for: captionB)
