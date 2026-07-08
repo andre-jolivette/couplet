@@ -61,7 +61,9 @@ public enum ConceptClusters {
         Cluster(name: "joy_celebration", keywords: [
             "smil", "laugh", "celebrat", "joy", "happi", "excit", "cheer",
             "delight", "elat", "triumphant", "festiv", "jubilant", "grin",
-            "beam", "gleam", "exuber", "playful", "danc", "jump", "raise",
+            // "rais" not "raise" — same keyword-reachability fix as bodily_gesture
+            // above (#96 pass 3, 2026-07-07): "raise" never matched stemmed "rais".
+            "beam", "gleam", "exuber", "playful", "danc", "jump", "rais",
             "toast", "applaud", "chant", "sing"
         ]),
 
@@ -224,8 +226,12 @@ public enum ConceptClusters {
 
         Cluster(name: "bodily_gesture", keywords: [
             // hands
+            // "rais" not "raise" (#96 pass 3, 2026-07-07): matchedClusters compares
+            // stemmed caption tokens against these RAW keyword strings — "raised"/
+            // "raising" stem to "rais", so the dictionary-word "raise" never matched.
+            // Verified: 170 corpus hits, all genuinely about raising a hand/arm/sign.
             "hand", "fist", "finger", "grip", "point", "reach",
-            "raise", "open", "spread", "clasp", "wave", "gesture",
+            "rais", "open", "spread", "clasp", "wave", "gesture",
             // arms and body
             "arm", "shoulder", "back", "chest", "lean", "stretch",
             "extend", "fold", "cross", "hunch", "arch",
