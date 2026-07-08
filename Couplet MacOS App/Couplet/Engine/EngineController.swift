@@ -280,19 +280,20 @@ final class EngineController: ObservableObject {
 
     // MARK: - Fetch pairs
 
+    /// Anchor-strip fetch — the lightbox "other pairs for this image" query. The only
+    /// live call site (`ContentView.swift`) always passes `anchorImageID`, so this always
+    /// runs the anchor path: `dbLimit = 500` is the sole cap, with no further per-image
+    /// cap or display trim applied (#86 — 500 gives headroom above the largest observed
+    /// hub-image pair count without hydrating an unbounded list). A `folderID`/`collectionID`-only,
+    /// no-anchor mode used to exist here (dbLimit 2000, cap-15, displayLimit 750, #86) but was
+    /// dead code — nothing ever called this function without `anchorImageID` — and was removed
+    /// during the #110 investigation. See decision #110.
     func fetchPairs(
         folderID: Int64? = nil, collectionID: Int64? = nil, anchorImageID: Int64? = nil
     ) async -> [DisplayPair] {
         guard let qs = queryService else { return [] }
         do {
-            // Fetch a larger pool so the per-image cap has enough to work with.
-            // The cap and re-weighting together can shrink 750 down significantly,
-            // so we fetch 2000 from the DB and trim after capping.
-            // Anchor queries use 500 — the displayLimit trim below is inside
-            // `if anchorImageID == nil`, so the DB limit IS the display cap for
-            // anchor; 200 was too small for hub images (400+ pairs). #86
-            let dbLimit = anchorImageID != nil ? 500 : 2000
-            let displayLimit = anchorImageID != nil ? 200 : 750
+            let dbLimit = 500
             let results: [PairQueryResult] = try await qs.fetchPairs(
                 folderID: folderID, collectionID: collectionID,
                 anchorImageID: anchorImageID, limit: dbLimit
@@ -317,24 +318,6 @@ final class EngineController: ObservableObject {
             // compositeScore in each DisplayPair already reflects current weights and
             // gating, so this sort is always meaningful and drives displayedPairs correctly.
             pairs.sort { $0.compositeScore > $1.compositeScore }
-
-            // Per-image cap: prevent any single image from dominating.
-            if anchorImageID == nil {
-                let perImageCap = 15
-                var imageCounts = [Int: Int]()
-                pairs = pairs.filter { pair in
-                    let countA = imageCounts[pair.imageAID, default: 0]
-                    let countB = imageCounts[pair.imageBID, default: 0]
-                    guard countA < perImageCap && countB < perImageCap else { return false }
-                    imageCounts[pair.imageAID, default: 0] += 1
-                    imageCounts[pair.imageBID, default: 0] += 1
-                    return true
-                }
-                // Trim to display limit after cap
-                if pairs.count > displayLimit {
-                    pairs = Array(pairs.prefix(displayLimit))
-                }
-            }
 
             return pairs
         } catch {
