@@ -58,17 +58,14 @@ public actor QueryService {
 
     // MARK: - Pairs
 
-    /// Fetches one representative pair per image — the top-1 pair for each image regardless
-    /// of whether it sits on the A or B side — deduplicated by DISTINCT. Returns all
-    /// candidates (no SQL LIMIT); pagination is handled in the caller via in-memory slicing.
-    ///
-    /// **Why `all_sides` instead of separate `top_a`/`top_b` CTEs:**
-    /// The old two-CTE design let hub images dominate: image 1471 (837 pairs) appeared as
-    /// imageBID in 44 of the top-150 sorted candidates, causing the Swift cap-2 to reject
-    /// all but 2, leaving only ~44 pairs in the grid. The `all_sides` UNION ALL ranks
-    /// every image's best pair from either side with a single window function, so
-    /// `DISTINCT pairID` on rn=1 yields at most ~1,028 candidates (one per image, many
-    /// shared). Cap-2 then trims hub appearances to ≤2 across the full set.
+    /// Fetches every pair row matching the folder/collection filter, sorted by
+    /// `sortColumn` descending. Returns all candidates (no SQL LIMIT); the caller
+    /// (`EngineController`/`PairHelpers`) runs the greedy cap-2 pass over the full
+    /// sorted set to pick each image's best ≤2 pairs — see `applyCap2Free`/
+    /// `applyPass2Free`. That's a global greedy matching over the whole result
+    /// set, not a per-image top-K selection, so it can't be replicated with a
+    /// `PARTITION BY imageID` window function without changing which pairs win
+    /// (decision #117).
     ///
     /// - Parameters:
     ///   - folderID: If set, restricts to intra-folder pairs (both images in this folder).
@@ -92,10 +89,15 @@ public actor QueryService {
     }
 
     /// Streams pairs in chunks using a GRDB cursor inside a single read transaction.
-    /// Rows arrive as SQLite produces them via the compositeScore index scan, so the
-    /// first chunk is available within milliseconds rather than after the full result
-    /// set is collected. `process` is called synchronously for each chunk; throw
-    /// `CancellationError` to stop early.
+    /// `sortColumn` must match one of the expression indexes created in migration
+    /// `v21_pairSortIndexes` (decision #117) — each `PairSortOrder.dbColumn` case has a
+    /// corresponding index, so SQLite scans in index order ("SCAN p USING INDEX ...")
+    /// and rows arrive as it goes; the first chunk is available within milliseconds
+    /// rather than after the full result set is sorted. A `sortColumn` with no matching
+    /// index falls back to "USE TEMP B-TREE FOR ORDER BY" — full materialize-and-sort
+    /// before row 1 — so any new sort option needs its own index or it silently
+    /// regresses to the pre-#117 full-table-scan behavior. `process` is called
+    /// synchronously for each chunk; throw `CancellationError` to stop early.
     public nonisolated func streamRepresentativePairs(
         folderID: Int64? = nil,
         collectionID: Int64? = nil,
