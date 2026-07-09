@@ -217,11 +217,20 @@ public enum ConceptClusters {
             "small", "tini", "frail", "bent", "gnarled", "sprightly"
         ]),
 
+        // #120 (2026-07-08) — the second-largest polluter in the system (755 firings).
+        // Removed the entire looking/watching vocabulary that belongs to
+        // looking_watching, not waiting: "look" (71% — ubiquitous "looking at/toward"),
+        // "gaze" (37% — the captioner's standard face formula), "observ"/"watch"
+        // (observing/watching ≠ waiting), "listen" (belongs to sound_music). These
+        // duplicated looking_watching and made "waiting" fire on nearly every portrait.
+        // Reachability: the cluster could not match its own name — "anticipat" never
+        // matched "anticipation" (stems to "anticip", 22 captions). Post-cleanup
+        // ≈76 genuinely-waiting firings.
         Cluster(name: "waiting_anticipation", keywords: [
-            "wait", "anticipat", "expect", "watch", "look", "gaze",
-            "observ", "scan", "survey", "monitor", "vigil", "guard",
+            "wait", "anticip", "expect",
+            "scan", "survey", "monitor", "vigil", "guard",
             "patienc", "hopeful", "anxious", "peer", "squint", "search",
-            "horizon", "listen", "alert", "ready", "brac", "tension"
+            "horizon", "alert", "ready", "brac", "tension"
         ]),
 
         // "strip" removed (#96 pass 2, 2026-07-07): stem collision with "striped"
@@ -300,15 +309,18 @@ public enum ConceptClusters {
         // that aren't about the human act of watching). What remains is
         // vocabulary that specifically describes intent, sustained gaze, or
         // deliberate observation.
+        // #120 (2026-07-08): removed "seen" (14 firings — "can be seen in the distance"
+        // passive-visibility filler, not the act of watching) and the dead keyword
+        // "gaz" (real firings all come from "gaze"; the stemmer never produces bare
+        // "gaz" from any corpus word — hygiene). This is the correct home for
+        // gaze/watch/observe (reallocated out of waiting_anticipation above).
         Cluster(name: "looking_watching", keywords: [
             // deliberate gaze / sustained watching
-            // "gaz" added alongside "gaze": the stemmer strips "-ing" from 7-char words
-            // (gazing → gaz) but not 6-char "gazing"-fail-case words, so both forms needed.
-            "watch", "stare", "gaze", "gaz", "peer", "squint",
+            "watch", "stare", "gaze", "peer", "squint",
             "glance", "glimps", "observ", "witness", "behold",
             "survey", "scan", "scrutin",
             // being seen / caught in the act
-            "seen", "noticed", "caught", "regard"
+            "noticed", "caught", "regard"
         ]),
 
         Cluster(name: "bodily_gesture", keywords: [
