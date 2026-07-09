@@ -599,7 +599,6 @@ public enum ConceptClusters {
         "stillness_rest":         0.75,
         "waiting_anticipation":   0.75,
         "movement_energy":        0.75,
-        "bodily_gesture":         0.75,
         "looking_watching":       0.75,
         "confinement_freedom":    0.75,
         "youth_age":              0.75,
@@ -625,6 +624,16 @@ public enum ConceptClusters {
         // "Two dogs" is shared context, not resonance. Demoted from 0.75 so
         // animal pairs must share an emotional cluster to score meaningfully.
         "animal_presence":        0.2,
+        // Tier 0.2 — near-universal bodily description (#120, 2026-07-08)
+        // Demoted from 0.75: bodily_gesture fires on 94% of the corpus ("hand"
+        // alone matches 85%), and judged-pair enrichment of hand-shared pairs is
+        // ~3% ≈ the 2.4% base rate. Two people both gesturing is expected
+        // coincidence, not resonance — exactly the #47 animal_presence case.
+        // Keyword edits can't fix ubiquity; the tier can. It keeps its
+        // Dice-denominator role but no longer clears the meaningful-tier gate,
+        // so a bodily_gesture pair must also share a genuine emotional cluster to
+        // score above the ambient floor. Not in axisPairs, so no bonus interaction.
+        "bodily_gesture":         0.2,
     ]
 
     // MARK: - Complementary axis pairs

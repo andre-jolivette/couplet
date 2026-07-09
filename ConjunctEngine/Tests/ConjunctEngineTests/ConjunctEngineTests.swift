@@ -493,13 +493,14 @@ final class ConceptClustersTests: XCTestCase {
         XCTAssertEqual(ConceptClusters.weights["tenderness_care"],        1.0)
         // Tier 0.75 — meaningful but moderate-frequency
         XCTAssertEqual(ConceptClusters.weights["skilled_performance"],    0.75)
-        XCTAssertEqual(ConceptClusters.weights["bodily_gesture"],         0.75)
         XCTAssertEqual(ConceptClusters.weights["sound_music"],            0.75)
         XCTAssertEqual(ConceptClusters.weights["joy_celebration"],        0.75)
         // Tier 0.2 — ambient setting / context (demoted from 0.5; see decision #47)
         XCTAssertEqual(ConceptClusters.weights["urban_street"],           0.2)
         XCTAssertEqual(ConceptClusters.weights["nature_landscape"],       0.2)
         XCTAssertEqual(ConceptClusters.weights["community_gathering"],    0.2)
+        // bodily_gesture demoted to ambient tier (0.75 → 0.2, #120, 2026-07-08)
+        XCTAssertEqual(ConceptClusters.weights["bodily_gesture"],         0.2)
     }
 
     // Verify that the test captions fire exactly the clusters we expect
