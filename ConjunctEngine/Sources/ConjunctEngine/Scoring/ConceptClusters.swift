@@ -127,11 +127,16 @@ public enum ConceptClusters {
             "drag", "hoist", "load", "burden", "task", "grind"
         ]),
 
+        // #120 (2026-07-08): removed "wheel" (steering wheels, Ferris wheels — not
+        // motion). Reachability adds: "dynamic" (29 captions of "dynamic pose/movement"
+        // — "dynam" only caught the rare bare stem), "runn" ("running" stems to "runn",
+        // 11 captions — bare "run" matched 0), "runs". "blur" left as-is (do NOT add
+        // "blurr": 49 captions of depth-of-field "blurred background", not motion).
         Cluster(name: "movement_energy", keywords: [
-            "run", "chase", "fast", "motion", "blur", "energi", "dynam",
+            "run", "runn", "runs", "chase", "fast", "motion", "blur", "energi", "dynam", "dynamic",
             "rush", "sprint", "leap", "jump", "bound", "gallop", "charg",
             "hurri", "speed", "swift", "rapid", "dash", "bolt", "lunge",
-            "pivot", "spin", "wheel", "burst", "flash"
+            "pivot", "spin", "burst", "flash"
         ]),
 
         // #120 (2026-07-08) collision removals: "rest" (47% of 590 firings — ≈90%
@@ -210,11 +215,16 @@ public enum ConceptClusters {
             "march", "uniform", "weapon", "badge", "insignia"
         ]),
 
+        // #120 (2026-07-08) collision removals: "small" (63% of 415 firings — "small
+        // object/dog/bag" size adjective, nothing to do with youth) and "bent" ("arm/
+        // legs bent" posture). Reachability: "toddler" stems to "toddl" via the -er
+        // strip, so the keyword could never match its own word → "toddl". Post-cleanup
+        // ≈174 firings (young/teen/child/aged/elder).
         Cluster(name: "youth_age", keywords: [
             "child", "young", "old", "elder", "age", "youth", "teen",
-            "infant", "toddler", "wrinkl", "generat", "grown",
+            "infant", "toddl", "wrinkl", "generat", "grown",
             "ancient", "aged", "matur", "veteran", "elderli", "juvenil",
-            "small", "tini", "frail", "bent", "gnarled", "sprightly"
+            "tini", "frail", "gnarled", "sprightly"
         ]),
 
         // #120 (2026-07-08) — the second-largest polluter in the system (755 firings).
