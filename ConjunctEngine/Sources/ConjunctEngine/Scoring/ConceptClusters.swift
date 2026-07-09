@@ -22,87 +22,169 @@ public enum ConceptClusters {
 
         // ── Existing clusters (expanded) ─────────────────────────────────
 
+        // #120 (2026-07-08) collision removals: "demonstr" (28% of 348 firings —
+        // political "demonstration", not demonstrating skill), "play" (55/69 the mood
+        // adjective "playful"; instrument-playing captions still fire via
+        // guitar/drum/perform/musician), "present" ("Two men are present"). The rich
+        // performance vocabulary (rodeo/lasso/rope/ride/danc/perform) is untouched.
         Cluster(name: "skilled_performance", keywords: [
-            "perform", "performanc", "play", "rope", "race", "compet", "ride",
+            "perform", "performanc", "rope", "race", "compet", "ride",
             "throw", "catch", "swing", "danc", "juggl", "acrobat", "athlet",
             "skill", "techniqu", "craft", "musician", "artist", "rodeo", "lasso",
-            "concert", "recit", "rehears", "execut", "demonstr", "exhibit",
-            "stag", "act", "present"
+            "concert", "recit", "rehears", "execut", "exhibit",
+            "stag", "act"
         ]),
 
+        // #120 (2026-07-08) collision removals: "hold" (85% of the cluster's 662 corpus
+        // firings; 45-sample review ≈90% instrumental — phones/signs/cups/cigarettes;
+        // only 62/565 hold-captions contain any tender register word; judged-pair
+        // enrichment 4% = base; explicit hand-holding is carried by the role pipeline,
+        // #116/G14), "lean" (15% — physical leaning on railings/walls), "shield"
+        // (13/15 "shielding eyes from sun"; the sensory sense lives in
+        // sensory_overwhelm). Reachability fixes: "gentl" matched NOTHING — "gently"
+        // stems to "gent" (36 captions of genuinely tender language were invisible),
+        // "gentle" to itself; "affection" stems to "affec"; bare "embrace"/"shelter"
+        // stem to "embrace"/"shelt". "touch"/"child"/"support" kept (mixed but below
+        // the ~80% artifact bar; see #120 verdict table).
         Cluster(name: "tenderness_care", keywords: [
-            "hold", "embrac", "comfort", "gentl", "care", "nurtur", "protect",
-            "tend", "cradl", "hug", "kiss", "touch", "sooth", "love", "affection",
+            "embrac", "embrace", "comfort", "gent", "gentle", "care", "nurtur", "protect",
+            "tend", "cradl", "hug", "kiss", "touch", "sooth", "love",
+            "affec", "affectionate",
             "parent", "child", "mother", "father", "tender", "stroking", "caress",
-            "support", "lean", "cling", "shelter", "shield", "guard", "devot"
+            "support", "cling", "shelt", "guard", "devot"
         ]),
 
+        // #120 (2026-07-08) collision removals: "quiet" (57% of 130 firings —
+        // boilerplate, often "quiet interaction between two people" = anti-isolation;
+        // quiet stays in stillness_rest where the register fits), "still" (32% —
+        // "standing still" ≠ solitude; stays in stillness_rest), "apart" (7/7 "legs
+        // apart"). Reachability: the cluster could not match its own name — "solitud"
+        // never matched "solitude" (10 captions), "solitar" never matched "solitary"
+        // (5), "empt" never matched "empty" (6). "contemplat"/"introspect" left
+        // as-is (near-dead) — deliberately NOT fixed to "contempl"/"introspective":
+        // those are captioner mood-summary boilerplate (79/16 captions) and would
+        // recreate the calm/relax problem.
         Cluster(name: "isolation_solitude", keywords: [
-            "alone", "solitar", "empt", "quiet", "still", "silent", "lone",
-            "isol", "distant", "apart", "withdrawn", "contemplat", "reflec",
-            "ponder", "introspect", "solitud", "separatd", "outsid", "margin",
+            "alone", "solitary", "empty", "silent", "lone",
+            "isol", "distant", "withdrawn", "contemplat", "reflec",
+            "ponder", "introspect", "solitude", "separatd", "outsid", "margin",
             "exclud", "ignor", "invisible", "unnoticed", "detach"
         ]),
 
+        // #120 (2026-07-08, post-re-index amendment): removed "public" — 122 of the
+        // cluster's 504 firings (24%), 50 as sole trigger: "public space", "public
+        // transportation stop", "public expression" have nothing to do with a
+        // gathering. Surfaced by Andre's re-index review (a lone couple at a bus stop
+        // tagged community_gathering). This is the only ambient-tier keyword edit in
+        // #120 — the rest of the ambient collisions stay deferred (they're contained
+        // below the meaningful-tier gate), but "public" produced a visibly wrong tag.
         Cluster(name: "community_gathering", keywords: [
             "crowd", "group", "togeth", "famil", "friend", "communiti",
             "celebrat", "gather", "assembl", "audienc", "spectator",
             "festival", "parad", "event", "congregat", "march", "rally",
-            "meet", "collect", "cluster", "mass", "throng", "public"
+            "meet", "collect", "cluster", "mass", "throng"
         ]),
 
+        // #120 (2026-07-08) collision removals: "protest" (67% of 167 firings —
+        // scene-classifier boilerplate on every protest photo = same-subject
+        // coincidence, not tension resonance; the 30% enrichment reflects protest-pair
+        // co-occurrence, not a relational signal), "pull" ("hair pulled back"), "push"
+        // (strollers/wagons). "conflict"/"tense" kept despite negation-context noise
+        // ("no signs of conflict") — token matching can't see the negation, but the
+        // counts are small. Post-cleanup ≈49 genuine firings.
         Cluster(name: "tension_conflict", keywords: [
-            "tense", "confront", "fight", "resist", "push", "pull", "struggl",
-            "conflict", "agress", "defiant", "protest", "argument", "clash",
+            "tense", "confront", "fight", "resist", "struggl",
+            "conflict", "agress", "defiant", "argument", "clash",
             "compet", "rival", "oppos", "stand-off", "demand", "challeng",
             "anger", "fist", "standoff", "barrier", "block", "defi"
         ]),
 
+        // #120 (2026-07-08) reachability adds (no removals — this cluster's keywords
+        // are clean): "celebr"/"celebratory" ("celebration" stems to "celebr" via the
+        // -ation strip — 45 captions the cluster was blind to), "excite" ("excitement"
+        // → "excite" via -ment), "smile" (bare "smile", 13 captions — "smil" only
+        // caught "smiling"/"smiles"), "dance" (bare "dance"/"dancer"). "festive" was
+        // deliberately NOT added (34 captions, mostly "festive atmosphere" mood
+        // boilerplate — the calm/relax lesson).
         Cluster(name: "joy_celebration", keywords: [
-            "smil", "laugh", "celebrat", "joy", "happi", "excit", "cheer",
+            "smil", "smile", "laugh", "celebrat", "celebr", "celebratory",
+            "joy", "happi", "excit", "excite", "cheer",
             "delight", "elat", "triumphant", "festiv", "jubilant", "grin",
             // "rais" not "raise" — same keyword-reachability fix as bodily_gesture
             // above (#96 pass 3, 2026-07-07): "raise" never matched stemmed "rais".
-            "beam", "gleam", "exuber", "playful", "danc", "jump", "rais",
+            "beam", "gleam", "exuber", "playful", "danc", "dance", "jump", "rais",
             "toast", "applaud", "chant", "sing"
         ]),
 
+        // #120 (2026-07-08): the cluster had only 21 corpus firings and 16 were
+        // collisions — "bow" (48%: hair bows + violin bows, never bowing in grief)
+        // and "numb" (29%: matches "number" via the -er strip — bus route 77, jersey
+        // 16). "cri" matched nothing ("crying"/"cries" survive stemming intact due to
+        // the length guard) → "crying"; "somber" was absent (stems to itself, 4
+        // captions). Post-cleanup ≈9 genuine firings — rare-but-correct is the
+        // tier-1.0 design intent.
         Cluster(name: "grief_sorrow", keywords: [
-            "cri", "mourn", "grief", "sorrow", "pain", "sad", "weep",
+            "crying", "mourn", "grief", "sorrow", "pain", "sad", "weep",
             "lament", "despair", "anguish", "desolat", "heartbreak", "loss",
             "tear", "mournful", "somber", "distress", "agoni", "suffer",
-            "bow", "slump", "hollow", "numb", "bereft", "griev"
+            "slump", "hollow", "bereft", "griev"
         ]),
 
+        // #120 (2026-07-08) collision removals: "build" (53% of 273 firings — background
+        // "building" architecture, the single largest collision found in the audit),
+        // "lift" ("foot lifted" mid-stride), "sweat" (matches ONLY "sweater" via the
+        // -er strip), "pull" ("hair pulled back"). "grip"/"task"/"work"/"carri" kept
+        // — genuine effort. Post-cleanup ≈96 firings.
         Cluster(name: "labor_effort", keywords: [
-            "work", "build", "lift", "carri", "toil", "effort", "strain",
-            "labor", "sweat", "haul", "construct", "repair", "fix", "craft",
+            "work", "carri", "toil", "effort", "strain",
+            "labor", "haul", "construct", "repair", "fix", "craft",
             "mend", "forc", "exert", "industri", "grip", "heav", "push",
-            "drag", "pull", "hoist", "load", "burden", "task", "grind"
+            "drag", "hoist", "load", "burden", "task", "grind"
         ]),
 
+        // #120 (2026-07-08): removed "wheel" (steering wheels, Ferris wheels — not
+        // motion). Reachability adds: "dynamic" (29 captions of "dynamic pose/movement"
+        // — "dynam" only caught the rare bare stem), "runn" ("running" stems to "runn",
+        // 11 captions — bare "run" matched 0), "runs". "blur" left as-is (do NOT add
+        // "blurr": 49 captions of depth-of-field "blurred background", not motion).
         Cluster(name: "movement_energy", keywords: [
-            "run", "chase", "fast", "motion", "blur", "energi", "dynam",
+            "run", "runn", "runs", "chase", "fast", "motion", "blur", "energi", "dynam", "dynamic",
             "rush", "sprint", "leap", "jump", "bound", "gallop", "charg",
             "hurri", "speed", "swift", "rapid", "dash", "bolt", "lunge",
-            "pivot", "spin", "wheel", "burst", "flash"
+            "pivot", "spin", "burst", "flash"
         ]),
 
+        // #120 (2026-07-08) collision removals: "rest" (47% of 590 firings — ≈90%
+        // "hand rests on hip/lap" posture idiom, enrichment 4% = base), "relax" (37% —
+        // captioner boilerplate "mood is casual and relaxed", enrichment 0%), "calm"
+        // (28% — "calm and serene atmosphere" boilerplate), "sit" (near-inert: only
+        // bare "sit" matched — "sits"/"sitting" stem to "sits"/"sitt"; ENABLING it
+        // would add 226 scene-description firings, so removed instead), "station"
+        // ("gas station"). Reachability: bare "pause" stems to itself (9 captions);
+        // "stationary" added for the genuine still sense. "peac" left as-is (dead:
+        // "peaceful" stems to "peace" — not added, it's "peaceful protest" + mood
+        // boilerplate). Do NOT change "settl" to "sett": "setting" stems to "sett"
+        // (490 captions!). "lean"/"quiet"/"still" kept — genuine rest postures/register.
         Cluster(name: "stillness_rest", keywords: [
-            "sit", "rest", "paus", "calm", "still", "wait", "sleep",
-            "quiet", "serene", "peac", "relax", "linger", "dwell", "reclin",
+            "paus", "pause", "still", "wait", "sleep",
+            "quiet", "serene", "peac", "linger", "dwell", "reclin",
             "settl", "repos", "lean", "slouch", "crouch", "kneel", "perch",
-            "station", "remain", "idle", "languid"
+            "stationary", "remain", "idle", "languid"
         ]),
 
         // "observ" removed (#96 pass 2, 2026-07-07): stem collision with "observing"
         // (photographic watching), not "observance" — 77% of this cluster's judged-pool
         // firings were this collision. Watching is already covered by looking_watching.
+        // #120 (2026-07-08) collision removals: "kneel" (36% of the remaining 39
+        // firings — mundane kneeling: holding a phone, tying shoelaces, playful;
+        // stays in bodily_gesture/stillness_rest where it's genuine) and "bow"
+        // (26% — hair/violin bows, same collision as grief_sorrow). Post-cleanup
+        // ≈15 genuine firings (ceremonial/solemn/march/procession).
         Cluster(name: "ritual_ceremony", keywords: [
             "ritual", "ceremoni", "traditi", "sacr", "prayer", "worship",
             "bless", "anoint", "consecrat", "solemn", "formal", "inaugur",
-            "initiat", "rite", "ceremonial", "devout", "kneel",
-            "bow", "vow", "oath", "incens", "altar", "procession", "march"
+            "initiat", "rite", "ceremonial", "devout",
+            "vow", "oath", "incens", "altar", "procession", "march"
         ]),
 
         Cluster(name: "urban_street", keywords: [
@@ -123,42 +205,72 @@ public enum ConceptClusters {
             "meadow", "bloom", "wildernes", "foliag", "canopi", "grove"
         ]),
 
+        // #120 (2026-07-08) collision removals: "open" (45% of 188 firings — "mouth
+        // open", car doors), "strip" (40% — striped clothing; the SAME stem collision
+        // #96 removed from transformation_change but missed here). "vulnerabl" could
+        // never match bare "vulnerable" (stems to itself) → "vulnerable" (inert on
+        // this corpus but correct, #96 obscure-class). "bare"/"reveal" kept — bare
+        // feet/back and revealing-outfit senses are genuine exposure here.
         Cluster(name: "vulnerability_exposure", keywords: [
-            "vulnerabl", "expos", "bare", "raw", "open", "unguard",
+            "vulnerable", "expos", "bare", "raw", "unguard",
             "unprotect", "fragil", "delic", "susceptibl", "naked",
-            "wound", "broken", "weak", "strip", "reveal", "unshield",
+            "wound", "broken", "weak", "reveal", "unshield",
             "defenceless", "tender", "shaking", "trembl"
         ]),
 
+        // #120 (2026-07-08) collision removals: "control" (20% of 60 firings —
+        // "balance and control over the horse/bike", "gun control" signs, not
+        // dominance), "larg" (matches ONLY comparative "larger": "part of a larger
+        // crowd"), "tower" (literal water/city towers). "loom"/"uniform"/"badge"
+        // kept — genuine authority register. Post-cleanup ≈36 firings.
         Cluster(name: "power_dominance", keywords: [
-            "power", "dominat", "control", "command", "authoriti", "strength",
-            "forc", "impos", "assert", "overwhelm", "loom", "tower",
-            "presid", "reign", "sovereign", "imposing", "larg", "vast",
+            "power", "dominat", "command", "authoriti", "strength",
+            "forc", "impos", "assert", "overwhelm", "loom",
+            "presid", "reign", "sovereign", "imposing", "vast",
             "march", "uniform", "weapon", "badge", "insignia"
         ]),
 
+        // #120 (2026-07-08) collision removals: "small" (63% of 415 firings — "small
+        // object/dog/bag" size adjective, nothing to do with youth) and "bent" ("arm/
+        // legs bent" posture). Reachability: "toddler" stems to "toddl" via the -er
+        // strip, so the keyword could never match its own word → "toddl". Post-cleanup
+        // ≈174 firings (young/teen/child/aged/elder).
         Cluster(name: "youth_age", keywords: [
             "child", "young", "old", "elder", "age", "youth", "teen",
-            "infant", "toddler", "wrinkl", "generat", "grown",
+            "infant", "toddl", "wrinkl", "generat", "grown",
             "ancient", "aged", "matur", "veteran", "elderli", "juvenil",
-            "small", "tini", "frail", "bent", "gnarled", "sprightly"
+            "tini", "frail", "gnarled", "sprightly"
         ]),
 
+        // #120 (2026-07-08) — the second-largest polluter in the system (755 firings).
+        // Removed the entire looking/watching vocabulary that belongs to
+        // looking_watching, not waiting: "look" (71% — ubiquitous "looking at/toward"),
+        // "gaze" (37% — the captioner's standard face formula), "observ"/"watch"
+        // (observing/watching ≠ waiting), "listen" (belongs to sound_music). These
+        // duplicated looking_watching and made "waiting" fire on nearly every portrait.
+        // Reachability: the cluster could not match its own name — "anticipat" never
+        // matched "anticipation" (stems to "anticip", 22 captions). Post-cleanup
+        // ≈76 genuinely-waiting firings.
         Cluster(name: "waiting_anticipation", keywords: [
-            "wait", "anticipat", "expect", "watch", "look", "gaze",
-            "observ", "scan", "survey", "monitor", "vigil", "guard",
+            "wait", "anticip", "expect",
+            "scan", "survey", "monitor", "vigil", "guard",
             "patienc", "hopeful", "anxious", "peer", "squint", "search",
-            "horizon", "listen", "alert", "ready", "brac", "tension"
+            "horizon", "alert", "ready", "brac", "tension"
         ]),
 
         // "strip" removed (#96 pass 2, 2026-07-07): stem collision with "striped"
         // clothing description, not "strip away" — 78% of this cluster's judged-pool
         // firings were this collision. Change sense retained via shed/reveal/transform.
+        // #120 (2026-07-08) collision removals: "reveal" (52% of the remaining 21
+        // firings — "background reveals", "revealing outfit"; the exposure sense lives
+        // in vulnerability_exposure), "end" ("END ZONE", "rear end"), "born" (sock/sign
+        // text), "pass" ("watching her pass"). Reachability: bare "change" stems to
+        // itself (4 captions) — "chang" only caught "changing". Post-cleanup ≈6 firings.
         Cluster(name: "transformation_change", keywords: [
-            "transform", "chang", "becom", "evolv", "shift", "transit",
+            "transform", "chang", "change", "becom", "evolv", "shift", "transit",
             "convert", "alter", "adapt", "emerg", "begin",
-            "end", "dissolv", "collaps", "shed", "reveal",
-            "renew", "born", "die", "pass", "grown", "ripen"
+            "dissolv", "collaps", "shed",
+            "renew", "die", "grown", "ripen"
         ]),
 
         // ── New clusters ──────────────────────────────────────────────────
@@ -179,28 +291,43 @@ public enum ConceptClusters {
             // instruments
             "violin", "guitar", "trumpet", "drum", "piano", "bass",
             "fiddle", "banjo", "saxophon", "tuba", "clarinet", "flute",
-            "instrument", "string", "bow",
+            "instrument",
             // active music-making
             "strum", "pluck", "beat", "strik", "blow",
             "musician", "band", "orchestra", "mariachi",
             // musical phenomenon
             "sound", "music", "note", "melody", "song", "tune",
             "rhythm", "lyric", "chord", "hum", "resonat", "audibl",
-            "ring", "echo",
+            "echo",
             // sound reception / listening
-            "ear", "hear", "listen", "deaf", "mute",
+            // #120 (2026-07-08): removed "ear" (13 firings, 11 "phone to his ear" — not
+            // sound-as-force; the cupping-ears sensory case lives in sensory_overwhelm
+            // via "cupp"/"noise"), "ring" (finger rings/jewelry), "bow" (hair bows;
+            // violin-bow captions still fire via "violin"/"guitar"), "string" (string
+            // lights; guitar strings fire via "guitar"). Added "heard" (genuine
+            // sound-reception language). Post-cleanup ≈65 firings.
+            "hear", "heard", "listen", "deaf", "mute",
             "concert", "recit", "gig", "audienc", "speaker", "amp"
         ]),
 
+        // #120 (2026-07-08) collision removals: "cover" (46 firings — "ground covered
+        // with dirt", "graffiti-covered walls"), "cup" (drinking cups), "grip"
+        // (reins/handlebars motor action), "ear" (11/13 "phone to his ear"; note bare
+        // "ears" also stemmed to "ear"), "nois" (dead — "noise" stems to itself).
+        // Reachability/precision adds: "cupp" (catches "cupping her ears" — both G5
+        // ears-women 572/712 and cupped hands — with zero drinking-cup hits), "noise",
+        // "intense" (was unreachable; "intensity"→intens was already covered).
+        // The ears-women stay in-cluster via cupp/noise/loud even without "ear".
+        // "clos" ("eyes closed") kept — genuinely sensory.
         Cluster(name: "sensory_overwhelm", keywords: [
             // physical gestures of blocking/reacting
-            "ear", "press", "cover", "cup", "block", "plug",
+            "press", "cupp", "block", "plug",
             "shield", "brace", "wince", "flinch", "recoil", "cringe",
-            "squint", "shut", "clos", "grip", "clutch", "grasp",
+            "squint", "shut", "clos", "clutch", "grasp",
             // states of overwhelm
             "overwhelm", "drown", "flood", "barrag", "assail",
-            "nois", "loud", "blaring", "pierc", "sharp",
-            "sensori", "stimul", "intens", "excess", "too much",
+            "noise", "loud", "blaring", "pierc", "sharp",
+            "sensori", "stimul", "intens", "intense", "excess", "too much",
             // facial/bodily distress
             "distress", "strain", "grimac", "tighten", "taut",
             "knit", "furrow", "contort", "tense", "rigid"
@@ -213,15 +340,18 @@ public enum ConceptClusters {
         // that aren't about the human act of watching). What remains is
         // vocabulary that specifically describes intent, sustained gaze, or
         // deliberate observation.
+        // #120 (2026-07-08): removed "seen" (14 firings — "can be seen in the distance"
+        // passive-visibility filler, not the act of watching) and the dead keyword
+        // "gaz" (real firings all come from "gaze"; the stemmer never produces bare
+        // "gaz" from any corpus word — hygiene). This is the correct home for
+        // gaze/watch/observe (reallocated out of waiting_anticipation above).
         Cluster(name: "looking_watching", keywords: [
             // deliberate gaze / sustained watching
-            // "gaz" added alongside "gaze": the stemmer strips "-ing" from 7-char words
-            // (gazing → gaz) but not 6-char "gazing"-fail-case words, so both forms needed.
-            "watch", "stare", "gaze", "gaz", "peer", "squint",
+            "watch", "stare", "gaze", "peer", "squint",
             "glance", "glimps", "observ", "witness", "behold",
             "survey", "scan", "scrutin",
             // being seen / caught in the act
-            "seen", "noticed", "caught", "regard"
+            "noticed", "caught", "regard"
         ]),
 
         Cluster(name: "bodily_gesture", keywords: [
@@ -233,28 +363,49 @@ public enum ConceptClusters {
             "hand", "fist", "finger", "grip", "point", "reach",
             "rais", "open", "spread", "clasp", "wave", "gesture",
             // arms and body
+            // #120 (2026-07-08): removed "fold" (14/15 "folding chairs") and "bow"
+            // (hair bows — the gesture sense of bowing is unreached; same collision as
+            // grief_sorrow/ritual_ceremony). The cluster's ubiquity (94% of corpus via
+            // "hand" alone) is addressed by the Phase-4 tier demotion, not keyword edits.
             "arm", "shoulder", "back", "chest", "lean", "stretch",
-            "extend", "fold", "cross", "hunch", "arch",
+            "extend", "cross", "hunch", "arch",
             // head and face
-            "bow", "tilt", "nod", "shake", "turn", "lift",
+            "tilt", "nod", "shake", "turn", "lift",
             // whole body
             "kneel", "crouch", "sprawl", "press", "push", "pull"
         ]),
 
+        // #120 (2026-07-08) collision removals: "sign" (65% of the cluster's 373 corpus
+        // firings — literal bus-stop/storefront/street signs, not religious/political
+        // signage), "cross" (23% — "arms crossed"/"crossing the street", never a
+        // religious cross), "banner" (sponsor/rodeo banners). "flag" KEPT deliberately:
+        // 18% judged-pair enrichment vs 2.4% base — genuinely political in a
+        // protest-heavy library. Reachability fixes: "passionat" matched nothing
+        // (nothing stems to it) → "passion"/"passionate"; "holi" never matched bare
+        // "holy" (stems to itself) → "holy".
         Cluster(name: "devotion_belief", keywords: [
             "faith", "believ", "devout", "pious", "spirit", "soul",
-            "sacred", "holi", "divin", "pray", "worship", "cross",
+            "sacred", "holy", "divin", "pray", "worship",
             "church", "temple", "mosque", "shrine", "altar",
-            "sign", "symbol", "icon", "flag", "banner", "emblem",
-            "pledge", "vow", "commit", "convict", "passionat", "fervent"
+            "symbol", "icon", "flag", "emblem",
+            "pledge", "vow", "commit", "convict", "passion", "passionate", "fervent"
         ]),
 
+        // #120 (2026-07-08) — worst collision density in the system: 12 keywords removed.
+        // "behind" (63% of 550 firings — bare spatial preposition, enrichment 1% < base),
+        // "wall" (18% — background scenery), "open" (16% — "mouth open"), "wide"
+        // ("wide-brimmed hat"), "fence" (rodeo-arena/background fences; cf #114's
+        // incidental-fence finding), "door"/"free"/"through"/"beyond"/"bar"/"break"
+        // (scenery, "her hand is free", "taking a break", nightclub bars).
+        // Reachability: bare "barrier" stems to "barri" via the -er strip (14 captions —
+        // glass/concrete barriers, the cluster's genuine core); "freedom" was unreachable
+        // via the removed "free". Cluster becomes rare-but-correct (~41 firings).
         Cluster(name: "confinement_freedom", keywords: [
-            "cage", "fence", "wall", "bar", "lock", "bound", "trap",
-            "confin", "restrict", "limit", "enclos", "behind",
-            "free", "open", "escape", "break", "through", "beyond",
-            "vast", "wide", "expand", "liberat", "releas", "flee",
-            "border", "threshold", "door", "gate", "barrier"
+            "cage", "lock", "bound", "trap",
+            "confin", "restrict", "limit", "enclos",
+            "freedom", "escape",
+            "vast", "expand", "liberat", "releas", "flee",
+            "border", "threshold", "gate", "barri"
         ]),
 
         // ── Photographer-influence clusters (#15) ─────────────────────────
@@ -272,13 +423,16 @@ public enum ConceptClusters {
         Cluster(
             name: "humor_absurdity",
             // Union of both groups — kept so any keyword-browsing code sees the full set.
+            // #120 (2026-07-08): added "humorou" to G1 — "humorous"/"humorously" stem
+            // to "humorou", so the keyword "humor" (which only matches bare "humor")
+            // was blind to the far more common adjective form (14 captions).
             keywords: [
-                "absurd", "humor", "irony", "ironic", "comic", "whimsic", "juxtaposi",
+                "absurd", "humor", "humorou", "irony", "ironic", "comic", "whimsic", "juxtaposi",
                 "laugh", "amuse", "delight", "play", "cheer", "glee"
             ],
             requiredGroups: [
                 // G1 — comic/absurd tone is present
-                ["absurd", "humor", "irony", "ironic", "comic", "whimsic", "juxtaposi"],
+                ["absurd", "humor", "humorou", "irony", "ironic", "comic", "whimsic", "juxtaposi"],
                 // G2 — visible reaction or tonal resolution (amused, laughing, playful, etc.)
                 ["laugh", "amuse", "delight", "play", "cheer", "glee"]
             ]
@@ -452,7 +606,6 @@ public enum ConceptClusters {
         "stillness_rest":         0.75,
         "waiting_anticipation":   0.75,
         "movement_energy":        0.75,
-        "bodily_gesture":         0.75,
         "looking_watching":       0.75,
         "confinement_freedom":    0.75,
         "youth_age":              0.75,
@@ -478,6 +631,16 @@ public enum ConceptClusters {
         // "Two dogs" is shared context, not resonance. Demoted from 0.75 so
         // animal pairs must share an emotional cluster to score meaningfully.
         "animal_presence":        0.2,
+        // Tier 0.2 — near-universal bodily description (#120, 2026-07-08)
+        // Demoted from 0.75: bodily_gesture fires on 94% of the corpus ("hand"
+        // alone matches 85%), and judged-pair enrichment of hand-shared pairs is
+        // ~3% ≈ the 2.4% base rate. Two people both gesturing is expected
+        // coincidence, not resonance — exactly the #47 animal_presence case.
+        // Keyword edits can't fix ubiquity; the tier can. It keeps its
+        // Dice-denominator role but no longer clears the meaningful-tier gate,
+        // so a bodily_gesture pair must also share a genuine emotional cluster to
+        // score above the ambient floor. Not in axisPairs, so no bonus interaction.
+        "bodily_gesture":         0.2,
     ]
 
     // MARK: - Complementary axis pairs

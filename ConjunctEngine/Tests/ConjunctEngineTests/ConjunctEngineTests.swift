@@ -276,6 +276,33 @@ final class PairScorerTests: XCTestCase {
         XCTAssertEqual(score, 0)
     }
 
+    // Decision #120 (deferred #48/#118 sibling): the stored-at-index-time rationale
+    // must pick its representative shared cluster deterministically via
+    // ConceptClusters.representativeCluster, never bare Set.first — which is stable
+    // within a process but varies across launches (per-process hash seed), making
+    // the DB-stored rationale disagree with the lightbox's live recompute.
+    func testCaptionRationalePicksDeterministicRepresentativeCluster() {
+        // Both captions fire {community_gathering (0.2), grief_sorrow (1.0)} —
+        // the representative must be the highest-weight cluster, grief_sorrow.
+        let caption = "the crowd stood in grief"
+        let rationale = PairScorer.captionRationale(
+            caption, caption,
+            aesthetic: 0.5, submode: "harmony", geometric: 0.5, thematic: 0.5)
+        XCTAssertEqual(rationale, "Thematic resonance — both images share a sense of grief sorrow.")
+
+        // And it must match representativeCluster's pick exactly, repeatedly.
+        let shared = ConceptClusters.matchedClusters(for: caption)
+        let expected = ConceptClusters.representativeCluster(in: shared)!
+            .replacingOccurrences(of: "_", with: " ")
+        for _ in 0..<100 {
+            XCTAssertTrue(
+                PairScorer.captionRationale(
+                    caption, caption,
+                    aesthetic: 0.5, submode: "harmony", geometric: 0.5, thematic: 0.5
+                ).contains(expected))
+        }
+    }
+
     private func makeFeatureVector(imageID: Int64, embedding: [Float]? = nil) -> FeatureVector {
         let raw: [Float]
         if let e = embedding {
@@ -466,13 +493,14 @@ final class ConceptClustersTests: XCTestCase {
         XCTAssertEqual(ConceptClusters.weights["tenderness_care"],        1.0)
         // Tier 0.75 — meaningful but moderate-frequency
         XCTAssertEqual(ConceptClusters.weights["skilled_performance"],    0.75)
-        XCTAssertEqual(ConceptClusters.weights["bodily_gesture"],         0.75)
         XCTAssertEqual(ConceptClusters.weights["sound_music"],            0.75)
         XCTAssertEqual(ConceptClusters.weights["joy_celebration"],        0.75)
         // Tier 0.2 — ambient setting / context (demoted from 0.5; see decision #47)
         XCTAssertEqual(ConceptClusters.weights["urban_street"],           0.2)
         XCTAssertEqual(ConceptClusters.weights["nature_landscape"],       0.2)
         XCTAssertEqual(ConceptClusters.weights["community_gathering"],    0.2)
+        // bodily_gesture demoted to ambient tier (0.75 → 0.2, #120, 2026-07-08)
+        XCTAssertEqual(ConceptClusters.weights["bodily_gesture"],         0.2)
     }
 
     // Verify that the test captions fire exactly the clusters we expect
