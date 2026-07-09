@@ -217,11 +217,16 @@ public enum ConceptClusters {
         // "strip" removed (#96 pass 2, 2026-07-07): stem collision with "striped"
         // clothing description, not "strip away" — 78% of this cluster's judged-pool
         // firings were this collision. Change sense retained via shed/reveal/transform.
+        // #120 (2026-07-08) collision removals: "reveal" (52% of the remaining 21
+        // firings — "background reveals", "revealing outfit"; the exposure sense lives
+        // in vulnerability_exposure), "end" ("END ZONE", "rear end"), "born" (sock/sign
+        // text), "pass" ("watching her pass"). Reachability: bare "change" stems to
+        // itself (4 captions) — "chang" only caught "changing". Post-cleanup ≈6 firings.
         Cluster(name: "transformation_change", keywords: [
-            "transform", "chang", "becom", "evolv", "shift", "transit",
+            "transform", "chang", "change", "becom", "evolv", "shift", "transit",
             "convert", "alter", "adapt", "emerg", "begin",
-            "end", "dissolv", "collaps", "shed", "reveal",
-            "renew", "born", "die", "pass", "grown", "ripen"
+            "dissolv", "collaps", "shed",
+            "renew", "die", "grown", "ripen"
         ]),
 
         // ── New clusters ──────────────────────────────────────────────────
@@ -255,15 +260,24 @@ public enum ConceptClusters {
             "concert", "recit", "gig", "audienc", "speaker", "amp"
         ]),
 
+        // #120 (2026-07-08) collision removals: "cover" (46 firings — "ground covered
+        // with dirt", "graffiti-covered walls"), "cup" (drinking cups), "grip"
+        // (reins/handlebars motor action), "ear" (11/13 "phone to his ear"; note bare
+        // "ears" also stemmed to "ear"), "nois" (dead — "noise" stems to itself).
+        // Reachability/precision adds: "cupp" (catches "cupping her ears" — both G5
+        // ears-women 572/712 and cupped hands — with zero drinking-cup hits), "noise",
+        // "intense" (was unreachable; "intensity"→intens was already covered).
+        // The ears-women stay in-cluster via cupp/noise/loud even without "ear".
+        // "clos" ("eyes closed") kept — genuinely sensory.
         Cluster(name: "sensory_overwhelm", keywords: [
             // physical gestures of blocking/reacting
-            "ear", "press", "cover", "cup", "block", "plug",
+            "press", "cupp", "block", "plug",
             "shield", "brace", "wince", "flinch", "recoil", "cringe",
-            "squint", "shut", "clos", "grip", "clutch", "grasp",
+            "squint", "shut", "clos", "clutch", "grasp",
             // states of overwhelm
             "overwhelm", "drown", "flood", "barrag", "assail",
-            "nois", "loud", "blaring", "pierc", "sharp",
-            "sensori", "stimul", "intens", "excess", "too much",
+            "noise", "loud", "blaring", "pierc", "sharp",
+            "sensori", "stimul", "intens", "intense", "excess", "too much",
             // facial/bodily distress
             "distress", "strain", "grimac", "tighten", "taut",
             "knit", "furrow", "contort", "tense", "rigid"
