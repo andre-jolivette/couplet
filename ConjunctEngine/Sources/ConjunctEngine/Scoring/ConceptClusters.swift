@@ -73,9 +73,16 @@ public enum ConceptClusters {
             "meet", "collect", "cluster", "mass", "throng", "public"
         ]),
 
+        // #120 (2026-07-08) collision removals: "protest" (67% of 167 firings —
+        // scene-classifier boilerplate on every protest photo = same-subject
+        // coincidence, not tension resonance; the 30% enrichment reflects protest-pair
+        // co-occurrence, not a relational signal), "pull" ("hair pulled back"), "push"
+        // (strollers/wagons). "conflict"/"tense" kept despite negation-context noise
+        // ("no signs of conflict") — token matching can't see the negation, but the
+        // counts are small. Post-cleanup ≈49 genuine firings.
         Cluster(name: "tension_conflict", keywords: [
-            "tense", "confront", "fight", "resist", "push", "pull", "struggl",
-            "conflict", "agress", "defiant", "protest", "argument", "clash",
+            "tense", "confront", "fight", "resist", "struggl",
+            "conflict", "agress", "defiant", "argument", "clash",
             "compet", "rival", "oppos", "stand-off", "demand", "challeng",
             "anger", "fist", "standoff", "barrier", "block", "defi"
         ]),
@@ -181,10 +188,15 @@ public enum ConceptClusters {
             "defenceless", "tender", "shaking", "trembl"
         ]),
 
+        // #120 (2026-07-08) collision removals: "control" (20% of 60 firings —
+        // "balance and control over the horse/bike", "gun control" signs, not
+        // dominance), "larg" (matches ONLY comparative "larger": "part of a larger
+        // crowd"), "tower" (literal water/city towers). "loom"/"uniform"/"badge"
+        // kept — genuine authority register. Post-cleanup ≈36 firings.
         Cluster(name: "power_dominance", keywords: [
-            "power", "dominat", "control", "command", "authoriti", "strength",
-            "forc", "impos", "assert", "overwhelm", "loom", "tower",
-            "presid", "reign", "sovereign", "imposing", "larg", "vast",
+            "power", "dominat", "command", "authoriti", "strength",
+            "forc", "impos", "assert", "overwhelm", "loom",
+            "presid", "reign", "sovereign", "imposing", "vast",
             "march", "uniform", "weapon", "badge", "insignia"
         ]),
 
