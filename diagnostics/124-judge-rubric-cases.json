@@ -278,5 +278,75 @@
   "hypothesis": "ironic: a sign or text announces or demands \u2018walk in\u2019, while the other image's subject literally embodies or contradicts that very idea",
   "captionA": "A woman in a brown hoodie and black pants stands on the right, her head turned slightly to the left as she looks at a young girl in a white tank top and denim shorts who is holding a small object near her face, possibly a phone or a toy. The girl is walking forward, her body angled toward the woman. A man in a light blue polo shirt and gray pants walks to the left, holding a can in his right hand. He appears to be looking at the woman and the girl. A child in a white shirt and blue shorts is partially obscured by a large, plush husky dog costume, which is being carried by the man. The dog costume is gray with white markings and a red collar. The setting appears to be an outdoor area with concrete pavement and some greenery in the background. The scene suggests a casual, possibly playful interaction among the individuals.",
   "captionB": "A young man, likely in his teens, is captured mid-action skateboarding. He is wearing a white t-shirt, dark pants, and sneakers. His body is angled forward, and his arms are extended for balance. His head is slightly tilted downward, and his eyes are focused on the skateboard beneath him. The skateboard is positioned on a concrete ledge, and his feet are firmly planted on it. The background shows a building with a sign that reads \"Just Walk In\" and \"We Accept All,\" indicating a medical or health care facility. The scene is set in an urban environment, with some greenery visible in the foreground. The photograph is in black and white, giving it a timeless feel."
+ },
+ {
+  "group": "live_leak",
+  "a": 98,
+  "b": 664,
+  "baselineScore": 0.75,
+  "baselineType": "contrastive",
+  "hypothesis": null,
+  "captionA": "A man, likely in his 60s or 70s, stands prominently in the foreground, draped in an American flag. He wears a black cowboy hat and a jacket with a star pattern, suggesting a patriotic or political stance. His hands are not visible, and his head is turned slightly to the side, looking off to the right. Behind him, another individual holds up a sign that reads \"MORONS ARE CUTTING AMERICA,\" with a Grateful Dead logo partially visible. The background shows a crowd of people, some seated and others standing, engaged in what appears to be a protest or demonstration. The setting is outdoors, with trees and a cityscape in the distance. The overall atmosphere suggests a serious or contentious political gathering.",
+  "captionB": "A woman, likely in her 60s, kneels on a bench, holding a sign that reads, \"HATE WILL NOT MAKE US GREAT.\" She wears a blue hooded sweatshirt and jeans, and her hands are clasped on the sign. Her head is slightly bowed, and her eyes are directed downward, possibly at the ground or her feet. A child, wearing a blue shirt with a car design, kneels in front of her, raising both hands in a gesture that could be interpreted as a sign of protest or defiance. The child's head is tilted slightly upward, and their eyes are focused on something or someone off-camera. The woman's feet are firmly planted on the ground, and she appears to be in a stationary position. The child's knees are bent, and their body is slightly hunched forward. The scene suggests a peaceful protest or demonstration, with the woman and child actively participating. The overall emotional register is one of determination and resistance, as both individuals hold their ground and display their signs."
+ },
+ {
+  "group": "live_leak",
+  "a": 186,
+  "b": 220,
+  "baselineScore": 0.75,
+  "baselineType": "contrastive",
+  "hypothesis": null,
+  "captionA": "A woman in a black dress and knee-high socks stands in the center of a group of people, her right hand raised in a fist, her left hand gripping a red flag. She is wearing a face mask and her head is turned slightly to the left, looking toward the crowd. Her feet are firmly planted on the ground. To her right, a man in a black shirt and jeans is also wearing a face mask and holding a red flag, his right hand raised in a fist. He is looking toward the crowd. Behind them, several people are standing, some with bicycles, and others with their hands raised or fists clenched. The scene is illuminated by streetlights, casting long shadows on the ground. The crowd appears to be engaged in a peaceful protest or demonstration, with some individuals looking at the woman and others looking in different directions. The overall mood is one of solidarity and determination.",
+  "captionB": "A woman, likely in her 30s, stands with her hands clasped over her chest, wearing a white hooded garment and a red cape. Her head is tilted slightly upward, and her eyes are directed toward the camera. She holds a sign that reads \"We are NOT.\" Beside her, a young man, possibly in his teens or early 20s, wears an American flag cape and holds a smaller sign that says \"Dem.\" He looks upward and to the side, seemingly addressing someone or something off-camera. The background shows a crowd of people, some partially visible, and a cityscape with tall buildings. The scene suggests a protest or demonstration, with the signs indicating a political or social message. The woman's posture and the young man's expression convey a sense of determination and perhaps a bit of defiance."
+ },
+ {
+  "group": "live_leak",
+  "a": 740,
+  "b": 863,
+  "baselineScore": 0.75,
+  "baselineType": "contrastive",
+  "hypothesis": null,
+  "captionA": "A woman with glasses and a gray shirt is engaged in conversation with a man in a red jacket and blue shirt. The man in the red jacket is pointing upwards with his right hand, gesturing emphatically. Another man in a red \"Marines\" t-shirt stands nearby, hands on his hips, observing the interaction. A sign in the background reads \"NO THRU TRAFFIC.\" The woman appears to be holding a pink object, possibly a phone or a small device, in her left hand. The scene suggests a discussion or protest, with the man in the red jacket taking a leading role in the conversation. The overall atmosphere is one of active engagement and communication.",
+  "captionB": "A woman with short gray hair and glasses, wearing a white shirt with floral patterns, raises her right arm in a thumbs-down gesture. She appears to be mid-conversation, her mouth slightly open as if speaking. Her left hand holds a black lanyard or strap. She is standing close to a man with short dark hair, wearing a dark jacket. The man is looking to his left, seemingly engaged in the same conversation. The background is dimly lit, suggesting an indoor setting, possibly a social gathering or event. The woman's gesture and the man's attentive posture suggest a dynamic interaction, possibly involving disagreement or discussion."
+ },
+ {
+  "group": "live_leak",
+  "a": 155,
+  "b": 926,
+  "baselineScore": 0.699999988079071,
+  "baselineType": "contrastive",
+  "hypothesis": null,
+  "captionA": "A woman, likely in her twenties, sits alone on the bleachers of a sports stadium. She is wearing a light-colored top and dark pants, and her posture is relaxed, with her legs crossed and her hands resting on her lap. Her gaze is directed downward, and she appears to be looking at something in her hands, possibly a phone or a small object. The bleachers are empty except for her, and the stadium is adorned with banners featuring the Pepsi logo. The sky is overcast, and the atmosphere is calm and quiet. The woman's solitary presence and the quiet setting suggest a moment of contemplation or rest.",
+  "captionB": "A man with a beard and a light brown jacket stands in front of a Tesla dealership. He holds a cardboard sign that reads \"Musk vs US.\" Another person, partially visible, holds up a smartphone to take a picture of the man. The man's head is slightly tilted, and his eyes are directed toward the person taking the photo. The background shows the Tesla logo on the building and some people inside the dealership. The scene appears to be a public demonstration or protest."
+ },
+ {
+  "group": "live_leak",
+  "a": 408,
+  "b": 723,
+  "baselineScore": 0.75,
+  "baselineType": "contrastive",
+  "hypothesis": null,
+  "captionA": "A woman in a pink shirt and black shorts stands on bleachers, her hand resting on her stomach, suggesting she is pregnant. She is surrounded by a crowd of people, some of whom are clapping and others appear to be watching something off-camera. A young girl in a blue dress stands beside a man in a green shirt and jeans, both looking towards the same direction. The man has his hand on his chest, possibly in a gesture of surprise or emotion. A dog, possibly a Kelpie, sits on the steps of the bleachers, looking to the side. The scene suggests a public event or gathering, with people engaged in a shared activity or performance. The atmosphere appears to be one of anticipation or excitement.",
+  "captionB": "A woman, likely in her 30s or 40s, stands in the center of the photograph, holding a large American flag above her head with both hands. She wears a tan hat, sunglasses, and a brown jacket over a white shirt. Her arms are raised high, and she appears to be addressing a crowd. She holds a sign in front of her that reads, \"Unemployed Disabled Veteran TRUMP Stole my job.\" The sign is white with blue and red text. The woman's expression is serious, and she looks directly ahead, seemingly at the people around her.\n\nTo the left, a person with dark hair, wearing a plaid shirt, holds up a smartphone, seemingly taking a photo or video of the woman. To the right, another person, partially visible, wears a blue hat and a dark jacket. This person appears to be holding a phone or camera, possibly recording the scene. The background shows a building under construction with scaffolding, and a few other individuals are visible in the distance, some wearing hats and jackets, suggesting a cool weather setting.\n\nThe overall scene suggests a protest or demonstration, with the woman as the focal point, likely expressing her frustration or anger about job loss and political issues. The presence of the American flag and the sign indicates a political or social statement. The crowd around her seems to be observing or recording the event."
+ },
+ {
+  "group": "live_watch",
+  "a": 130,
+  "b": 599,
+  "baselineScore": 0.75,
+  "baselineType": "contrastive",
+  "hypothesis": null,
+  "captionA": "A woman in a black outfit is laughing heartily, her head tilted back, eyes closed in joy. She is holding a sign that reads \"CRIMINAL\". To her left, a person is wearing a t-shirt with a large image of a yellow Labrador Retriever. The Labrador's tongue is sticking out, giving the impression of a playful or excited dog. The Labrador t-shirt wearer has their hands on their hips and is looking towards the woman, who is the main focus of the image. The background is crowded with other people, some of whom are partially visible. The overall mood of the photograph is lighthearted and celebratory, with the woman's laughter and the playful Labrador t-shirt adding a humorous element.",
+  "captionB": "A woman, wearing a white T-shirt and a white hard hat, stands in the foreground, facing a group of police officers. She appears to be in her twenties or thirties. Her hands are raised, and she is looking up at the officers. One officer, wearing a black uniform with \"POLICE\" written on the back, is holding a baton in his right hand, which is extended towards the woman. Another officer, also in a black uniform, is holding a flashlight in his right hand, illuminating the scene. The woman's expression is one of concern or fear. The police officers are standing close together, some with their hands on their hips, others with their hands on their gear. The background is dark, with some lights visible, suggesting an urban setting at night. The overall atmosphere is tense and confrontational."
+ },
+ {
+  "group": "live_watch",
+  "a": 37,
+  "b": 267,
+  "baselineScore": 0.949999988079071,
+  "baselineType": "echo",
+  "hypothesis": "complementary: one image is the SOURCE of sound \u2014 it is produced there \u2014 while the other shows sound being RECEIVED or physically blocked",
+  "captionA": "A man, likely in his 40s or 50s, stands in front of a large Tesla sign. He is wearing a dark suit jacket over a light blue shirt and dark sunglasses. He holds a megaphone in his right hand and raises his left hand in a gesture that appears to be a wave or a stop sign. The megaphone is red and white, and the word \"POLE\" is visible on it. Another person's hand is partially visible holding a sign with the word \"TRUMP\" on it. The man is speaking into the megaphone, and his head is slightly tilted back, suggesting he is addressing an audience. The background is a clear blue sky, and the setting appears to be outdoors. The man's expression and body language convey a sense of urgency or emphasis as he speaks.",
+  "captionB": "A woman with her head down, her hair tied back, appears to be in distress or exhaustion. She is wearing a dark suit and is positioned in the foreground, with her head bowed and her face obscured. Behind her, a man with white hair and a light-colored suit is visible, his mouth open as if shouting or yelling. His hand is raised, gripping the edge of a large, blue, star-patterned backdrop. Another man, partially visible on the right side of the image, is wearing sunglasses and a dark suit. The backdrop features the American flag, with stars and stripes visible. The scene suggests a political rally or event, with the backdrop and the man's gesture indicating a moment of intense emotion or confrontation. The woman's posture and the man's expression suggest a tense or chaotic atmosphere."
  }
 ]

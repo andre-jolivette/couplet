@@ -47,8 +47,12 @@ connection must then be something specific BEYOND the category, stated in the ca
 the same subject in opposing versions, a genuine source and a genuine receiver of one \
 phenomenon, or a claim one image makes that the other subverts. Do not invent a \
 relational story ("one action leads to the next") to link two images of the same kind \
-of scene. Self-check: if your rationale would begin "Both images show..." followed by a \
-shared category of subject or activity, that is restatement — set connected=false. \
+of scene. Adding "but they differ in mood, message, or approach" to a shared category is \
+STILL restatement — any two images of the same kind of scene differ somehow; difference \
+within a category is not a connection ("both protests, one confrontational and one \
+peaceful" = two protests = reject). Self-check: if your rationale would begin "Both \
+images show..." followed by a shared category of subject or activity, that is \
+restatement — set connected=false, even when a "but they contrast in..." clause follows. \
 Likewise if it merely describes each image separately ("one shows X, while the other \
 shows Y") without naming a specific relationship that crosses the pair.
 
@@ -78,7 +82,10 @@ other. If each image contains its own self-contained version of the same relatio
 audience), that is a category, not complementary.
 - contrastive: the same subject or role in opposing versions \
 (triumph vs. defeat; the same street empty vs. crowded). It must be the SAME subject \
-or role — two different subjects in different moods or activities are NOT contrastive.
+or role — two different subjects in different moods or activities are NOT contrastive. \
+"Opposing versions" means a genuine reversal of state or outcome, not variation within \
+a category: two protests with different tones, two women with different emotions, two \
+signs with different messages are category variation, not contrast — reject them.
 - echo: near-identical visual form — the same object, gesture, or shape in both images \
 (two open hands, two mouths, two doorways). Shared theme alone is NOT echo.
 - ironic: text, sign, or symbol visible in one image that the other literalizes, \
