@@ -57,8 +57,13 @@ nonisolated func convertToPairFree(
     // specific role connection, not the pair's overall thematic value, so it must
     // not demote the pair below its cluster thematicScore — fall back in that case.
     let effectiveThematic: Float = {
-        if r.roleHypothesis != nil, r.thematicV2Score == 0 { return Float(r.thematicScore) }
-        return Float(r.thematicV2Score ?? r.thematicScore)
+        let base: Float
+        if r.roleHypothesis != nil, r.thematicV2Score == 0 { base = Float(r.thematicScore) }
+        else { base = Float(r.thematicV2Score ?? r.thematicScore) }
+        // #122: discount the thematic axis for same-event, same-category pairs.
+        return base * eventProximityThematicFactor(
+            captureDateA: r.captureDateA, captureDateB: r.captureDateB,
+            captionA: r.captionA, captionB: r.captionB)
     }()
     let modality: PairingModality
     if r.selectedFor == "thematic" {

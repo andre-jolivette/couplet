@@ -323,6 +323,80 @@ final class PairScorerTests: XCTestCase {
     }
 }
 
+// ── EventProximityTests (#122) ────────────────────────────────────────────────
+
+final class EventProximityTests: XCTestCase {
+
+    // Two skateboard-trick captions that share a meaningful cluster (skilled_performance) —
+    // the "same category" gate. Mirror the P7/P8 skateboard failures in backlog #122.
+    let skateA = "A skateboarder is captured mid-air performing a skateboarding trick at a skatepark."
+    let skateB = "A man performs a skateboarding trick, mid-air over a metal railing at the skatepark."
+    // Disjoint meaningful clusters (isolation_solitude vs stillness_rest) → no shared category.
+    let plainA = "A red bus drives down an empty city street in the morning."
+    let plainB = "A person walks quietly past a brick wall on a quiet sidewalk."
+
+    private func d(_ t: TimeInterval) -> Date { Date(timeIntervalSince1970: 1_700_000_000 + t) }
+
+    func testSharesMeaningfulClusterSameActivity() {
+        XCTAssertTrue(ConceptClusters.sharesMeaningfulCluster(skateA, skateB))
+    }
+
+    func testSharesMeaningfulClusterDisjoint() {
+        XCTAssertFalse(ConceptClusters.sharesMeaningfulCluster(plainA, plainB))
+    }
+
+    func testNoDiscountAtOrBelowBurstWindow() {
+        // <=300s is the burst guard's territory — the proximity discount stays out.
+        XCTAssertEqual(eventProximityThematicFactor(
+            captureDateA: d(0), captureDateB: d(300), captionA: skateA, captionB: skateB), 1.0)
+    }
+
+    func testStrongDiscount300sTo30min() {
+        // P7 skateboard: 567s (9.5 min) apart, shared skilled_performance.
+        XCTAssertEqual(eventProximityThematicFactor(
+            captureDateA: d(0), captureDateB: d(567), captionA: skateA, captionB: skateB),
+            0.70, accuracy: 1e-6)
+    }
+
+    func testMediumDiscount30minTo2h() {
+        // P8 skateboard: 3261s (54 min) apart.
+        XCTAssertEqual(eventProximityThematicFactor(
+            captureDateA: d(0), captureDateB: d(3261), captionA: skateA, captionB: skateB),
+            0.80, accuracy: 1e-6)
+    }
+
+    func testLightDiscount2hTo6h() {
+        XCTAssertEqual(eventProximityThematicFactor(
+            captureDateA: d(0), captureDateB: d(3 * 3600), captionA: skateA, captionB: skateB),
+            0.90, accuracy: 1e-6)
+    }
+
+    func testNoDiscountBeyond6h() {
+        XCTAssertEqual(eventProximityThematicFactor(
+            captureDateA: d(0), captureDateB: d(6 * 3600 + 1), captionA: skateA, captionB: skateB), 1.0)
+    }
+
+    func testNoDiscountWithoutSharedCategory() {
+        // In-window temporally, but no shared meaningful cluster → unaffected.
+        XCTAssertEqual(eventProximityThematicFactor(
+            captureDateA: d(0), captureDateB: d(567), captionA: plainA, captionB: plainB), 1.0)
+    }
+
+    func testNoDiscountWhenDateMissing() {
+        XCTAssertEqual(eventProximityThematicFactor(
+            captureDateA: nil, captureDateB: d(567), captionA: skateA, captionB: skateB), 1.0)
+    }
+
+    func testDiscountSymmetricInDateOrder() {
+        // abs() gap — order of the two dates must not matter.
+        let f1 = eventProximityThematicFactor(
+            captureDateA: d(0), captureDateB: d(567), captionA: skateA, captionB: skateB)
+        let f2 = eventProximityThematicFactor(
+            captureDateA: d(567), captureDateB: d(0), captionA: skateB, captionB: skateA)
+        XCTAssertEqual(f1, f2)
+    }
+}
+
 // ── ColourAnalyserTests ───────────────────────────────────────────────────────
 
 final class ColourAnalyserTests: XCTestCase {
