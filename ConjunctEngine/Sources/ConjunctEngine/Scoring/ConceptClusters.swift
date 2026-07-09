@@ -92,12 +92,20 @@ public enum ConceptClusters {
             "anger", "fist", "standoff", "barrier", "block", "defi"
         ]),
 
+        // #120 (2026-07-08) reachability adds (no removals — this cluster's keywords
+        // are clean): "celebr"/"celebratory" ("celebration" stems to "celebr" via the
+        // -ation strip — 45 captions the cluster was blind to), "excite" ("excitement"
+        // → "excite" via -ment), "smile" (bare "smile", 13 captions — "smil" only
+        // caught "smiling"/"smiles"), "dance" (bare "dance"/"dancer"). "festive" was
+        // deliberately NOT added (34 captions, mostly "festive atmosphere" mood
+        // boilerplate — the calm/relax lesson).
         Cluster(name: "joy_celebration", keywords: [
-            "smil", "laugh", "celebrat", "joy", "happi", "excit", "cheer",
+            "smil", "smile", "laugh", "celebrat", "celebr", "celebratory",
+            "joy", "happi", "excit", "excite", "cheer",
             "delight", "elat", "triumphant", "festiv", "jubilant", "grin",
             // "rais" not "raise" — same keyword-reachability fix as bodily_gesture
             // above (#96 pass 3, 2026-07-07): "raise" never matched stemmed "rais".
-            "beam", "gleam", "exuber", "playful", "danc", "jump", "rais",
+            "beam", "gleam", "exuber", "playful", "danc", "dance", "jump", "rais",
             "toast", "applaud", "chant", "sing"
         ]),
 
@@ -276,16 +284,22 @@ public enum ConceptClusters {
             // instruments
             "violin", "guitar", "trumpet", "drum", "piano", "bass",
             "fiddle", "banjo", "saxophon", "tuba", "clarinet", "flute",
-            "instrument", "string", "bow",
+            "instrument",
             // active music-making
             "strum", "pluck", "beat", "strik", "blow",
             "musician", "band", "orchestra", "mariachi",
             // musical phenomenon
             "sound", "music", "note", "melody", "song", "tune",
             "rhythm", "lyric", "chord", "hum", "resonat", "audibl",
-            "ring", "echo",
+            "echo",
             // sound reception / listening
-            "ear", "hear", "listen", "deaf", "mute",
+            // #120 (2026-07-08): removed "ear" (13 firings, 11 "phone to his ear" — not
+            // sound-as-force; the cupping-ears sensory case lives in sensory_overwhelm
+            // via "cupp"/"noise"), "ring" (finger rings/jewelry), "bow" (hair bows;
+            // violin-bow captions still fire via "violin"/"guitar"), "string" (string
+            // lights; guitar strings fire via "guitar"). Added "heard" (genuine
+            // sound-reception language). Post-cleanup ≈65 firings.
+            "hear", "heard", "listen", "deaf", "mute",
             "concert", "recit", "gig", "audienc", "speaker", "amp"
         ]),
 
