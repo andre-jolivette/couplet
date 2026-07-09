@@ -356,10 +356,14 @@ public enum ConceptClusters {
             "hand", "fist", "finger", "grip", "point", "reach",
             "rais", "open", "spread", "clasp", "wave", "gesture",
             // arms and body
+            // #120 (2026-07-08): removed "fold" (14/15 "folding chairs") and "bow"
+            // (hair bows — the gesture sense of bowing is unreached; same collision as
+            // grief_sorrow/ritual_ceremony). The cluster's ubiquity (94% of corpus via
+            // "hand" alone) is addressed by the Phase-4 tier demotion, not keyword edits.
             "arm", "shoulder", "back", "chest", "lean", "stretch",
-            "extend", "fold", "cross", "hunch", "arch",
+            "extend", "cross", "hunch", "arch",
             // head and face
-            "bow", "tilt", "nod", "shake", "turn", "lift",
+            "tilt", "nod", "shake", "turn", "lift",
             // whole body
             "kneel", "crouch", "sprawl", "press", "push", "pull"
         ]),
@@ -412,13 +416,16 @@ public enum ConceptClusters {
         Cluster(
             name: "humor_absurdity",
             // Union of both groups — kept so any keyword-browsing code sees the full set.
+            // #120 (2026-07-08): added "humorou" to G1 — "humorous"/"humorously" stem
+            // to "humorou", so the keyword "humor" (which only matches bare "humor")
+            // was blind to the far more common adjective form (14 captions).
             keywords: [
-                "absurd", "humor", "irony", "ironic", "comic", "whimsic", "juxtaposi",
+                "absurd", "humor", "humorou", "irony", "ironic", "comic", "whimsic", "juxtaposi",
                 "laugh", "amuse", "delight", "play", "cheer", "glee"
             ],
             requiredGroups: [
                 // G1 — comic/absurd tone is present
-                ["absurd", "humor", "irony", "ironic", "comic", "whimsic", "juxtaposi"],
+                ["absurd", "humor", "humorou", "irony", "ironic", "comic", "whimsic", "juxtaposi"],
                 // G2 — visible reaction or tonal resolution (amused, laughing, playful, etc.)
                 ["laugh", "amuse", "delight", "play", "cheer", "glee"]
             ]
