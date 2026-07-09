@@ -22,12 +22,17 @@ public enum ConceptClusters {
 
         // ── Existing clusters (expanded) ─────────────────────────────────
 
+        // #120 (2026-07-08) collision removals: "demonstr" (28% of 348 firings —
+        // political "demonstration", not demonstrating skill), "play" (55/69 the mood
+        // adjective "playful"; instrument-playing captions still fire via
+        // guitar/drum/perform/musician), "present" ("Two men are present"). The rich
+        // performance vocabulary (rodeo/lasso/rope/ride/danc/perform) is untouched.
         Cluster(name: "skilled_performance", keywords: [
-            "perform", "performanc", "play", "rope", "race", "compet", "ride",
+            "perform", "performanc", "rope", "race", "compet", "ride",
             "throw", "catch", "swing", "danc", "juggl", "acrobat", "athlet",
             "skill", "techniqu", "craft", "musician", "artist", "rodeo", "lasso",
-            "concert", "recit", "rehears", "execut", "demonstr", "exhibit",
-            "stag", "act", "present"
+            "concert", "recit", "rehears", "execut", "exhibit",
+            "stag", "act"
         ]),
 
         // #120 (2026-07-08) collision removals: "hold" (85% of the cluster's 662 corpus
@@ -110,11 +115,16 @@ public enum ConceptClusters {
             "slump", "hollow", "bereft", "griev"
         ]),
 
+        // #120 (2026-07-08) collision removals: "build" (53% of 273 firings — background
+        // "building" architecture, the single largest collision found in the audit),
+        // "lift" ("foot lifted" mid-stride), "sweat" (matches ONLY "sweater" via the
+        // -er strip), "pull" ("hair pulled back"). "grip"/"task"/"work"/"carri" kept
+        // — genuine effort. Post-cleanup ≈96 firings.
         Cluster(name: "labor_effort", keywords: [
-            "work", "build", "lift", "carri", "toil", "effort", "strain",
-            "labor", "sweat", "haul", "construct", "repair", "fix", "craft",
+            "work", "carri", "toil", "effort", "strain",
+            "labor", "haul", "construct", "repair", "fix", "craft",
             "mend", "forc", "exert", "industri", "grip", "heav", "push",
-            "drag", "pull", "hoist", "load", "burden", "task", "grind"
+            "drag", "hoist", "load", "burden", "task", "grind"
         ]),
 
         Cluster(name: "movement_energy", keywords: [
