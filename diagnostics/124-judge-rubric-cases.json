@@ -1,0 +1,282 @@
+[
+ {
+  "group": "target",
+  "a": 105,
+  "b": 220,
+  "baselineScore": 0.949999988079071,
+  "baselineType": "contrastive",
+  "hypothesis": "contrastive: the same kind of thing \u2014 a sign \u2014 appears REAL in one image and as a depicted version in the other, one earnest and one play or representation",
+  "captionA": "A woman, likely in her twenties, stands with her arms raised, holding a cardboard sign that reads \"CRUSHED.\" She wears a patterned crop top, blue jeans, and a blue scarf draped over her shoulders. Her head is tilted slightly downward, and her gaze is directed downward, possibly at the ground or the sign itself. Behind her, two men are partially visible, one wearing a beige shirt and the other in a dark outfit with a green and red flag draped over his shoulders. The man in the beige shirt appears to be adjusting something on the ground, while the man in the dark outfit stands with his hands behind his back. The setting appears to be an outdoor protest or demonstration, with trees and a clear sky in the background. The overall mood seems serious and focused, with the woman's posture and the sign suggesting a message of protest or awareness.",
+  "captionB": "A woman, likely in her 30s, stands with her hands clasped over her chest, wearing a white hooded garment and a red cape. Her head is tilted slightly upward, and her eyes are directed toward the camera. She holds a sign that reads \"We are NOT.\" Beside her, a young man, possibly in his teens or early 20s, wears an American flag cape and holds a smaller sign that says \"Dem.\" He looks upward and to the side, seemingly addressing someone or something off-camera. The background shows a crowd of people, some partially visible, and a cityscape with tall buildings. The scene suggests a protest or demonstration, with the signs indicating a political or social message. The woman's posture and the young man's expression convey a sense of determination and perhaps a bit of defiance."
+ },
+ {
+  "group": "target",
+  "a": 486,
+  "b": 804,
+  "baselineScore": 0.949999988079071,
+  "baselineType": "ironic",
+  "hypothesis": "ironic: a sign or text announces or demands \u2018solidarity\u2019, while the other image's subject literally embodies or contradicts that very idea",
+  "captionA": "A woman with long dark hair, wearing a black hoodie, stands closely with an older woman with long blonde hair, dressed in a blue plaid shirt. The younger woman has her arm around the older woman's shoulders, and they both appear to be looking at something off-camera to their right. The older woman is holding a sign that reads \"HATE NEVER MADE AMERICA GREAT.\" The younger woman is holding an American flag, and the older woman is holding a sign that says \"todos somos.\" Another person, wearing a red cap and glasses, is partially visible behind them, holding a sign that reads \"todos somos.\" The group seems to be participating in a protest or demonstration, as suggested by the signs and the American flag. The atmosphere appears to be one of solidarity and activism.",
+  "captionB": "A woman in a red cape and white hat stands prominently in the foreground, holding a sign that reads, \"NO MAN IS GOOD ENOUGH TO GOVERN ANY WOMEN WITHOUT HER CONSENT\" by Susan B. Anthony. She is surrounded by a crowd of people, many of whom are also holding signs. To her left, a woman in a straw hat and black shirt holds a sign that says, \"First they go for a woman.\" Behind her, a man in a black shirt and jeans raises a sign that reads, \"You are not alone.\" Another woman in a purple skirt and black top stands to the right, holding a sign that says, \"You are not alone.\" The crowd appears to be marching or protesting, with some individuals raising their signs high. The background shows a cityscape with buildings and a dome-like structure, suggesting a public demonstration or rally. The overall mood is one of activism and solidarity."
+ },
+ {
+  "group": "target",
+  "a": 339,
+  "b": 670,
+  "baselineScore": 0.949999988079071,
+  "baselineType": "contrastive",
+  "hypothesis": "contrastive: the same kind of thing \u2014 a sign \u2014 appears REAL in one image and as a depicted version in the other, one earnest and one play or representation",
+  "captionA": "A woman, likely in her twenties or thirties, stands holding a sign that reads, \"It should be safe to buy or boycott. Make your choice.\" She wears a striped dress and a red cap, looking towards the man beside her. The man, also in his twenties or thirties, wears a dark jacket and jeans, holding a smaller sign that says \"TRUMP\" and \"FAKE.\" They are positioned in front of a Tesla dealership, with a red Tesla car visible inside the showroom. The woman appears to be engaging with the man, possibly in a discussion or protest. The background shows a cloudy sky and some trees, indicating an outdoor setting. The overall scene suggests a political or social statement being made in front of a commercial establishment.",
+  "captionB": "A woman with long dark hair, wearing a black jacket, stands prominently in the foreground, holding a large American flag. Her head is slightly tilted downward, and her eyes are focused on something in front of her. Behind her, another woman with long blonde hair, wearing a plaid shirt, looks to the right with a serious expression. Both women are part of a larger group of people holding signs and flags, including a large pink heart-shaped sign that reads \"HATE NEVER MADE AMERICA GREAT.\" The group appears to be engaged in a protest or demonstration, with some individuals raising their fists and others holding signs with messages of solidarity and activism. The setting suggests an urban environment, possibly a public square or street, with buildings and columns visible in the background. The overall emotional register is one of determination and solidarity, as the group works together to express their views and advocate for change."
+ },
+ {
+  "group": "target",
+  "a": 363,
+  "b": 695,
+  "baselineScore": 0.949999988079071,
+  "baselineType": "contrastive",
+  "hypothesis": "contrastive: the same kind of thing \u2014 a sign \u2014 appears REAL in one image and as a depicted version in the other, one earnest and one play or representation",
+  "captionA": "Two men stand in the foreground, facing a line of police. The man on the left, wearing a black shirt and shorts, raises a sign that reads \"I CAN'T BREATHE.\" The man on the right, dressed in a red jacket and black pants, gestures with his hands, possibly communicating or emphasizing a point. Both are wearing backpacks. The police line is dense, with officers in riot gear standing in formation. The background shows a cloudy sky and urban buildings, with graffiti visible on the wall behind the police. The scene suggests a protest or demonstration, with the sign and gestures indicating a call for awareness or action. The overall atmosphere appears tense and charged.",
+  "captionB": "A woman in a red shirt with a badge stands prominently in the foreground, holding a cane and looking upward. Her expression is one of determination or perhaps a shout. Behind her, a man in a blue and orange shirt with \"FOREVER\" printed on it is also looking upward, appearing to be part of a group. Another woman in a red shirt with a badge stands to the right, her hand raised in a gesture that could be interpreted as cheering or signaling. She is wearing sunglasses and has a microphone attached to her shirt. To the left, a man in a red shirt with a badge holds up a sign that reads \"HEAL.\" The group appears to be engaged in a public demonstration or rally, with some individuals looking towards something off-camera, possibly a speaker or a focal point of the event. The atmosphere suggests a sense of solidarity and active participation."
+ },
+ {
+  "group": "target",
+  "a": 18,
+  "b": 126,
+  "baselineScore": 0.949999988079071,
+  "baselineType": "ironic",
+  "hypothesis": "ironic: a sign or text announces or demands \u2018protest\u2019, while the other image's subject literally embodies or contradicts that very idea",
+  "captionA": "A woman, likely in her 30s or 40s, stands holding a sign that reads \"America Deserves Better.\" She wears sunglasses, a patterned top, and jeans, and holds an American flag in her other hand. Her head is slightly tilted, and she looks directly at the camera. Beside her, a person holds a sign that says \"Tax the Rich,\" with a pink border. This individual is partially visible, with only their torso and arms shown. They wear a white shirt and jeans. The background includes a metal gate and part of a stone building. The scene suggests a protest or demonstration.",
+  "captionB": "A woman with gray hair and a pink headscarf sits on stone steps, holding a sign that reads \"Hands Off Medicare & Medicaid.\" She is smiling and looking to her left. Next to her, a man in a black jacket and white cap sits with his legs crossed, holding a phone in his hands. He is looking down at the phone. To the right, another woman with gray hair sits in a wheelchair, holding a sign that says \"Hands Off Women's Bodies.\" She is wearing a purple top and a scarf, and she is looking to her right. The background shows other people standing and sitting on the steps, some holding cameras. The scene appears to be a protest or demonstration."
+ },
+ {
+  "group": "target",
+  "a": 238,
+  "b": 811,
+  "baselineScore": 0.75,
+  "baselineType": "complementary",
+  "hypothesis": null,
+  "captionA": "A woman, likely in her 30s, is seen from behind, carrying a small white dog in a pet carrier slung over her shoulder. She wears a dark jacket and jeans, and her head is slightly bowed as she looks down at the dog. The dog appears calm and nestled comfortably in the carrier. The woman's hands are not visible, suggesting they are holding the carrier securely. The setting seems to be an outdoor market or street, with a white vehicle and some crates or boxes in the background. The woman's posture and the way she carries the dog suggest a sense of care and attentiveness. The overall mood is calm and focused, with no visible signs of distress or urgency.",
+  "captionB": "A man with a long white beard and a teal cap is walking down a street. He is wearing a white shirt with a pattern and has a black strap over his shoulder, possibly from a bag or camera. Perched on his shoulder is a bearded dragon, its head turned slightly to the side as it looks around. The man appears to be in mid-stride, with his head turned slightly to the left, possibly looking at something or someone off-camera. The background shows a street scene with a lemonade stand and some blurred figures, suggesting a casual, everyday setting. The man's relaxed posture and the presence of the bearded dragon on his shoulder create a sense of calm and companionship."
+ },
+ {
+  "group": "target",
+  "a": 729,
+  "b": 1009,
+  "baselineScore": 0.8899999856948853,
+  "baselineType": "complementary",
+  "hypothesis": null,
+  "captionA": "A skateboarder, wearing a green cap and a black shirt, is captured mid-air performing a trick. The skateboarder's body is angled forward, with one hand raised and the other gripping the skateboard. The skateboarder's feet are off the ground, and their head is turned slightly to the side, looking down at the skateboard. The background is blurred, showing a crowd of spectators and a building with illuminated windows, suggesting an urban setting. The skateboarder appears focused and determined, with a sense of motion and energy conveyed by the blur of the background.",
+  "captionB": "A man, appearing to be in his late teens or early twenties, is captured mid-air performing a skateboarding trick. He is shirtless, wearing dark shorts, and has curly hair. His arms are outstretched, and his hands are gripping the skateboard, which is tilted at an angle. His legs are bent, and his feet are positioned on the skateboard, which is airborne. The background shows a blurred urban setting with a building and a crowd of spectators. The man's eyes are focused downward, likely on the skateboard, as he executes the trick. The crowd in the background appears to be watching the action, with some individuals standing and others sitting. The overall scene conveys a sense of energy and excitement, typical of a skateboarding event or competition."
+ },
+ {
+  "group": "target",
+  "a": 278,
+  "b": 643,
+  "baselineScore": 0.8899999856948853,
+  "baselineType": "complementary",
+  "hypothesis": null,
+  "captionA": "A man, likely in his twenties, is captured mid-trick on a skateboard at a skatepark. He wears a black t-shirt, black shorts, and a black cap. His right hand is raised, palm facing outward, as he balances on the edge of a concrete ramp. His left hand is not visible. His left foot is planted on the skateboard, while his right foot is lifted, suggesting he is performing a trick. The background shows a multi-story parking garage and a crowd of onlookers, some of whom are watching the skater intently. The scene is bathed in the warm light of a setting sun, casting long shadows and creating a dynamic, energetic atmosphere. The skater appears focused and skilled, demonstrating a moment of concentration and athletic prowess.",
+  "captionB": "A skateboarder, wearing a white t-shirt and dark shorts, is captured mid-air, performing a trick over a metal railing. Their body is angled forward, arms outstretched for balance, and they are wearing black and white sneakers. The skateboard is visible beneath them, tilted slightly. The skateboarder's head is tilted back, eyes focused on the trick ahead. Below, a crowd of onlookers stands on concrete steps, some leaning forward to watch the action. The crowd appears engaged, with some individuals raising their hands, possibly cheering or signaling. The setting is outdoors, with a clear sky and some trees visible in the background. The atmosphere suggests excitement and anticipation as the skateboarder executes the trick."
+ },
+ {
+  "group": "golden",
+  "a": 245,
+  "b": 246,
+  "baselineScore": 0.949999988079071,
+  "baselineType": "contrastive",
+  "hypothesis": "contrastive: the same kind of thing \u2014 a pigeons \u2014 appears REAL in one image and as a depicted version in the other, one earnest and one play or representation",
+  "captionA": "A woman sits on a bench, her back to the viewer, gazing at a group of pigeons scattered on the ground. She wears a white top and a patterned skirt, her legs crossed, and her hands rest on her lap. A man sits beside her, facing away, also looking at the pigeons. He wears a dark shirt and pants, his hands resting on his knees. The pigeons are scattered around them, some pecking at the ground, others standing still. The setting appears to be an urban plaza with a covered walkway, a utility box, and a building in the background. The scene is calm and quiet, with no visible interaction between the two individuals.",
+  "captionB": "A woman with long brown hair, wearing a teal top, sits on a wooden bench, her gaze directed upwards and to the left, towards a large mural of a peacock's head on the wall behind her. She holds a black bag on her lap. Another woman, wearing a white top, sits beside her, looking in the same direction. The mural is vibrant, with the peacock's feathers and head prominently displayed. The setting appears to be an indoor space, possibly a zoo or animal sanctuary, as indicated by the \"Staff Only No Entry\" sign on the wall. The atmosphere is calm and contemplative, with the women seemingly captivated by the mural."
+ },
+ {
+  "group": "golden",
+  "a": 80,
+  "b": 874,
+  "baselineScore": 0.949999988079071,
+  "baselineType": "ironic",
+  "hypothesis": "ironic: a sign or text announces or demands \u2018smile\u2019, while the other image's subject literally embodies or contradicts that very idea",
+  "captionA": "A woman, likely in her twenties or thirties, is the main subject of the photograph. She is wearing a fluffy white coat and has her hair tied back. Her face is turned to the side, and she is smiling widely, showing her teeth. She is holding a smartphone in her right hand, which is positioned near her mouth. Her left hand is raised, with her fingers forming a peace sign, and she is pointing at her teeth with her right hand. She is wearing red nail polish and a bracelet on her right wrist. In the background, there are other people, including a man in a gray jacket and another person with a black bag. The setting appears to be an outdoor urban area with buildings and trees visible. The woman's expression and gesture suggest a playful or lighthearted moment.",
+  "captionB": "A man, likely in his twenties or thirties, stands in the foreground, wearing glasses and a brown scarf. He holds a smartphone in his right hand and a can of what appears to be a beverage in his left. He is looking down at his phone, seemingly engrossed in it. Behind him, a colorful poster with the word \"Smile\" prominently displayed is visible. The poster features a person in a suit, adding a commercial or promotional element to the scene. In the background, a crowd of people is partially visible, some wearing hooded jackets, suggesting a cool or urban setting. The overall atmosphere appears casual and everyday, with the man focused on his phone and the crowd going about their business."
+ },
+ {
+  "group": "golden",
+  "a": 80,
+  "b": 259,
+  "baselineScore": 0.949999988079071,
+  "baselineType": "ironic",
+  "hypothesis": "ironic: a sign or text announces or demands \u2018smile\u2019, while the other image's subject literally embodies or contradicts that very idea",
+  "captionA": "A woman, likely in her twenties or thirties, is the main subject of the photograph. She is wearing a fluffy white coat and has her hair tied back. Her face is turned to the side, and she is smiling widely, showing her teeth. She is holding a smartphone in her right hand, which is positioned near her mouth. Her left hand is raised, with her fingers forming a peace sign, and she is pointing at her teeth with her right hand. She is wearing red nail polish and a bracelet on her right wrist. In the background, there are other people, including a man in a gray jacket and another person with a black bag. The setting appears to be an outdoor urban area with buildings and trees visible. The woman's expression and gesture suggest a playful or lighthearted moment.",
+  "captionB": "A woman stands on a sidewalk with her feet visible, wearing sandals and dark pants. The sidewalk has the words \"SMILE you're Beautiful\" painted in red on it. The woman is not interacting with anyone else in the frame. The text on the sidewalk is the main focus, and the woman appears to be standing still, possibly contemplating the message. The scene conveys a positive and uplifting sentiment."
+ },
+ {
+  "group": "golden",
+  "a": 50,
+  "b": 572,
+  "baselineScore": 0.949999988079071,
+  "baselineType": "complementary",
+  "hypothesis": "complementary: one image is the SOURCE of sound \u2014 it is produced there \u2014 while the other shows sound being RECEIVED or physically blocked",
+  "captionA": "A man in a suit, likely in his 30s or 40s, stands at the center of the frame, holding a megaphone to his mouth. His right hand is raised in a gesture that suggests he is speaking or addressing an audience. He wears a dark suit and a white shirt, and a necklace is visible around his neck. Behind him, two other men are present. The man on the left, also likely in his 30s or 40s, wears a black cap, a black shirt, and blue jeans. He holds a camera mounted on a selfie stick, seemingly recording the scene. The man in the middle, possibly in his 20s or 30s, wears a blue blazer over a white shirt and blue jeans. He holds a camera in his hands, capturing the moment. The background features a large, colorful wall with geometric shapes in red, blue, and pink. The sky is clear and blue, indicating it is a sunny day. The overall scene suggests a public event or demonstration, with the man in the suit possibly leading or speaking at the gathering.",
+  "captionB": "A woman, likely in her 40s or 50s, sits on a set of stone steps, her hands cupping her ears as if blocking out noise or protecting her ears from a loud sound. She wears a dark jacket and light-colored pants, her head tilted slightly downward, and her eyes are closed. Behind her, a person in camouflage pants and a light purple backpack stands, partially obscured by a railing. The background shows other people standing on the steps and on the ground, some wearing casual shoes. The woman's posture and gesture suggest she is trying to block out a loud noise or is in discomfort. The overall scene appears to be in a public space, possibly a city square or a similar area."
+ },
+ {
+  "group": "regress_ok",
+  "a": 37,
+  "b": 267,
+  "baselineScore": 0.949999988079071,
+  "baselineType": "complementary",
+  "hypothesis": "complementary: one image is the SOURCE of sound \u2014 it is produced there \u2014 while the other shows sound being RECEIVED or physically blocked",
+  "captionA": "A man, likely in his 40s or 50s, stands in front of a large Tesla sign. He is wearing a dark suit jacket over a light blue shirt and dark sunglasses. He holds a megaphone in his right hand and raises his left hand in a gesture that appears to be a wave or a stop sign. The megaphone is red and white, and the word \"POLE\" is visible on it. Another person's hand is partially visible holding a sign with the word \"TRUMP\" on it. The man is speaking into the megaphone, and his head is slightly tilted back, suggesting he is addressing an audience. The background is a clear blue sky, and the setting appears to be outdoors. The man's expression and body language convey a sense of urgency or emphasis as he speaks.",
+  "captionB": "A woman with her head down, her hair tied back, appears to be in distress or exhaustion. She is wearing a dark suit and is positioned in the foreground, with her head bowed and her face obscured. Behind her, a man with white hair and a light-colored suit is visible, his mouth open as if shouting or yelling. His hand is raised, gripping the edge of a large, blue, star-patterned backdrop. Another man, partially visible on the right side of the image, is wearing sunglasses and a dark suit. The backdrop features the American flag, with stars and stripes visible. The scene suggests a political rally or event, with the backdrop and the man's gesture indicating a moment of intense emotion or confrontation. The woman's posture and the man's expression suggest a tense or chaotic atmosphere."
+ },
+ {
+  "group": "regress_ok",
+  "a": 111,
+  "b": 616,
+  "baselineScore": 0.8500000238418579,
+  "baselineType": "contrastive",
+  "hypothesis": "contrastive: the same kind of thing \u2014 a small object \u2014 appears REAL in one image and as a depicted version in the other, one earnest and one play or representation",
+  "captionA": "A woman in a brown hoodie and black pants stands on the right, her head turned slightly to the left as she looks at a young girl in a white tank top and denim shorts who is holding a small object near her face, possibly a phone or a toy. The girl is walking forward, her body angled toward the woman. A man in a light blue polo shirt and gray pants walks to the left, holding a can in his right hand. He appears to be looking at the woman and the girl. A child in a white shirt and blue shorts is partially obscured by a large, plush husky dog costume, which is being carried by the man. The dog costume is gray with white markings and a red collar. The setting appears to be an outdoor area with concrete pavement and some greenery in the background. The scene suggests a casual, possibly playful interaction among the individuals.",
+  "captionB": "A woman and a young boy walk side by side on a paved area. The woman, wearing a cowboy hat, jeans, and a white tank top, carries a black crossbody bag and holds a small object in her right hand. Her gaze is directed forward, and her body is angled slightly to the left. The boy, dressed in a patterned shirt and jeans, walks beside her, looking straight ahead. They are both walking away from a colorful food stand with a large image of chili and corn. A person in a cow costume walks past them, carrying a large stuffed animal resembling a bull. The bull costume has a red and orange pattern. The woman and the boy appear relaxed and engaged in their walk. The scene suggests a casual outing, possibly at a fair or festival."
+ },
+ {
+  "group": "regress_ok",
+  "a": 296,
+  "b": 334,
+  "baselineScore": 0.949999988079071,
+  "baselineType": "ironic",
+  "hypothesis": "ironic: a sign or text announces or demands \u2018greeting\u2019, while the other image's subject literally embodies or contradicts that very idea",
+  "captionA": "A woman, likely in her twenties, walks past a wall with a large, stylized drawing of a creature and the text \"HI, HOW ARE YOU\" above it. She is wearing a light-colored top and dark pants, and her head is slightly tilted as she looks at the wall. Her hands are in her pockets, and her feet are firmly on the ground. The wall is part of a fenced area, and in the background, there are buildings and trees. The scene is in black and white, giving it a nostalgic feel. The text on the wall appears to be a friendly greeting, adding a touch of humor and warmth to the otherwise ordinary street scene.",
+  "captionB": "A woman, likely in her 30s or 40s, is smiling broadly with her eyes closed, appearing joyful and relaxed. She is wearing a white, fluffy coat and a brown top, accessorized with a necklace and earrings. Her hair is pulled back, and she has a headband or sunglasses resting on her head. She is waving with her right hand, palm facing outward, as if greeting someone or acknowledging a crowd. The background shows a cityscape with buildings and some people in the distance, suggesting an urban setting. The woman's expression and gesture convey a sense of happiness and friendliness."
+ },
+ {
+  "group": "regress_ok",
+  "a": 407,
+  "b": 859,
+  "baselineScore": 0.949999988079071,
+  "baselineType": "ironic",
+  "hypothesis": "ironic: a sign or text announces or demands \u2018freedom\u2019, while the other image's subject literally embodies or contradicts that very idea",
+  "captionA": "A man, appearing to be in his twenties, is captured mid-air as he dives off a bridge into a river. He is wearing a brown shirt and dark shorts, and his body is bent at the knees with his arms extended behind him, hands open and fingers splayed. His head is tilted back, and his eyes are closed, suggesting he is focused on the dive. Below him, several people are in the water, some on inner tubes and others swimming. The river is surrounded by lush green trees, and the sky above is partly cloudy. The scene conveys a sense of adventure and freedom.",
+  "captionB": "A woman in a plaid shirt and sunglasses holds a sign that reads \"LION'S FREEDOM\" in bold letters. She stands among a group of people, many of whom hold red signs with \"TRUMP VANCE\" printed on them. The signs are held up high, and some individuals are raising their hands, possibly cheering or signaling. The crowd appears engaged and animated, with some individuals looking towards the camera or each other. The setting seems to be an outdoor event, possibly a political rally, given the signs and the attire of the participants. The atmosphere is energetic and focused, with a clear sense of purpose and solidarity among the group."
+ },
+ {
+  "group": "regress_ok",
+  "a": 555,
+  "b": 888,
+  "baselineScore": 0.949999988079071,
+  "baselineType": "contrastive",
+  "hypothesis": "contrastive: the same kind of thing \u2014 a table \u2014 appears REAL in one image and as a depicted version in the other, one earnest and one play or representation",
+  "captionA": "A woman with long dark hair and a bright smile stands in front of a red semi-truck. She is wearing a white shirt and appears to be looking directly at the camera. Behind her, a table is set up with various posters and images, including one of Elvis Presley, a crucifix, and a poster for Harley-Davidson motorcycles. The posters are arranged neatly, and some have text printed on them, such as \"Emmitt Smith\" and \"Harley-Davidson.\" The scene suggests a roadside stall or market, possibly selling memorabilia or artwork. The woman seems to be engaging with the viewer, possibly selling or displaying the items on the table. The overall mood is casual and friendly, with the woman appearing approachable and welcoming.",
+  "captionB": "A woman wearing a white shirt with a large, irregular hole cut out of the front stands in front of a framed painting of \"The Last Supper.\" The painting depicts Jesus and his disciples around a table, with Jesus at the center. The woman's shirt is positioned directly in front of the painting, obscuring the lower half of the image. The painting is set against a marble-patterned wall. The woman appears to be standing still, and the hole in her shirt is the only unusual element in the scene. The painting itself is detailed, with the figures in various poses and expressions, but the focus is on the juxtaposition of the woman's shirt and the artwork. The scene does not convey any particular emotional register, as there are no visible gestures or expressions that suggest strong emotions. The incongruity lies in the unexpected placement of the woman's shirt in front of the painting, which creates a humorous and somewhat absurd visual effect."
+ },
+ {
+  "group": "regress_ok",
+  "a": 115,
+  "b": 656,
+  "baselineScore": 0.949999988079071,
+  "baselineType": "contrastive",
+  "hypothesis": "contrastive: the same kind of thing \u2014 a sun \u2014 appears REAL in one image and as a depicted version in the other, one earnest and one play or representation",
+  "captionA": "A woman sits in the driver's seat of a white pickup truck at a gas station, her hands resting on the steering wheel. She appears to be middle-aged and is looking out the windshield, her gaze directed towards the bright sun that is setting behind her. The sun creates a lens flare effect, adding a warm glow to the scene. The truck is parked at a gas pump, and a coffee cup sits on the dashboard, suggesting she might be taking a break or waiting for someone. The gas station is quiet, with no other people visible in the frame. The overall mood is calm and reflective, with the woman seemingly lost in thought as she waits.",
+  "captionB": "A woman, likely in her twenties, walks with two other individuals, possibly friends, in a parking lot at sunset. The woman in the foreground holds hands with one person, while the other walks slightly ahead. They are all dressed casually, and their shadows stretch long on the ground. The woman in the foreground wears a dark dress and has her hair tied back. The two others are less distinct but appear to be wearing similar casual attire. The background is softly blurred, showing trees and a setting sun, casting a warm glow over the scene. The image is taken from inside a vehicle, as evidenced by the reflection of a hand holding a phone on the window. The phone screen is visible, showing a blurred image of the same scene, creating a layered effect. The overall mood is relaxed and social, with the warm lighting adding a sense of calm and connection."
+ },
+ {
+  "group": "regress_ok",
+  "a": 929,
+  "b": 998,
+  "baselineScore": 0.8500000238418579,
+  "baselineType": "ironic",
+  "hypothesis": "ironic: a sign or text announces or demands \u2018prayer\u2019, while the other image's subject literally embodies or contradicts that very idea",
+  "captionA": "A woman, wearing jeans and brown shoes, holds a small white and black dog in her arms. Her hands are positioned to support the dog securely. She is standing on a paved surface, and her feet are firmly planted on the ground. The woman is looking down at the dog, and her head is slightly tilted. Behind her, several signs are held up, with messages such as \"PRAY TO END ABORTION,\" \"REMEMBER THE ALAMO,\" and \"IN GOD WE TRUST.\" The signs are held by other individuals who are partially visible. The scene appears to be a protest or demonstration, with the signs indicating religious or political activism. The dog looks calm and is being held gently. The overall atmosphere suggests a peaceful gathering with a clear focus on the messages displayed.",
+  "captionB": "A woman, likely in her 30s, stands in a public square, her hands raised in a gesture of appeal or prayer. She wears a white robe and a hooded cloth over her head, obscuring her face. Her hands are cupped together, palms facing outward, as if she is reaching out to someone or something unseen. Beside her, a stroller holds a Ukrainian flag and a small plant, suggesting a peaceful protest or demonstration. The background features a paved square with railings and trees, indicating an urban setting. The woman's posture and the presence of the flag suggest a moment of solemnity or plea, possibly related to the ongoing conflict in Ukraine."
+ },
+ {
+  "group": "regress_ok",
+  "a": 485,
+  "b": 653,
+  "baselineScore": 0.75,
+  "baselineType": "complementary",
+  "hypothesis": null,
+  "captionA": "A man in a black shirt and cap stands at the center of a crowd, raising his right hand high in the air. His mouth is open, suggesting he is shouting or cheering. The crowd around him is diverse, with some wearing yellow and black sports jerseys, indicating they might be fans of a particular team. One person in the crowd wears a jersey with the text \"QUEGAENEL\" visible. Another individual in the crowd wears a white shirt with red and blue stripes and a logo that appears to be related to a national team or organization. The man in the black shirt is the focal point, and his gesture and expression suggest he is actively participating in a lively event, possibly a sports match or a public gathering. The crowd appears engaged and animated, with some individuals looking in the direction of the man in the black shirt. The overall emotional register is one of excitement and enthusiasm.",
+  "captionB": "A man, likely in his 30s, stands in the foreground, wearing a white shirt with red stripes and a black cap. He has tattoos on his arm and is holding a yellow smoke bomb, raising it high in the air. His head is turned slightly to the side, and his eyes are focused on something off-camera. Behind him, a crowd of people, many wearing red and yellow attire, are gathered. Some are holding signs, and one sign reads \"ROAD CLOSED TO TRAFFIC.\" The crowd appears to be celebrating or protesting, with some individuals raising their hands and others holding up signs. The atmosphere is energetic, with smoke filling the air and people engaged in the event. The overall mood is one of excitement and collective action."
+ },
+ {
+  "group": "regress_ok",
+  "a": 596,
+  "b": 641,
+  "baselineScore": 0.8500000238418579,
+  "baselineType": "contrastive",
+  "hypothesis": "contrastive: the same kind of thing \u2014 a toy \u2014 appears REAL in one image and as a toy version in the other, one earnest and one play or representation",
+  "captionA": "A woman, likely in her 30s or 40s, is the main subject of the photograph. She is smiling broadly, showing her teeth, and holding a small red object, possibly a piece of candy or a small toy, between her thumb and index finger. Her hair is pulled back, and she wears a white, fluffy coat. She is outdoors, with a modern building in the background. The woman appears to be in a cheerful mood, possibly engaging with someone or something off-camera. The red object she holds is the focal point of her expression, suggesting a playful or lighthearted moment.",
+  "captionB": "A man in a mustard yellow shirt and black shorts is bending over, holding a yellow taco-shaped object in one hand and a small yellow toy in the other. He is wearing blue and red socks with a cartoon character on them and blue New Balance sneakers. His right foot is on the ground, while his left foot is lifted, suggesting he is in the middle of a step or movement. The background shows a group of people standing on a paved surface, possibly at an outdoor event or gathering. The man appears to be casually interacting with the objects he is holding, possibly preparing to eat or play with them. The scene has a playful and lighthearted tone."
+ },
+ {
+  "group": "regress_ok",
+  "a": 41,
+  "b": 310,
+  "baselineScore": 0.8500000238418579,
+  "baselineType": "ironic",
+  "hypothesis": "ironic: a sign or text announces or demands \u2018walk in\u2019, while the other image's subject literally embodies or contradicts that very idea",
+  "captionA": "A woman with long, flowing hair is captured mid-stride, her body angled slightly to the left as she walks. She is wearing a sleeveless top and patterned pants, and her right arm is extended forward, holding a small object, possibly a phone or a small bag, close to her body. Her left arm is bent at the elbow, and her hand is near her waist. Her gaze is directed downward, and her head is slightly tilted back, suggesting she might be looking at something on the ground or focusing on her path. The background shows a public space with columns and other people walking in the distance, indicating a bustling environment. The photograph is in black and white, adding a timeless quality to the scene.",
+  "captionB": "A young man, likely in his teens, is captured mid-action skateboarding. He is wearing a white t-shirt, dark pants, and sneakers. His body is angled forward, and his arms are extended for balance. His head is slightly tilted downward, and his eyes are focused on the skateboard beneath him. The skateboard is positioned on a concrete ledge, and his feet are firmly planted on it. The background shows a building with a sign that reads \"Just Walk In\" and \"We Accept All,\" indicating a medical or health care facility. The scene is set in an urban environment, with some greenery visible in the foreground. The photograph is in black and white, giving it a timeless feel."
+ },
+ {
+  "group": "regress_ok",
+  "a": 267,
+  "b": 384,
+  "baselineScore": 0.8999999761581421,
+  "baselineType": "contrastive",
+  "hypothesis": "contrastive: the same kind of thing \u2014 a American flag \u2014 appears REAL in one image and as a depicted version in the other, one earnest and one play or representation",
+  "captionA": "A woman with her head down, her hair tied back, appears to be in distress or exhaustion. She is wearing a dark suit and is positioned in the foreground, with her head bowed and her face obscured. Behind her, a man with white hair and a light-colored suit is visible, his mouth open as if shouting or yelling. His hand is raised, gripping the edge of a large, blue, star-patterned backdrop. Another man, partially visible on the right side of the image, is wearing sunglasses and a dark suit. The backdrop features the American flag, with stars and stripes visible. The scene suggests a political rally or event, with the backdrop and the man's gesture indicating a moment of intense emotion or confrontation. The woman's posture and the man's expression suggest a tense or chaotic atmosphere.",
+  "captionB": "A crowd of people stands on a street, holding signs and banners. The signs are varied, with messages like \"RIGHT TO CIVIL RIGHTS\" and \"ABBOT HAS PRISON PETIT.\" A young boy in the foreground, wearing a green jacket and brown pants, stands with a small American flag and a red and white cup. His gaze is directed forward, and his expression is serious. Behind him, adults hold signs, some with text that references historical events and political figures. The crowd appears to be engaged in a protest or demonstration, with individuals standing close together, some holding signs high. The atmosphere suggests a serious and focused mood, with the crowd facing in the same direction, possibly towards a speaker or a focal point not visible in the frame. The setting appears to be an urban area, with trees and buildings in the background."
+ },
+ {
+  "group": "regress_ok",
+  "a": 337,
+  "b": 628,
+  "baselineScore": 0.8500000238418579,
+  "baselineType": "contrastive",
+  "hypothesis": "contrastive: the same kind of thing \u2014 a truck \u2014 appears REAL in one image and as a depicted version in the other, one earnest and one play or representation",
+  "captionA": "A woman and a man are seated in folding chairs on a grassy field. The woman, wearing sunglasses and a light blue shirt, has her legs crossed and her arms resting on the back of the chair. The man, wearing a cowboy hat and jeans, is sitting with his legs extended and his hands resting on his lap. Both are looking towards something off-camera to their right. A black plastic stool is placed between them. In the background, a white pickup truck and a black livestock trailer are visible, along with a horse standing nearby. The scene suggests a casual outdoor setting, possibly a farm or ranch.",
+  "captionB": "A woman and a man stand close together on a sidewalk, facing each other. The woman, wearing a gray t-shirt and blue jeans, has her hands by her sides. The man, in a white hoodie and blue jeans, has his hands clasped in front of him. Both are wearing face masks. They appear to be in the middle of a conversation, with their heads tilted slightly towards each other. Behind them, a white Ford F-150 truck is parked on the street, and trees and buildings are visible in the background. The scene suggests a casual, everyday interaction in an urban setting."
+ },
+ {
+  "group": "regress_rej",
+  "a": 37,
+  "b": 135,
+  "baselineScore": 0.0,
+  "baselineType": "none",
+  "hypothesis": null,
+  "captionA": "A man, likely in his 40s or 50s, stands in front of a large Tesla sign. He is wearing a dark suit jacket over a light blue shirt and dark sunglasses. He holds a megaphone in his right hand and raises his left hand in a gesture that appears to be a wave or a stop sign. The megaphone is red and white, and the word \"POLE\" is visible on it. Another person's hand is partially visible holding a sign with the word \"TRUMP\" on it. The man is speaking into the megaphone, and his head is slightly tilted back, suggesting he is addressing an audience. The background is a clear blue sky, and the setting appears to be outdoors. The man's expression and body language convey a sense of urgency or emphasis as he speaks.",
+  "captionB": "A woman with long, curly hair and a white headband is embracing a man with short hair and a tattooed arm. They are both facing each other, and their hands are interlocked. The woman is wearing a patterned dress, and the man is in a sleeveless shirt. They appear to be dancing or moving closely together. In the background, a crowd of people is visible, some standing and others sitting. The setting seems to be an outdoor event or gathering. The overall mood is lively and social."
+ },
+ {
+  "group": "regress_rej",
+  "a": 111,
+  "b": 217,
+  "baselineScore": 0.0,
+  "baselineType": "none",
+  "hypothesis": null,
+  "captionA": "A woman in a brown hoodie and black pants stands on the right, her head turned slightly to the left as she looks at a young girl in a white tank top and denim shorts who is holding a small object near her face, possibly a phone or a toy. The girl is walking forward, her body angled toward the woman. A man in a light blue polo shirt and gray pants walks to the left, holding a can in his right hand. He appears to be looking at the woman and the girl. A child in a white shirt and blue shorts is partially obscured by a large, plush husky dog costume, which is being carried by the man. The dog costume is gray with white markings and a red collar. The setting appears to be an outdoor area with concrete pavement and some greenery in the background. The scene suggests a casual, possibly playful interaction among the individuals.",
+  "captionB": "A man with tattoos on his arms and a necklace is holding a small object in his right hand, which appears to be a small tool or device. He is looking down at the object with a focused expression. His left hand is raised, holding another small object, possibly a piece of paper or a small container. The background shows a cityscape with buildings and a street, suggesting an urban setting. The man's expression and posture indicate concentration and possibly a task he is engaged in."
+ },
+ {
+  "group": "regress_rej",
+  "a": 37,
+  "b": 293,
+  "baselineScore": 0.0,
+  "baselineType": "none",
+  "hypothesis": "ironic: a sign or text warns of or names \u2018pole\u2019, while the other image shows the real pole \u2014 the very thing the warning is about",
+  "captionA": "A man, likely in his 40s or 50s, stands in front of a large Tesla sign. He is wearing a dark suit jacket over a light blue shirt and dark sunglasses. He holds a megaphone in his right hand and raises his left hand in a gesture that appears to be a wave or a stop sign. The megaphone is red and white, and the word \"POLE\" is visible on it. Another person's hand is partially visible holding a sign with the word \"TRUMP\" on it. The man is speaking into the megaphone, and his head is slightly tilted back, suggesting he is addressing an audience. The background is a clear blue sky, and the setting appears to be outdoors. The man's expression and body language convey a sense of urgency or emphasis as he speaks.",
+  "captionB": "A small, blue flag with a white dove and a star design hangs from a thin metal pole amidst lush green foliage. The flag is slightly tilted, and the background is dense with various green plants, creating a natural setting. The flag appears to be a decorative or symbolic item, possibly representing peace or a specific cause, given the dove imagery. The scene is tranquil and serene, with no visible human presence or interaction."
+ },
+ {
+  "group": "regress_rej",
+  "a": 111,
+  "b": 310,
+  "baselineScore": 0.0,
+  "baselineType": "none",
+  "hypothesis": "ironic: a sign or text announces or demands \u2018walk in\u2019, while the other image's subject literally embodies or contradicts that very idea",
+  "captionA": "A woman in a brown hoodie and black pants stands on the right, her head turned slightly to the left as she looks at a young girl in a white tank top and denim shorts who is holding a small object near her face, possibly a phone or a toy. The girl is walking forward, her body angled toward the woman. A man in a light blue polo shirt and gray pants walks to the left, holding a can in his right hand. He appears to be looking at the woman and the girl. A child in a white shirt and blue shorts is partially obscured by a large, plush husky dog costume, which is being carried by the man. The dog costume is gray with white markings and a red collar. The setting appears to be an outdoor area with concrete pavement and some greenery in the background. The scene suggests a casual, possibly playful interaction among the individuals.",
+  "captionB": "A young man, likely in his teens, is captured mid-action skateboarding. He is wearing a white t-shirt, dark pants, and sneakers. His body is angled forward, and his arms are extended for balance. His head is slightly tilted downward, and his eyes are focused on the skateboard beneath him. The skateboard is positioned on a concrete ledge, and his feet are firmly planted on it. The background shows a building with a sign that reads \"Just Walk In\" and \"We Accept All,\" indicating a medical or health care facility. The scene is set in an urban environment, with some greenery visible in the foreground. The photograph is in black and white, giving it a timeless feel."
+ }
+]

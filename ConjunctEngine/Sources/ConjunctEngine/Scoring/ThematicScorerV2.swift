@@ -16,12 +16,12 @@ public struct ThematicV2Result: Sendable {
 
 // MARK: - Scorer
 
-/// Calls llama3.2 via the local Ollama server to evaluate whether two photographs
-/// form a meaningful thematic pair. Runs sequentially — one request at a time —
-/// because Ollama handles one inference at a time.
+/// Calls qwen2.5:14b-instruct via the local Ollama server to evaluate whether two
+/// photographs form a meaningful thematic pair. Runs sequentially — one request at
+/// a time — because Ollama handles one inference at a time.
 ///
-/// Cold start for llama3.2 3B is ~26s; warm inference is ~1–2s per pair.
-/// Returns nil on connection failure or unparseable JSON — never throws.
+/// Warm inference is ~3–4s per pair; cold model load needs extra headroom.
+/// Throws on connection/HTTP errors; returns nil on unparseable LLM output (#89).
 public actor ThematicScorerV2 {
 
     private static let kSystemPrompt = """
@@ -38,8 +38,31 @@ That is an aesthetic connection, not a thematic one. Set connected=false. \
 A thematic connection must be based solely on subject, action, role, emotion, \
 or narrative — things that have nothing to do with how the image looks.
 
+THE THIRD-MEANING TEST: before connecting a pair, form the best one-sentence description \
+of what the pair says TOGETHER. If that sentence merely restates what both images share — \
+"both show skateboarders performing tricks", "both show people carrying animals", "both \
+show protesters holding signs" — the pair is a category, not a connection. Set \
+connected=false. A shared category does not by itself disqualify a pair, but the \
+connection must then be something specific BEYOND the category, stated in the captions: \
+the same subject in opposing versions, a genuine source and a genuine receiver of one \
+phenomenon, or a claim one image makes that the other subverts. Do not invent a \
+relational story ("one action leads to the next") to link two images of the same kind \
+of scene. Self-check: if your rationale would begin "Both images show..." followed by a \
+shared category of subject or activity, that is restatement — set connected=false. \
+Likewise if it merely describes each image separately ("one shows X, while the other \
+shows Y") without naming a specific relationship that crosses the pair.
+
+EVIDENCE RULE: every claim in your rationale must be traceable to specific caption text. \
+Never assert a distinction the captions do not state — do not call one image "real" and \
+the other "staged", or one "earnest" and the other "theatrical", unless a caption \
+explicitly describes a staging, depiction, or performance. If the relationship cannot \
+be supported by caption evidence, set connected=false.
+
 Respond with exactly this JSON structure. No preamble, no markdown, no other text:
-{"connected": true or false, "confidence": 0.0 to 1.0, "relationship_type": "one word", \
+{"together": "one sentence: what the pair says TOGETHER beyond what the images share — \
+if you can only describe each image separately or name a shared category, write exactly \
+RESTATEMENT here and set connected=false", \
+"connected": true or false, "confidence": 0.0 to 1.0, "relationship_type": "one word", \
 "rationale": "one sentence"}
 
 RELATIONSHIP TYPE — output exactly one word from this list: \
@@ -48,9 +71,14 @@ Use "none" when connected is false.
 
 Definitions — use the narrowest definition that fits:
 - complementary: one image is the SOURCE of something; the other is the RECEIVER \
-(sound produced vs. heard; command issued vs. obeyed; tenderness offered vs. accepted)
+(sound produced vs. heard; command issued vs. obeyed; tenderness offered vs. accepted). \
+The phenomenon must CROSS the pair — its source in one image, its reception in the \
+other. If each image contains its own self-contained version of the same relationship \
+(each shows a person with their own animal; each shows a performer with their own \
+audience), that is a category, not complementary.
 - contrastive: the same subject or role in opposing versions \
-(triumph vs. defeat; the same street empty vs. crowded)
+(triumph vs. defeat; the same street empty vs. crowded). It must be the SAME subject \
+or role — two different subjects in different moods or activities are NOT contrastive.
 - echo: near-identical visual form — the same object, gesture, or shape in both images \
 (two open hands, two mouths, two doorways). Shared theme alone is NOT echo.
 - ironic: text, sign, or symbol visible in one image that the other literalizes, \
@@ -77,9 +105,40 @@ system already noticed a possible link and named it; your job is to confirm whet
 is a genuine THIRD-MEANING pair — one that creates meaning neither image carries alone — \
 or a coincidence.
 
-Confirm (connected=true) only if the proposed connection holds and produces a real third \
-meaning. Reject (connected=false) if the link is superficial (shared clothing, shared \
-generic action like walking or looking, same setting) or simply does not hold.
+Work through these checks in order:
+
+CHECK 1 — PREMISE. The proposal comes from a noisy automated system: every FACTUAL claim \
+in it must be supported by the captions. A real-versus-depicted premise requires one \
+caption to actually describe a depiction — a mural, drawing, statue, toy, poster, or \
+printed image of the thing; words or graphics printed on a real sign do not make the \
+sign a "depicted version". If a factual claim fails, reject. The proposed LABEL (ironic \
+/ contrastive / complementary) is different — it is only a guess. If the facts hold but \
+the label fits imperfectly, do NOT reject; confirm and choose the fitting \
+relationship_type yourself.
+
+CHECK 2 — TEXT-VS-WORLD. When the link is a sign or text in one image and the named idea \
+enacted in the other, text and world are different registers, so this IS a genuine \
+third-meaning pattern: a sidewalk sign saying "SMILE" paired with an unrelated woman \
+genuinely beaming is a REAL pair — one image states the idea, the other lives it. \
+Embodiment alone is enough; contradiction is NOT required; confirm it (usually as \
+ironic). The pattern fails only when the enacting image is the same kind of scene the \
+sign belongs to and the idea is inherent there: a protest sign demanding "solidarity" \
+paired with another protest showing solidarity is restatement — every protest shows \
+solidarity.
+
+CHECK 3 — THIRD MEANING. If the best description of the pair merely restates what both \
+images share ("two protests", "two people holding signs"), reject: category membership \
+is not a third meaning, even when the proposed connection technically matches both \
+captions. A shared category does not by itself disqualify the pair, but the connection \
+must then be specific and beyond the category, and it must run through the MAIN subjects \
+of both images — a link through an incidental or background object (an American flag \
+appearing somewhere in each of two political scenes) connects nothing; the pair remains \
+"two political events". Also reject when the link is superficial: shared clothing, \
+shared generic action (walking, looking), same setting.
+
+EVIDENCE RULE: your rationale must cite the specific caption details the connection rests \
+on. Never assert a distinction the captions do not state — real vs. staged, earnest vs. \
+theatrical, nuanced vs. unified.
 
 Do NOT use visual properties (color, light, composition) as the basis. Judge on subject, \
 action, role, claim-vs-enactment, real-vs-depiction, or source-vs-receiver.
