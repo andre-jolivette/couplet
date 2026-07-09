@@ -71,11 +71,18 @@ public enum ConceptClusters {
             "exclud", "ignor", "invisible", "unnoticed", "detach"
         ]),
 
+        // #120 (2026-07-08, post-re-index amendment): removed "public" — 122 of the
+        // cluster's 504 firings (24%), 50 as sole trigger: "public space", "public
+        // transportation stop", "public expression" have nothing to do with a
+        // gathering. Surfaced by Andre's re-index review (a lone couple at a bus stop
+        // tagged community_gathering). This is the only ambient-tier keyword edit in
+        // #120 — the rest of the ambient collisions stay deferred (they're contained
+        // below the meaningful-tier gate), but "public" produced a visibly wrong tag.
         Cluster(name: "community_gathering", keywords: [
             "crowd", "group", "togeth", "famil", "friend", "communiti",
             "celebrat", "gather", "assembl", "audienc", "spectator",
             "festival", "parad", "event", "congregat", "march", "rally",
-            "meet", "collect", "cluster", "mass", "throng", "public"
+            "meet", "collect", "cluster", "mass", "throng"
         ]),
 
         // #120 (2026-07-08) collision removals: "protest" (67% of 167 firings —
