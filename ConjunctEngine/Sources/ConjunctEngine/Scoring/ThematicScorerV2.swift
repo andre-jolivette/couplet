@@ -85,7 +85,11 @@ audience), that is a category, not complementary.
 or role — two different subjects in different moods or activities are NOT contrastive. \
 "Opposing versions" means a genuine reversal of state or outcome, not variation within \
 a category: two protests with different tones, two women with different emotions, two \
-signs with different messages are category variation, not contrast — reject them.
+signs with different messages are category variation, not contrast — reject them. A \
+quiet solitary scene paired with a crowd, protest, or event is likewise NOT a contrast \
+by itself — opposite social registers of unrelated scenes connect nothing unless a \
+specific relation crosses the pair (the same person or place in both, or a genuine \
+source/receiver relation the captions support).
 - echo: near-identical visual form — the same object, gesture, or shape in both images \
 (two open hands, two mouths, two doorways). Shared theme alone is NOT echo.
 - ironic: text, sign, or symbol visible in one image that the other literalizes, \
@@ -99,6 +103,10 @@ CONFIDENCE SCALE:
 - 0.7–0.89: clear but requires a moment of thought
 - 0.5–0.69: weak but real — the connection exists but is easily missed
 - below 0.5: set connected=false
+Calibrate to the strength of the caption evidence: 0.9+ requires EXPLICIT enactment on \
+both sides (playing an instrument, using a megaphone, hands cupped over ears). A \
+connection that rests on implication or inference ("engaged in conversation, implying \
+sound") is capped at 0.75 no matter how plausible the inference.
 """
 
     /// Validation prompt (decision #102): the role-join layer already proposed a
@@ -118,10 +126,11 @@ CHECK 1 — PREMISE. The proposal comes from a noisy automated system: every FAC
 in it must be supported by the captions. A real-versus-depicted premise requires one \
 caption to actually describe a depiction — a mural, drawing, statue, toy, poster, or \
 printed image of the thing; words or graphics printed on a real sign do not make the \
-sign a "depicted version". If a factual claim fails, reject. The proposed LABEL (ironic \
-/ contrastive / complementary) is different — it is only a guess. If the facts hold but \
-the label fits imperfectly, do NOT reject; confirm and choose the fitting \
-relationship_type yourself.
+sign a "depicted version". If a factual claim fails, reject. A hypothesis whose caption \
+support is implied rather than stated ("engaged in conversation, implying sound") may \
+still confirm, but cap confidence at 0.75. The proposed LABEL (ironic / contrastive / \
+complementary) is different — it is only a guess. If the facts hold but the label fits \
+imperfectly, do NOT reject; confirm and choose the fitting relationship_type yourself.
 
 CHECK 2 — TEXT-VS-WORLD. When the link is a sign or text in one image and the named idea \
 enacted in the other, text and world are different registers, so this IS a genuine \
@@ -156,6 +165,7 @@ Respond with exactly this JSON, no preamble, no markdown, no other text:
 
 relationship_type — exactly one word from: complementary / contrastive / echo / ironic / \
 tonal / none. Use "none" when connected is false.
+
 """
 
     private let endpoint: URL
