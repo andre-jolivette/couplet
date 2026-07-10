@@ -153,4 +153,14 @@ final class RoleJoinsTests: XCTestCase {
         // bridge must match on the whole claim string, not a token contained in it.
         XCTAssertNil(RoleJoins.join(missRodeo, handHolding))
     }
+
+    func testBridgeConnectsMissClaimToHoldHandsAlone() {
+        // #125: extraction's "tenderness" affect emission is decode-fragile (dropped
+        // by unrelated prompt additions), while the literal "hold hands" enact is
+        // stable — the bridge must fire on it even when the affect word is absent.
+        let holdOnly = RoleProfile(subjects: ["mannequin","mannequin"], enacts: ["hold hands"])
+        let j = RoleJoins.join(missSign, holdOnly)
+        XCTAssertEqual(j?.priority, 2)
+        XCTAssertEqual(j?.relationshipType, "ironic")
+    }
 }

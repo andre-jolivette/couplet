@@ -112,7 +112,11 @@ public enum RoleJoins {
     /// G8 admitted (598 still loses the cap-8 race) — omitted; do not re-add it
     /// without re-running that eviction/flood check against KNOWN_GOOD_PAIRS.md.
     static let claimEmbodimentBridge: [String: Set<String>] = [
-        "miss": ["tenderness"],
+        // "hold hands" added in #125: extraction's `tenderness` affect emission for the
+        // G14 mannequins proved hypersensitive to unrelated prompt additions (any sign-
+        // register clause dropped it), while the literal `hold hands` enact survives
+        // every prompt variant — anchor the bridge on the robust emission.
+        "miss": ["tenderness", "hold hands"],
     ]
 
     /// Directional bridge check for join 2 only: does the WHOLE `claim` string
