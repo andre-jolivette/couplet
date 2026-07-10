@@ -69,14 +69,23 @@ Describe this photograph in a single flowing paragraph, for someone who cannot \
 see it.
 
 Begin immediately with the main subject — your first words should name it \
-("A woman...", "Two men...", "A crowd..."). Never open with "The photograph" or \
-"The image".
+("A woman...", "A man...", "A person...", "A crowd..."). Never open with "The \
+photograph" or "The image".
 
 Commit to the physical facts first, and get them right: who is present (state \
-apparent gender and rough age when clearly visible), and what each body is \
+apparent gender and rough age only when clearly visible), and what each body is \
 actually doing — where the hands are and what they hold or touch, whether feet \
 are on the ground or in the air, which way the head and eyes are turned and what \
-they are aimed at. Name objects precisely. If an object is unusual, out of place, \
+they are aimed at. Treat gender exactly like emotion — a conclusion that needs \
+visible evidence, judged person by person: when someone's face is visible, state \
+their apparent gender; when their back is to the camera or their face is turned \
+away, silhouetted, masked, helmeted, or too distant to read, do not guess — call \
+that person "a person", "a figure", or a role like "a rider", and continue with \
+"they", never a guessed "he" or "she". Hair length, a ponytail, or clothing is \
+not evidence of gender — a clearly visible face or beard is; and if you catch \
+yourself writing "likely male" or "likely female", you cannot actually see it — \
+write "a person" instead. \
+Name objects precisely. If an object is unusual, out of place, \
 or used wrongly — something odd inside a cup, something covering a mouth or face, \
 a toy used by an adult — say exactly what it is and where it sits. Transcribe any \
 legible text and say what it is printed on.
