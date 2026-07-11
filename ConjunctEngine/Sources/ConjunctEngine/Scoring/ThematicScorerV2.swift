@@ -16,157 +16,221 @@ public struct ThematicV2Result: Sendable {
 
 // MARK: - Scorer
 
-/// Calls qwen2.5:14b-instruct via the local Ollama server to evaluate whether two
-/// photographs form a meaningful thematic pair. Runs sequentially — one request at
-/// a time — because Ollama handles one inference at a time.
+/// Evidence-grounded pair judge (decision #127). The LLM never emits a verdict:
+/// it extracts typed FINDINGS with verbatim caption quotes (grammar-constrained
+/// JSON via Ollama structured output); `JudgeEvidence` verifies every quote
+/// mechanically against the captions and discards unsupported claims; and
+/// `JudgeVerdict` computes connected/confidence/type/rationale from what
+/// survives via a fixed, unit-tested table. Fabricated rationales cannot reach
+/// the DB — the stored rationale is templated from verified quotes only.
 ///
-/// Warm inference is ~3–4s per pair; cold model load needs extra headroom.
-/// Throws on connection/HTTP errors; returns nil on unparseable LLM output (#89).
+/// One narrow judgment kernel remains an LLM question (Stage 4): a verified
+/// text-vs-world finding between two images of the same scene kind may be
+/// restatement ("solidarity" sign at a protest ↔ another protest); a tiny
+/// binary probe decides "is the idea inherent to the scene kind?".
+///
+/// Warm extraction is ~5–11s per pair; cold model load needs extra headroom.
+/// Throws on connection/HTTP errors; returns nil on unusable LLM output (#89).
 public actor ThematicScorerV2 {
 
-    private static let kSystemPrompt = """
-You evaluate whether two photographs form a meaningful thematic pair.
+    /// Findings-extraction prompt. ONE prompt serves both the cold path and
+    /// the validate path (the role hypothesis rides in the user prompt as a
+    /// hint to ground) — constant system prompt maximizes KV prefix reuse (#93).
+    static let kExtractPrompt = """
+You analyze two photograph captions and report FINDINGS about how the images relate. \
+You do NOT decide whether they form a good pair and you do NOT give a score — a \
+separate system does that from your findings.
 
-A pair is connected ONLY if it creates meaning that neither image conveys alone. \
-Shared genre, shared location, or shared lighting alone do not make a pair connected.
+A finding is one specific link between the two captions. Report every finding you can \
+see, each with VERBATIM evidence quotes. Kinds:
 
-Visual properties are evaluated by a separate system — do not use them as the \
-basis for a thematic connection. This includes: shared color, palette, vibrancy, \
-brightness, light quality, or compositional style. If you find yourself writing a \
-rationale that mentions color, hue, tone, brightness, or visual style — stop. \
-That is an aesthetic connection, not a thematic one. Set connected=false. \
-A thematic connection must be based solely on subject, action, role, emotion, \
-or narrative — things that have nothing to do with how the image looks.
+- text_vs_world: text/sign/writing quoted in one caption, and the OTHER caption \
+describes that idea enacted, lived, or contradicted in the world. Evidence: the sign \
+text span, and the enacting span.
+- source_receiver: one caption describes producing/emitting a phenomenon (sound, \
+command, care), the other describes receiving/blocking/reacting to that same \
+phenomenon. Evidence: the producing span and the receiving span.
+- same_subject_reversal: the SAME specific subject, place, or object appears in both \
+captions in opposed states or outcomes. Evidence: both spans.
+- real_vs_depicted: a thing physically present in one caption appears in the other \
+only as an image, toy, statue, mural, or other depiction. Evidence: the real span and \
+the depiction span.
+- gesture_echo: the same specific gesture or physical configuration described in both \
+captions. Evidence: both spans.
+- shared_category: both captions describe the same kind of scene or subject (two \
+protests, two portraits, two street scenes). Evidence: one span from each.
 
-THE THIRD-MEANING TEST: before connecting a pair, form the best one-sentence description \
-of what the pair says TOGETHER. If that sentence merely restates what both images share — \
-"both show skateboarders performing tricks", "both show people carrying animals", "both \
-show protesters holding signs" — the pair is a category, not a connection. Set \
-connected=false. A shared category does not by itself disqualify a pair, but the \
-connection must then be something specific BEYOND the category, stated in the captions: \
-the same subject in opposing versions, a genuine source and a genuine receiver of one \
-phenomenon, or a claim one image makes that the other subverts. Do not invent a \
-relational story ("one action leads to the next") to link two images of the same kind \
-of scene. Adding "but they differ in mood, message, or approach" to a shared category is \
-STILL restatement — any two images of the same kind of scene differ somehow; difference \
-within a category is not a connection ("both protests, one confrontational and one \
-peaceful" = two protests = reject). Self-check: if your rationale would begin "Both \
-images show..." followed by a shared category of subject or activity, that is \
-restatement — set connected=false, even when a "but they contrast in..." clause follows. \
-Likewise if it merely describes each image separately ("one shows X, while the other \
-shows Y") without naming a specific relationship that crosses the pair.
+RULES for evidence:
+- quoteA must be COPIED CHARACTER-FOR-CHARACTER from IMAGE A's caption; quoteB from \
+IMAGE B's caption. Never paraphrase, never merge words from different sentences. Keep \
+each quote under 15 words.
+- For each side, set explicit=true only if the span DIRECTLY states the thing (a \
+megaphone being spoken into is explicit sound production; "engaged in conversation" \
+is implied sound, so explicit=false). A physical action that is directly described \
+counts as explicit even when its purpose is interpreted — "hands cupping her ears as \
+if blocking out noise" is EXPLICIT reception.
+- If a link you suspect has no supporting span in a caption, set that quote to "" — \
+do not invent one.
+- If a PROPOSED CONNECTION is given, it comes from a noisy automated system: try to \
+ground it in caption spans as a finding, but if the captions do not support it, do \
+not force it — report only what the captions actually contain.
 
-EVIDENCE RULE: every claim in your rationale must be traceable to specific caption text. \
-Never assert a distinction the captions do not state — do not call one image "real" and \
-the other "staged", or one "earnest" and the other "theatrical", unless a caption \
-explicitly describes a staging, depiction, or performance. If the relationship cannot \
-be supported by caption evidence, set connected=false.
-
-Respond with exactly this JSON structure. No preamble, no markdown, no other text:
-{"together": "one sentence: what the pair says TOGETHER beyond what the images share — \
-if you can only describe each image separately or name a shared category, write exactly \
-RESTATEMENT here and set connected=false", \
-"connected": true or false, "confidence": 0.0 to 1.0, "relationship_type": "one word", \
-"rationale": "one sentence"}
-
-RELATIONSHIP TYPE — output exactly one word from this list: \
-complementary / contrastive / echo / ironic / tonal / none
-Use "none" when connected is false.
-
-Definitions — use the narrowest definition that fits:
-- complementary: one image is the SOURCE of something; the other is the RECEIVER \
-(sound produced vs. heard; command issued vs. obeyed; tenderness offered vs. accepted). \
-The phenomenon must CROSS the pair — its source in one image, its reception in the \
-other. If each image contains its own self-contained version of the same relationship \
-(each shows a person with their own animal; each shows a performer with their own \
-audience), that is a category, not complementary.
-- contrastive: the same subject or role in opposing versions \
-(triumph vs. defeat; the same street empty vs. crowded). It must be the SAME subject \
-or role — two different subjects in different moods or activities are NOT contrastive. \
-"Opposing versions" means a genuine reversal of state or outcome, not variation within \
-a category: two protests with different tones, two women with different emotions, two \
-signs with different messages are category variation, not contrast — reject them. A \
-quiet solitary scene paired with a crowd, protest, or event is likewise NOT a contrast \
-by itself — opposite social registers of unrelated scenes connect nothing unless a \
-specific relation crosses the pair (the same person or place in both, or a genuine \
-source/receiver relation the captions support).
-- echo: near-identical visual form — the same object, gesture, or shape in both images \
-(two open hands, two mouths, two doorways). Shared theme alone is NOT echo.
-- ironic: text, sign, or symbol visible in one image that the other literalizes, \
-subverts, or contradicts
-- tonal: shared emotional atmosphere where subjects completely differ \
-(both carry dread, or absurdity, or tenderness — without sharing subject or form)
-- none: no meaningful connection
-
-CONFIDENCE SCALE:
-- 0.9–1.0: connection is undeniable, immediately apparent to any viewer
-- 0.7–0.89: clear but requires a moment of thought
-- 0.5–0.69: weak but real — the connection exists but is easily missed
-- below 0.5: set connected=false
-Calibrate to the strength of the caption evidence: 0.9+ requires EXPLICIT enactment on \
-both sides (playing an instrument, using a megaphone, hands cupped over ears). A \
-connection that rests on implication or inference ("engaged in conversation, implying \
-sound") is capped at 0.75 no matter how plausible the inference.
+An empty findings list is a valid answer.
 """
 
-    /// Validation prompt (decision #102): the role-join layer already proposed a
-    /// connection; the judge only confirms or rejects it. This converts the judge's
-    /// task from cold *discovery* (which no local model does — 14b scores 0/8 cold)
-    /// to *validation* (where 14b scores 6/7 recall, 4/4 precision). The join layer
-    /// does recall; this prompt does precision.
-    private static let kValidatePrompt = """
-You are validating a PROPOSED thematic connection between two photographs. A separate \
-system already noticed a possible link and named it; your job is to confirm whether it \
-is a genuine THIRD-MEANING pair — one that creates meaning neither image carries alone — \
-or a coincidence.
+    // MARK: Probe prompts (decision #127)
+    //
+    // The judgment kernels that cannot be mechanized, each a narrow
+    // grammar-constrained question asked only on would-be confirms.
 
-Work through these checks in order:
-
-CHECK 1 — PREMISE. The proposal comes from a noisy automated system: every FACTUAL claim \
-in it must be supported by the captions. A real-versus-depicted premise requires one \
-caption to actually describe a depiction — a mural, drawing, statue, toy, poster, or \
-printed image of the thing; words or graphics printed on a real sign do not make the \
-sign a "depicted version". If a factual claim fails, reject. A hypothesis whose caption \
-support is implied rather than stated ("engaged in conversation, implying sound") may \
-still confirm, but cap confidence at 0.75. The proposed LABEL (ironic / contrastive / \
-complementary) is different — it is only a guess. If the facts hold but the label fits \
-imperfectly, do NOT reject; confirm and choose the fitting relationship_type yourself.
-
-CHECK 2 — TEXT-VS-WORLD. When the link is a sign or text in one image and the named idea \
-enacted in the other, text and world are different registers, so this IS a genuine \
-third-meaning pattern: a sidewalk sign saying "SMILE" paired with an unrelated woman \
-genuinely beaming is a REAL pair — one image states the idea, the other lives it. \
-Embodiment alone is enough; contradiction is NOT required; confirm it (usually as \
-ironic). The pattern fails only when the enacting image is the same kind of scene the \
-sign belongs to and the idea is inherent there: a protest sign demanding "solidarity" \
-paired with another protest showing solidarity is restatement — every protest shows \
-solidarity.
-
-CHECK 3 — THIRD MEANING. If the best description of the pair merely restates what both \
-images share ("two protests", "two people holding signs"), reject: category membership \
-is not a third meaning, even when the proposed connection technically matches both \
-captions. A shared category does not by itself disqualify the pair, but the connection \
-must then be specific and beyond the category, and it must run through the MAIN subjects \
-of both images — a link through an incidental or background object (an American flag \
-appearing somewhere in each of two political scenes) connects nothing; the pair remains \
-"two political events". Also reject when the link is superficial: shared clothing, \
-shared generic action (walking, looking), same setting.
-
-EVIDENCE RULE: your rationale must cite the specific caption details the connection rests \
-on. Never assert a distinction the captions do not state — real vs. staged, earnest vs. \
-theatrical, nuanced vs. unified.
-
-Do NOT use visual properties (color, light, composition) as the basis. Judge on subject, \
-action, role, claim-vs-enactment, real-vs-depiction, or source-vs-receiver.
-
-Respond with exactly this JSON, no preamble, no markdown, no other text:
-{"connected": true or false, "confidence": 0.0 to 1.0, "relationship_type": "one word", \
-"rationale": "one sentence"}
-
-relationship_type — exactly one word from: complementary / contrastive / echo / ironic / \
-tonal / none. Use "none" when connected is false.
-
+    static let kInherentPrompt = """
+You answer one narrow question about photograph pairing. A sign in one photograph \
+carries a message. Both photographs show the same kind of scene. Question: is the \
+idea in the sign's message INHERENT to that kind of scene — i.e. would any typical \
+scene of that kind already show the idea, so that pairing the sign with such a scene \
+adds no meaning? Examples: "solidarity" is inherent to a protest (every protest shows \
+solidarity); "smile" is NOT inherent to a street portrait (people in portraits are \
+not necessarily smiling). Answer with JSON only.
 """
+
+    static let kTextWorldLinkPrompt = """
+You examine one proposed link between two photographs. A sign or text in one \
+photograph carries a MESSAGE. A span from the other photograph's caption describes a \
+SCENE. Task: name the single specific idea or feeling that the message states and the \
+scene physically shows. It may be direct (message "Smile", scene of a woman smiling -> \
+"smiling") or a slant emotional resonance (message about missing someone, scene of two \
+figures holding hands -> "longing for closeness"). Rules: the idea must be present in \
+BOTH the message's words and the scene's physical content. A message must state an \
+idea — a bare noun or label matching an object in the scene is a word coincidence, not \
+an idea (message "POLE", scene with a flag on a pole -> NONE). A generic everyday \
+action anyone does (walking, standing, sitting, looking, entering) is not a shared \
+idea (message "JUST WALK IN", scene of a girl walking -> NONE). If the scene merely \
+happens near the message's topic, shares generic props, clothing, or posture, or is \
+just the kind of place such a message appears, there is no link. Answer with JSON \
+only: {"link": "2-5 words naming the shared idea, or exactly NONE"}
+"""
+
+    /// Hypothesis-grounding fallback (decision #127): when validate-path
+    /// extraction produces NO verified scoring finding at all, ground the role
+    /// hypothesis directly — one focused span-retrieval call per caption. The
+    /// join templates are fixed strings, so the finding kind is inferred
+    /// deterministically; the grounded spans still pass verification, the
+    /// structural checks, and the probes. Recovers extraction decode-roll
+    /// misses on genuine role pairs (G4 class) without re-rolling extraction.
+    static let kGroundPrompt = """
+You ground one claim from a noisy automated system in caption evidence. A HYPOTHESIS \
+about a photograph PAIR is given, plus the CAPTION of ONE of the two photographs. \
+Task: quote the single span from the CAPTION (copied character-for-character, under \
+15 words) that shows THIS photograph's side of the hypothesis. If the caption does \
+not support the hypothesis's claim about this photograph, answer exactly NONE. \
+Answer with JSON only: {"span": "..."}
+"""
+
+    static let kSamePhenomenonPrompt = """
+You examine one proposed source-receiver link between two photographs. A SOURCE span \
+describes something being produced or emitted (sound, a command, care). A RECEIVER \
+span from the other photograph describes a reaction. Two questions. First: does the \
+receiver span describe receiving, blocking, or reacting to the SAME phenomenon the \
+source emits — so that the phenomenon genuinely crosses from one photograph to the \
+other? A woman cupping her ears blocks out the sound a megaphone produces (true). \
+People dancing together are not receiving a speech (false). Two people making similar \
+gestures or expressions are NOT source and receiver (false). Second: is the link \
+EXPLICIT on both sides — a directly described physical action or instrument on each \
+side (megaphone to mouth; hands cupped over ears), rather than an inference from \
+context ("engaged in conversation" implies sound but is not explicit)? Answer with \
+JSON only: {"same_phenomenon": true or false, "explicit_both_sides": true or false}
+"""
+
+    static let kSameKindPrompt = """
+You examine one proposed real-versus-depicted link between two photographs. SPAN 1 \
+describes a thing physically present in one photograph. SPAN 2 describes a depicted, \
+painted, sculpted, printed, or modeled thing in the other. Question: is the depicted \
+thing a version of the SAME category of thing as the real one? Real pigeons and a \
+painted peacock are both birds (true). A real bus and toy cars are not the same thing \
+(false). Answer with JSON only: {"same_kind": true or false}
+"""
+
+    /// Retrieval fallback (decision #127): when extraction reports a verified
+    /// sign-side quote but an empty/unverified world side (a recurring decode
+    /// pattern on genuine embodiment pairs), ask the model the focused
+    /// retrieval question instead of re-rolling the whole extraction. The
+    /// returned span still passes mechanical verification and the link probe.
+    static let kRetrievePrompt = """
+You retrieve evidence from a photograph caption. A MESSAGE (text on a sign in a \
+different photograph) is given, plus a CAPTION. Task: quote the single span from the \
+CAPTION (copied character-for-character, under 15 words) that shows the message's \
+idea or feeling physically present — an action, gesture, expression, or object that \
+lives, embodies, or subverts the message. Slant emotional resonance counts (message \
+about missing someone -> a span of two figures holding hands). If nothing in the \
+caption shows the idea, answer exactly NONE. Answer with JSON only: {"span": "..."}
+"""
+
+    static let kSameSubjectPrompt = """
+You examine one proposed contrast between two photographs. Two caption spans are \
+given. Question: do they describe the SAME specific subject (the same person, place, \
+or object) in genuinely OPPOSED states or outcomes? Two different people of the same \
+kind (two men in black shirts at different protests), or the same subject in merely \
+different-but-not-opposed poses, do NOT qualify. Answer with JSON only: \
+{"same_subject_opposed": true or false}
+"""
+
+    static let kSameGesturePrompt = """
+You examine one proposed gesture echo between two photographs. Two caption spans are \
+given, each describing a gesture, and optionally the kind of scene both photographs \
+share. Question: are they the SAME specific gesture or physical configuration (two \
+raised fists; two open palms), AND is the gesture more than what the shared activity \
+already implies (two skateboarders both balancing with arms out is inherent to \
+skateboarding, not an echo; pointing up vs thumbs-down are different gestures)? \
+Answer with JSON only: {"same_gesture": true or false}
+"""
+
+    private static let kExtractSchema: [String: Any] = [
+        "type": "object",
+        "properties": [
+            "findings": [
+                "type": "array",
+                "items": [
+                    "type": "object",
+                    "properties": [
+                        "kind": ["type": "string",
+                                 "enum": FindingKind.allCases.map(\.rawValue)],
+                        "quoteA": ["type": "string"],
+                        "quoteB": ["type": "string"],
+                        "explicitA": ["type": "boolean"],
+                        "explicitB": ["type": "boolean"],
+                        "note": ["type": "string"]
+                    ],
+                    "required": ["kind", "quoteA", "quoteB", "explicitA", "explicitB", "note"]
+                ]
+            ]
+        ],
+        "required": ["findings"]
+    ]
+
+    private static func boolSchema(_ field: String) -> [String: Any] {
+        ["type": "object",
+         "properties": [field: ["type": "boolean"]],
+         "required": [field]]
+    }
+
+    private static let kLinkSchema: [String: Any] = [
+        "type": "object",
+        "properties": ["link": ["type": "string"]],
+        "required": ["link"]
+    ]
+
+    private static let kSpanSchema: [String: Any] = [
+        "type": "object",
+        "properties": ["span": ["type": "string"]],
+        "required": ["span"]
+    ]
+
+    private static let kPhenomenonSchema: [String: Any] = [
+        "type": "object",
+        "properties": ["same_phenomenon": ["type": "boolean"],
+                       "explicit_both_sides": ["type": "boolean"]],
+        "required": ["same_phenomenon", "explicit_both_sides"]
+    ]
 
     private let endpoint: URL
     private let model: String
@@ -179,34 +243,32 @@ tonal / none. Use "none" when connected is false.
 
     public init(
         host: String = "http://127.0.0.1:11434",  // IPv4 explicit — localhost resolves IPv6 first on macOS
-        model: String = "qwen2.5:14b-instruct",    // #102: 14b validates role hypotheses 6/7,4/4; benchmarked best local
-        timeoutSeconds: Double = 90                 // 14b is ~3.5s/pair warm; cold load needs headroom
+        model: String = "qwen2.5:14b-instruct",    // #102: benchmarked best local; #127 keeps it (task structure, not scale, was the bottleneck)
+        timeoutSeconds: Double = 90                 // extraction is ~5–11s/pair warm; cold load needs headroom
     ) {
         self.endpoint = URL(string: "\(host)/api/generate")!
         self.model = model
         self.timeoutSeconds = timeoutSeconds
     }
 
-    /// Scores a pair from its captions.
+    /// Scores a pair from its captions (cold path — no hypothesis hint).
     ///
     /// - Returns: A `ThematicV2Result` on success, or `nil` when the LLM returned a
-    ///   response the JSON parser could not interpret (model output format issue — the
-    ///   pair stays unscored in the DB and can be retried in a later pass). Also returns
-    ///   `nil` when the Swift task is cancelled (caller should check `Task.isCancelled`).
+    ///   response the parser could not interpret (the pair stays unscored in the DB
+    ///   and can be retried in a later pass). Also returns `nil` when the Swift task
+    ///   is cancelled (caller should check `Task.isCancelled`).
     /// - Throws: Any underlying network or HTTP error when Ollama is unreachable or
     ///   returns a non-200 status. Callers use this to decide whether to abort.
     public func score(captionA: String, captionB: String) async throws -> ThematicV2Result? {
-        let prompt = "IMAGE A: \(captionA)\n\nIMAGE B: \(captionB)"
-        guard let raw = try await callOllama(system: Self.kSystemPrompt, prompt: prompt) else { return nil }
-        return parseResult(from: raw)
+        try await judge(captionA: captionA, captionB: captionB, hypothesis: nil)
     }
 
-    /// Validates a role-join candidate against its proposed connection (decision #102).
+    /// Validates a role-join candidate: the proposed connection is passed to the
+    /// extractor as a hint to ground (#102's validation framing preserved — the
+    /// hint aims extraction, but ungroundable hypotheses die at verification).
     /// Same return/throw contract as `score()`.
     public func validate(captionA: String, captionB: String, hypothesis: String) async throws -> ThematicV2Result? {
-        let prompt = "IMAGE A: \(captionA)\n\nIMAGE B: \(captionB)\n\nPROPOSED CONNECTION: \(hypothesis)\n\nIs this a genuine third-meaning pair?"
-        guard let raw = try await callOllama(system: Self.kValidatePrompt, prompt: prompt) else { return nil }
-        return parseResult(from: raw)
+        try await judge(captionA: captionA, captionB: captionB, hypothesis: hypothesis)
     }
 
     /// Returns true if the Ollama server is reachable and `model` is available.
@@ -224,18 +286,235 @@ tonal / none. Use "none" when connected is false.
         return models.contains { ($0["name"] as? String)?.hasPrefix(model) == true }
     }
 
-    // MARK: - Private
+    // MARK: - Pipeline
 
-    /// Shared Ollama call. Returns the model's raw `response` text, or nil on task
-    /// cancellation. Throws on real network/HTTP failures so the caller can track
-    /// consecutive failures and abort if the server is down.
-    private func callOllama(system: String, prompt: String) async throws -> String? {
+    private func judge(captionA: String, captionB: String, hypothesis: String?) async throws -> ThematicV2Result? {
+        var prompt = "IMAGE A: \(captionA)\n\nIMAGE B: \(captionB)"
+        if let hypothesis {
+            prompt += "\n\nPROPOSED CONNECTION (from a noisy automated system — ground it or ignore it): \(hypothesis)"
+        }
+        guard let raw = try await callOllama(system: Self.kExtractPrompt, prompt: prompt,
+                                             schema: Self.kExtractSchema) else { return nil }
+        guard let findings = Self.parseFindings(from: raw) else {
+            print("ThematicScorerV2: failed to parse findings — raw response: \(raw.prefix(400))")
+            return nil
+        }
+
+        var verified = findings.map { JudgeEvidence.verify($0, captionA: captionA, captionB: captionB) }
+        verified = try await retrievalPass(verified, captionA: captionA, captionB: captionB)
+        let computed = JudgeVerdict.compute(findings: verified)
+        var verdict = try await finalize(computed)
+
+        // Grounding fallback: extraction decode rolls sometimes miss a genuine
+        // role connection, or report it in a shape the structural checks
+        // discard. When no candidate survived to be judged and a hypothesis
+        // exists, ground the hypothesis directly and re-run the normal checks
+        // (which the grounded finding must still pass — this cannot loop).
+        if !verdict.connected, !computed.hadCandidates, let hypothesis,
+           let grounded = try await groundHypothesis(hypothesis, captionA: captionA, captionB: captionB) {
+            let categories = verified.filter { $0.finding.kind == .sharedCategory }
+            verdict = try await finalize(JudgeVerdict.compute(findings: [grounded] + categories))
+        }
+
+        return ThematicV2Result(
+            connected: verdict.connected,
+            confidence: verdict.confidence,
+            sharedContext: nil,
+            relationshipType: verdict.relationshipType,
+            rationale: verdict.rationale
+        )
+    }
+
+    /// Runs the verdict's probes — narrow judgment kernels. All must pass;
+    /// any failure rejects with an honest, templated rationale.
+    private func finalize(_ computed: JudgeVerdictResult) async throws -> JudgeVerdictResult {
+        var verdict = computed
+        guard verdict.connected else { return verdict }
+        for probe in verdict.probes {
+            if let rejection = try await run(probe: probe, verdict: &verdict) {
+                return .rejected(rejection)
+            }
+        }
+        return verdict
+    }
+
+    /// Grounds a role-join hypothesis in one caption span per side. The join
+    /// templates are fixed strings (RoleJoins), so the finding kind is a
+    /// deterministic mapping; unknown templates don't ground.
+    private func groundHypothesis(_ hypothesis: String,
+                                  captionA: String, captionB: String) async throws -> VerifiedFinding? {
+        let kind: FindingKind
+        if hypothesis.contains("is the SOURCE of") {
+            kind = .sourceReceiver
+        } else if hypothesis.contains("announces or demands") || hypothesis.contains("warns of or names") {
+            kind = .textVsWorld
+        } else if hypothesis.contains("appears REAL in one image") {
+            kind = .realVsDepicted
+        } else {
+            return nil
+        }
+
+        func span(in caption: String) async throws -> String? {
+            guard let raw = try await callOllama(system: Self.kGroundPrompt,
+                                                 prompt: "HYPOTHESIS: \(hypothesis)\n\nCAPTION: \(caption)",
+                                                 schema: Self.kSpanSchema),
+                  let obj = Self.parseJSONObject(raw),
+                  let s = obj["span"] as? String,
+                  s.uppercased() != "NONE",
+                  JudgeEvidence.quoteMatches(s, in: caption),
+                  // Caption speculation ("perhaps a shout") cannot ground a
+                  // hypothesis — grounding demands physical content.
+                  !JudgeVerdict.isInterpretive(s) else { return nil }
+            return s
+        }
+
+        guard let sA = try await span(in: captionA),
+              let sB = try await span(in: captionB) else { return nil }
+        let f = JudgeFinding(kind: kind, quoteA: sA, quoteB: sB,
+                             explicitA: false, explicitB: false, note: "grounded hypothesis")
+        return JudgeEvidence.verify(f, captionA: captionA, captionB: captionB)
+    }
+
+    /// Patches findings where the extraction found a sign-side quote but left
+    /// the world side empty/unverified — a recurring decode pattern on genuine
+    /// embodiment pairs (G6/G7/G14 class). One focused retrieval call per such
+    /// finding (max 2 per pair); the retrieved span must still pass mechanical
+    /// verification, and the rebuilt finding goes through the normal probes.
+    private func retrievalPass(_ verified: [VerifiedFinding],
+                               captionA: String, captionB: String) async throws -> [VerifiedFinding] {
+        var out: [VerifiedFinding] = []
+        var retrievals = 0
+        for vf in verified {
+            let signOnA = vf.signTextA && !vf.verifiedB
+            let signOnB = vf.signTextB && !vf.verifiedA
+            guard retrievals < 2, vf.finding.kind != .sharedCategory, signOnA != signOnB,
+                  let message = vf.signRegionA ?? vf.signRegionB else {
+                out.append(vf)
+                continue
+            }
+            retrievals += 1
+            let worldCaption = signOnA ? captionB : captionA
+            guard let raw = try await callOllama(system: Self.kRetrievePrompt,
+                                                 prompt: "MESSAGE: \(message)\nCAPTION: \(worldCaption)",
+                                                 schema: Self.kSpanSchema),
+                  let obj = Self.parseJSONObject(raw),
+                  let span = obj["span"] as? String,
+                  span.uppercased() != "NONE",
+                  JudgeEvidence.quoteMatches(span, in: worldCaption) else {
+                out.append(vf)
+                continue
+            }
+            let f = vf.finding
+            let patched = JudgeFinding(
+                kind: f.kind,
+                quoteA: signOnA ? f.quoteA : span,
+                quoteB: signOnA ? span : f.quoteB,
+                explicitA: signOnA ? f.explicitA : false,
+                explicitB: signOnA ? false : f.explicitB,
+                note: f.note)
+            out.append(JudgeEvidence.verify(patched, captionA: captionA, captionB: captionB))
+        }
+        return out
+    }
+
+    /// Executes one probe. Returns nil when the probe passes (possibly
+    /// enriching the verdict's rationale), or a rejection rationale when it
+    /// fails. Unusable probe output fails CLOSED (reject) — a confirm must be
+    /// positively supported. Network errors propagate (caller aborts the pass).
+    private func run(probe: JudgeProbe, verdict: inout JudgeVerdictResult) async throws -> String? {
+        func askBool(_ system: String, _ prompt: String, _ field: String) async throws -> Bool {
+            guard let raw = try await callOllama(system: system, prompt: prompt,
+                                                 schema: Self.boolSchema(field)),
+                  let obj = Self.parseJSONObject(raw),
+                  let answer = obj[field] as? Bool else { return false }
+            return answer
+        }
+
+        switch probe {
+        case .textWorldLink(let message, let scene):
+            guard let raw = try await callOllama(system: Self.kTextWorldLinkPrompt,
+                                                 prompt: "MESSAGE: \(message)\nSCENE: \(scene)",
+                                                 schema: Self.kLinkSchema),
+                  let obj = Self.parseJSONObject(raw),
+                  let link = obj["link"] as? String else {
+                return "Link probe unusable — confirm withheld."
+            }
+            let trimmed = link.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.isEmpty || trimmed.uppercased() == "NONE" {
+                return "The scene span does not live or subvert the sign's message — coexistence, not a third meaning."
+            }
+            // Enrich the rationale with the named idea (2–5 bounded words).
+            if verdict.rationale.count + trimmed.count + 4 <= 200 {
+                verdict.rationale = String(verdict.rationale.dropLast()) + " — \(trimmed)."
+            }
+            return nil
+
+        case .inherentIdea(let message, let category):
+            let prompt = "SIGN MESSAGE: \(message)\nSCENE KIND OF BOTH PHOTOGRAPHS: \(category)"
+            if try await askBool(Self.kInherentPrompt, prompt, "inherent") {
+                return "The sign's idea is inherent to the scene kind both images share — restatement, not a third meaning."
+            }
+            return nil
+
+        case .samePhenomenon(let source, let receiver):
+            let prompt = "SOURCE: \(source)\nRECEIVER: \(receiver)"
+            guard let raw = try await callOllama(system: Self.kSamePhenomenonPrompt, prompt: prompt,
+                                                 schema: Self.kPhenomenonSchema),
+                  let obj = Self.parseJSONObject(raw),
+                  let same = obj["same_phenomenon"] as? Bool else {
+                return "Phenomenon probe unusable — confirm withheld."
+            }
+            guard same else {
+                return "The phenomenon does not cross the pair — the reaction is not to what the source produces."
+            }
+            // The probe grades explicitness with both spans in view — more
+            // reliable than the extraction call's per-side flags (#127 v4).
+            let explicitBoth = (obj["explicit_both_sides"] as? Bool) ?? false
+            verdict.confidence = explicitBoth ? 0.95 : min(verdict.confidence, 0.75)
+            return nil
+
+        case .sameSubjectOpposed(let a, let b):
+            let prompt = "SPAN 1: \(a)\nSPAN 2: \(b)"
+            if try await askBool(Self.kSameSubjectPrompt, prompt, "same_subject_opposed") {
+                return nil
+            }
+            return "Not the same subject in opposed states — two different subjects of the same kind."
+
+        case .sameGesture(let a, let b, let category):
+            var prompt = "GESTURE 1: \(a)\nGESTURE 2: \(b)"
+            if let category { prompt += "\nSHARED SCENE KIND: \(category)" }
+            if try await askBool(Self.kSameGesturePrompt, prompt, "same_gesture") {
+                return nil
+            }
+            return "Not the same specific gesture beyond what the shared activity implies."
+
+        case .sameKindDepicted(let real, let depicted):
+            let prompt = "SPAN 1: \(real)\nSPAN 2: \(depicted)"
+            if try await askBool(Self.kSameKindPrompt, prompt, "same_kind") {
+                return nil
+            }
+            return "The depicted thing is not a version of the real one — different kinds of thing."
+        }
+    }
+
+    // MARK: - Ollama call
+
+    /// Shared Ollama call with grammar-constrained structured output (`format`
+    /// schema — eliminates the #89 unescaped-quote parse-failure class).
+    /// Returns the model's raw `response` text, or nil on task cancellation.
+    /// Throws on real network/HTTP failures so the caller can track consecutive
+    /// failures and abort if the server is down.
+    private func callOllama(system: String, prompt: String, schema: [String: Any]) async throws -> String? {
         let body: [String: Any] = [
             "model": model,
             "system": system,
             "prompt": prompt,
             "stream": false,
-            "options": ["temperature": 0.0]
+            "format": schema,
+            // num_predict bounds grammar-constrained decode: a degenerate
+            // generation gets cut (→ parse fail → nil, retryable) instead of
+            // hanging to the 90s timeout (→ throw → abort counter).
+            "options": ["temperature": 0.0, "num_predict": 800]
         ]
         let bodyData: Data
         do {
@@ -277,57 +556,34 @@ tonal / none. Use "none" when connected is false.
         return rawText
     }
 
-    private func parseResult(from raw: String) -> ThematicV2Result? {
-        var text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+    // MARK: - Parsing
 
-        // Attempt 1: find the last `}` and truncate there (handles trailing whitespace
-        // or stray characters after the closing brace).
-        if let lastBrace = text.lastIndex(of: "}") {
-            text = String(text[...lastBrace])
+    static func parseJSONObject(_ raw: String) -> [String: Any]? {
+        let text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let data = text.data(using: .utf8),
+              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else { return nil }
+        return obj
+    }
+
+    /// Lenient findings parse: unknown keys are ignored; a finding with an
+    /// unknown kind or missing fields is skipped rather than failing the pair.
+    static func parseFindings(from raw: String) -> [JudgeFinding]? {
+        guard let obj = parseJSONObject(raw),
+              let list = obj["findings"] as? [[String: Any]] else { return nil }
+        return list.compactMap { item in
+            guard let kindRaw = item["kind"] as? String,
+                  let kind = FindingKind(rawValue: kindRaw),
+                  let quoteA = item["quoteA"] as? String,
+                  let quoteB = item["quoteB"] as? String else { return nil }
+            return JudgeFinding(
+                kind: kind,
+                quoteA: quoteA,
+                quoteB: quoteB,
+                explicitA: (item["explicitA"] as? Bool) ?? false,
+                explicitB: (item["explicitB"] as? Bool) ?? false,
+                note: (item["note"] as? String) ?? ""
+            )
         }
-
-        // Attempt 2: if the object is still unclosed (model emitted a stray `)` or
-        // similar after the last field — e.g. when the rationale contains "(IMAGE B)"
-        // and the model "matches" it at the JSON level), strip back to the last `"`
-        // and append a closing brace. This recovers the rationale value intact.
-        func tryParse(_ s: String) -> [String: Any]? {
-            guard let data = s.data(using: .utf8),
-                  let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-            else { return nil }
-            return obj
-        }
-
-        var parsed: [String: Any]?
-        parsed = tryParse(text)
-        if parsed == nil, text.hasPrefix("{"), let lastQuote = text.lastIndex(of: "\"") {
-            let recovered = String(text[...lastQuote]) + "}"
-            parsed = tryParse(recovered)
-            if parsed != nil {
-                print("ThematicScorerV2: recovered unclosed JSON for pair")
-            }
-        }
-
-        guard let parsed else {
-            print("ThematicScorerV2: failed to parse JSON — raw response: \(raw)")
-            return nil
-        }
-
-        guard let connected = parsed["connected"] as? Bool,
-              let confidence = parsed["confidence"] as? Double,
-              let relationshipType = parsed["relationship_type"] as? String,
-              let rationale = parsed["rationale"] as? String else {
-            print("ThematicScorerV2: missing required fields in JSON — \(parsed.keys.joined(separator: ", "))")
-            return nil
-        }
-
-        let sharedContext = parsed["shared_context"] as? String
-
-        return ThematicV2Result(
-            connected: connected,
-            confidence: Float(confidence),
-            sharedContext: sharedContext,
-            relationshipType: relationshipType,
-            rationale: rationale
-        )
     }
 }
