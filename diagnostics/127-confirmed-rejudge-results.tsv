@@ -1,0 +1,79 @@
+pair	filenameA	filenameB	baseline	baselineType	path	new_score	new_type	verdict	stability	other_run_score	new_rationale
+127/247	20240813-_DSF8392.jpg	20241101-_DSF0811.jpg	0.95	ironic	validate	0.75	ironic	SURVIVE		0.75	"Text ""let's celebrate my 35th!"" in one image is lived in the other: ""Her expression is joyful, with a wide smile"" — celebration joy."
+157/247	20250426-_DSF5335.jpg	20241101-_DSF0811.jpg	1.00	ironic	validate	0.75	ironic	SURVIVE		0.75	"Text ""let's celebrate my 35th!"" in one image is lived in the other: ""a festival or outdoor event"" — celebration."
+239/666	20200531-DSCF4319.jpg	20200704-L1001455.jpg	0.85	complementary	cold	0.75	ironic	SURVIVE		0.80	"Text ""blm."" in one image is lived in the other: ""Her arms are raised, palms facing forward"" — protest."
+29/692	20250426-R0015770.jpg	20250510-_DSF0778.jpg	0.95	contrastive	validate	0.90	contrastive	SURVIVE		0.90	"""A small black dog with brown markings lies beside her, its head resti…"" ↔ ""A framed painting of a dog hangs on the wall above the desk."" — the same thing real in one frame, depicted in the other."
+33/572	20250217-_DSF4799.jpg	20250405-_R014662.jpg	1.00	complementary	validate	0.95	complementary	SURVIVE		0.95	"""holding a megaphone and speaking to a crowd"" meets ""hands cupping her ears as if blocking out noise"" — source and receiver of one phenomenon."
+37/572	20250315-_DSF9077.jpg	20250405-_R014662.jpg	1.00	complementary	validate	0.95	complementary	SURVIVE		0.95	"""speaking into the megaphone"" meets ""hands cupping her ears as if blocking out noise"" — source and receiver of one phenomenon."
+4/259	20240813-_DSF8179.jpg	96-20250823-_DSF6565.jpg	1.00	ironic	validate	0.95	ironic	SURVIVE	PARSE_FAIL_ONE_RUN	PARSE_FAIL	"Text ""smile you're beautiful"" in one image is lived in the other: ""a slight smile on her face"" — smiling."
+4/874	20240813-_DSF8179.jpg	07-20190120-_G130022.jpg	0.95	ironic	validate	0.95	ironic	SURVIVE		0.95	"Text ""smile"" in one image is lived in the other: ""her eyes closed and a slight smile on her face"" — smiling."
+40/259	20250208-_DSF2403.jpg	96-20250823-_DSF6565.jpg	1.00	ironic	validate	0.95	ironic	SURVIVE		0.95	"Text ""smile you're beautiful"" in one image is lived in the other: ""She smiles and looks to her right"" — smiling."
+40/572	20250208-_DSF2403.jpg	20250405-_R014662.jpg	1.00	complementary	validate	0.75	ironic	SURVIVE		0.75	"Text ""deportation back to scam."" in one image is lived in the other: ""her hands cupping her ears as if blocking out noise"" — blocking out reality."
+417/507	20250124-_DSF0913.jpg	20200531-DSCF4226.jpg	1.00	ironic	validate	0.75	ironic	SURVIVE		0.75	"Text ""ignoring is ignorance."" in one image is lived in the other: ""She looks down at the ground as she walks"" — disregard."
+50/572	20250315-_DSF9076.jpg	20250405-_R014662.jpg	1.00	complementary	validate	0.95	complementary	SURVIVE		0.95	"""holding a megaphone to his mouth"" meets ""hands cupping her ears as if blocking out noise"" — source and receiver of one phenomenon."
+707/931	20250405-_R014466.jpg	20240704-L1008984.jpg	1.00	ironic	validate	0.75	ironic	SURVIVE		0.75	"Text ""racism is not patriotism."" in one image is lived in the other: ""She holds an American flag aloft, waving it vigorously."" — political disagreement."
+94/259	20241101-_DSF0802.jpg	96-20250823-_DSF6565.jpg	1.00	ironic	validate	0.95	ironic	SURVIVE		0.95	"Text ""smile you're beautiful"" in one image is lived in the other: ""The man in the brown shirt is smiling"" — smiling."
+102/1007	20250515-_DSF1956.jpg	20250217-_DSF4780.jpg	0.95	ironic	validate	0.00	none	DROP		0.00	No caption-verifiable link between the two images.
+11/259	20250426-R0015823.jpg	96-20250823-_DSF6565.jpg	0.95	ironic	validate	0.00	none	DROP		0.00	The scene span does not live or subvert the sign's message — coexistence, not a third meaning.
+11/874	20250426-R0015823.jpg	07-20190120-_G130022.jpg	1.00	ironic	validate	0.00	none	DROP		0.00	The scene span does not live or subvert the sign's message — coexistence, not a third meaning.
+124/822	88-20250709-R0024458.jpg	94-20250802-_DSF4201.jpg	1.00	contrastive	validate	0.00	none	DROP	FLIPS_ACROSS_RUNS	0.90	Only a shared category links the images — While IMAGE A does not explicitly state the woman's gaze direction or any interaction with others, there is a contrast in that IM….
+126/441	20250405-_DSF0855.jpg	60-20250501-_DSF6985.jpg	0.95	ironic	validate	0.00	none	DROP		0.00	The scene span does not live or subvert the sign's message — coexistence, not a third meaning.
+13/572	06-20170624-nyc-rdm-080183.jpg	20250405-_R014662.jpg	1.00	echo	validate	0.00	none	DROP		0.00	The phenomenon does not cross the pair — the reaction is not to what the source produces.
+14/572	20241101-_DSF0829.jpg	20250405-_R014662.jpg	1.00	complementary	validate	0.00	none	DROP	FLIPS_ACROSS_RUNS	0.75	The phenomenon does not cross the pair — the reaction is not to what the source produces.
+152/1008	20200801-L1009481.jpg	20250419-_DSF3050.jpg	1.00	contrastive	validate	0.00	none	DROP		0.00	The reported links fail structural checks (same register, or no verifiable depiction).
+153/940	70-20250603-R0019657.jpg	20240818-L1000153.jpg	1.00	ironic	validate	0.00	none	DROP	FLIPS_ACROSS_RUNS	0.75	The scene span does not live or subvert the sign's message — coexistence, not a third meaning.
+164/247	20240810-R0008691.jpg	20241101-_DSF0811.jpg	0.95	ironic	validate	0.00	none	DROP		0.00	Only a shared category links the images — The sign text 'LET'S CELEBRATE MY 35TH!' and the caption mentioning participation in an event suggest a shared celebratory atmosp….
+166/393	20250531-_DSF4140.jpg	20250515-_DSF2140.jpg	1.00	ironic	validate	0.00	none	DROP		0.00	No caption-verifiable link between the two images.
+166/666	20250531-_DSF4140.jpg	20200704-L1001455.jpg	1.00	ironic	validate	0.00	none	DROP		0.00	The scene span does not live or subvert the sign's message — coexistence, not a third meaning.
+166/768	20250531-_DSF4140.jpg	73-20250606-_R019980.jpg	1.00	ironic	validate	0.00	none	DROP		0.00	The scene span does not live or subvert the sign's message — coexistence, not a third meaning.
+169/707	20250304-_R012535.jpg	20250405-_R014466.jpg	1.00	ironic	validate	0.00	none	DROP		0.00	The reported links fail structural checks (same register, or no verifiable depiction).
+169/969	20250304-_R012535.jpg	20250531-_R019089.jpg	1.00	contrastive	validate	0.00	none	DROP		0.00	The scene span does not live or subvert the sign's message — coexistence, not a third meaning.
+185/969	20240813-_DSF8368.jpg	20250531-_R019089.jpg	0.95	contrastive	validate	PARSE_FAIL		DROP	PARSE_FAIL_ONE_RUN	0.00	
+186/220	20200801-L1009912.jpg	20250501-_R016573.jpg	0.75	contrastive	cold	0.00	none	DROP		0.00	The scene span does not live or subvert the sign's message — coexistence, not a third meaning.
+186/390	20200801-L1009912.jpg	20241013-R0010761.jpg	0.90	complementary	cold	0.00	none	DROP		0.00	The reported links fail structural checks (same register, or no verifiable depiction).
+20/247	20241105-_R011061.jpg	20241101-_DSF0811.jpg	1.00	ironic	validate	0.00	none	DROP		0.00	The reported links fail structural checks (same register, or no verifiable depiction).
+204/824	20250426-_DSF4376.jpg	20250315-_DSF9719.jpg	0.75	complementary	cold	0.00	none	DROP		0.00	Only a shared category links the images — IMAGE B shows a man holding a flag, while IMAGE A mentions a woman holding a blue and pink flag but there's no indication of the ….
+22/220	20250304-_DSF6588.jpg	20250501-_R016573.jpg	0.95	contrastive	validate	0.00	none	DROP		0.00	No caption-verifiable link between the two images.
+241/371	20250501-_R016572.jpg	00-20250614-_R022138-2.jpg	0.85	contrastive	cold	0.00	none	DROP		0.00	Not the same specific gesture beyond what the shared activity implies.
+241/620	20250501-_R016572.jpg	20250322-_DSF1446.jpg	0.95	contrastive	validate	0.00	none	DROP		0.00	The reported links fail structural checks (same register, or no verifiable depiction).
+241/723	20250501-_R016572.jpg	20250217-_DSF3462.jpg	0.75	ironic	cold	0.00	none	DROP		0.00	The reported links fail structural checks (same register, or no verifiable depiction).
+245/246	10-20201030-L1000519.jpg	87-20250706-R0024349.jpg	0.75	contrastive	validate	0.00	none	DROP		0.00	No caption-verifiable link between the two images.
+25/572	20250507-_DSF0519.jpg	20250405-_R014662.jpg	1.00	contrastive	validate	0.00	none	DROP		0.00	No caption-verifiable link between the two images.
+268/967	20250426-_DSF4648.jpg	20250125-_DSF1134.jpg	0.95	ironic	validate	0.00	none	DROP		0.00	The scene span does not live or subvert the sign's message — coexistence, not a third meaning.
+294/309	20200531-DSCF4140.jpg	20200531-DSCF4545.jpg	0.75	complementary	cold	0.00	none	DROP		0.00	Not the same subject in opposed states — two different subjects of the same kind.
+296/334	20250124-_DSF0914.jpg	41-20250326-_DSF3626.jpg	1.00	ironic	validate	0.00	none	DROP		0.00	The reported links fail structural checks (same register, or no verifiable depiction).
+33/551	20250217-_DSF4799.jpg	20250324-_DSF3447.jpg	1.00	echo	validate	0.00	none	DROP		0.00	No caption-verifiable link between the two images.
+33/995	20250217-_DSF4799.jpg	20250405-_R014598.jpg	1.00	echo	validate	0.00	none	DROP		0.00	The phenomenon does not cross the pair — the reaction is not to what the source produces.
+333/572	20250504-_R016900.jpg	20250405-_R014662.jpg	0.75	contrastive	cold	0.00	none	DROP		0.00	Only a shared category links the images — IMAGE A describes another woman walking past the first two women, while IMAGE B mentions someone standing behind the woman with h….
+342/707	20250304-_R012546.jpg	20250405-_R014466.jpg	1.00	ironic	validate	0.00	none	DROP		0.00	The reported links fail structural checks (same register, or no verifiable depiction).
+36/497	20240617-DSCF6548.jpg	20240907-L1000992.jpg	0.95	contrastive	validate	0.00	none	DROP		0.00	The reported links fail structural checks (same register, or no verifiable depiction).
+37/551	20250315-_DSF9077.jpg	20250324-_DSF3447.jpg	1.00	echo	validate	0.00	none	DROP		0.00	No caption-verifiable link between the two images.
+37/995	20250315-_DSF9077.jpg	20250405-_R014598.jpg	1.00	complementary	validate	0.00	none	DROP		0.00	The phenomenon does not cross the pair — the reaction is not to what the source produces.
+40/551	20250208-_DSF2403.jpg	20250324-_DSF3447.jpg	1.00	complementary	validate	PARSE_FAIL		DROP	PARSE_FAIL_ONE_RUN	0.00	
+422/1007	20250503-_R016695.jpg	20250217-_DSF4780.jpg	1.00	ironic	validate	0.00	none	DROP		0.00	No caption-verifiable link between the two images.
+448/1007	20250503-_R016723.jpg	20250217-_DSF4780.jpg	0.95	ironic	validate	0.00	none	DROP		0.00	The scene span does not live or subvert the sign's message — coexistence, not a third meaning.
+50/551	20250315-_DSF9076.jpg	20250324-_DSF3447.jpg	1.00	echo	validate	PARSE_FAIL		DROP	PARSE_FAIL_ONE_RUN	0.00	
+50/995	20250315-_DSF9076.jpg	20250405-_R014598.jpg	1.00	echo	validate	0.00	none	DROP		0.00	The phenomenon does not cross the pair — the reaction is not to what the source produces.
+500/707	20250503-_DSF8880.jpg	20250405-_R014466.jpg	1.00	ironic	validate	0.00	none	DROP		0.00	The scene span does not live or subvert the sign's message — coexistence, not a third meaning.
+507/971	20200531-DSCF4226.jpg	20250515-_DSF2129.jpg	1.00	ironic	validate	0.00	none	DROP	FLIPS_ACROSS_RUNS	0.75	No caption-verifiable link between the two images.
+52/842	20250315-_DSF9704.jpg	20240709-DSCF7798.jpg	1.00	contrastive	validate	0.00	none	DROP		0.00	The reported links fail structural checks (same register, or no verifiable depiction).
+530/857	20250405-_DSF0626.jpg	20200717-L1008954.jpg	1.00	ironic	validate	0.00	none	DROP		0.00	The reported links fail structural checks (same register, or no verifiable depiction).
+547/707	20240704-L1009157.jpg	20250405-_R014466.jpg	1.00	ironic	validate	0.00	none	DROP		0.00	The scene span does not live or subvert the sign's message — coexistence, not a third meaning.
+585/603	85-20250627-_R022927.jpg	20241017-_DSF0508.jpg	0.95	contrastive	validate	0.00	none	DROP		0.00	The reported links fail structural checks (same register, or no verifiable depiction).
+645/656	20250124-_DSF0881.jpg	20241017-_DSF0492.jpg	0.95	ironic	validate	0.00	none	DROP		0.00	No caption-verifiable link between the two images.
+656/895	20241017-_DSF0492.jpg	20250405-_DSF0848.jpg	1.00	ironic	validate	0.00	none	DROP		0.00	The scene span does not live or subvert the sign's message — coexistence, not a third meaning.
+67/491	20250426-_DSF5050.jpg	20250531-_DSF4134.jpg	1.00	ironic	validate	0.00	none	DROP		0.00	No caption-verifiable link between the two images.
+67/895	20250426-_DSF5050.jpg	20250405-_DSF0848.jpg	1.00	ironic	validate	0.00	none	DROP		0.00	The scene span does not live or subvert the sign's message — coexistence, not a third meaning.
+682/1007	20250503-_R016676.jpg	20250217-_DSF4780.jpg	1.00	ironic	validate	0.00	none	DROP		0.00	No caption-verifiable link between the two images.
+7/572	20240909-_DSF9222.jpg	20250405-_R014662.jpg	1.00	complementary	validate	0.00	none	DROP		0.00	No caption-verifiable link between the two images.
+707/1004	20250405-_R014466.jpg	20250217-_DSF4794.jpg	1.00	ironic	validate	0.00	none	DROP		0.00	No caption-verifiable link between the two images.
+707/766	20250405-_R014466.jpg	20200607-DSCF5031.jpg	1.00	ironic	validate	0.00	none	DROP		0.00	No caption-verifiable link between the two images.
+73/497	20250515-_DSF2130.jpg	20240907-L1000992.jpg	0.95	contrastive	validate	0.00	none	DROP		0.00	The reported links fail structural checks (same register, or no verifiable depiction).
+75/129	20250331-_DSF9317.jpg	20250501-_R016414.jpg	0.75	contrastive	cold	0.00	none	DROP		0.00	The reported links fail structural checks (same register, or no verifiable depiction).
+766/969	20200607-DSCF5031.jpg	20250531-_R019089.jpg	0.75	contrastive	cold	0.00	none	DROP	PARSE_FAIL_ONE_RUN	PARSE_FAIL	Only a shared category links the images — shared_category.
+768/910	73-20250606-_R019980.jpg	20250426-_DSF5011-3.jpg	1.00	contrastive	validate	0.00	none	DROP		0.00	The reported links fail structural checks (same register, or no verifiable depiction).
+82/705	20250526-_R018155.jpg	20250501-_DSF6472.jpg	1.00	ironic	validate	0.00	none	DROP		0.00	The reported links fail structural checks (same register, or no verifiable depiction).
+874/125	07-20190120-_G130022.jpg	20250501-_DSF7501.jpg	1.00	ironic	validate	0.00	none	DROP	FLIPS_ACROSS_RUNS	0.95	No caption-verifiable link between the two images.
+967/969	20250125-_DSF1134.jpg	20250531-_R019089.jpg	0.70	contrastive	cold	PARSE_FAIL		DROP	PARSE_FAIL_ONE_RUN	0.00	
+98/666	20250405-_DSF9694.jpg	20200704-L1001455.jpg	1.00	ironic	validate	0.00	none	DROP		0.00	Only a shared category links the images — The signs in both images contain text related to political or social issues, though the specific messages differ..
+98/707	20250405-_DSF9694.jpg	20250405-_R014466.jpg	1.00	ironic	validate	0.00	none	DROP		0.00	The reported links fail structural checks (same register, or no verifiable depiction).

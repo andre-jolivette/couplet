@@ -358,5 +358,45 @@
   "hypothesis": "complementary: one image is the SOURCE of sound \u2014 it is produced there \u2014 while the other shows sound being RECEIVED or physically blocked",
   "captionA": "A woman with blonde hair and a black top stands with her back slightly turned, looking to the right. She holds a white object in her right hand. A man in a dark suit and tie stands beside her, facing forward, with his hands clasped in front. Another man, wearing a patterned shirt, gestures with his hands as he speaks, his body angled toward the man in the suit. A fourth person, wearing a dark shirt and a cap, stands to the right, looking down at something in his hands. The background is a weathered wall with peeling paint. The scene appears casual, with the individuals engaged in conversation.",
   "captionB": "A woman, likely in her 40s or 50s, sits on a set of stone steps, her hands cupping her ears as if blocking out noise or protecting her ears from a loud sound. She wears a dark jacket and light-colored pants, her head tilted slightly downward, and her eyes are closed. Behind her, a person in camouflage pants and a light purple backpack stands, partially obscured by a railing. The background shows other people standing on the steps and on the ground, some wearing casual shoes. The woman's posture and gesture suggest she is trying to block out a loud noise or is in discomfort. The overall scene appears to be in a public space, possibly a city square or a similar area."
+ },
+ {
+  "group": "t127",
+  "a": 52,
+  "b": 842,
+  "baselineScore": 1.0,
+  "baselineType": "contrastive",
+  "hypothesis": "contrastive: the same kind of thing \u2014 a bus \u2014 appears REAL in one image and as a toy version in the other, one earnest and one play or representation",
+  "captionA": "A woman, wearing a white shirt and a black mask, raises her right arm, holding a large sign with bold yellow text. Her left hand is raised, gripping another sign. She appears to be in her late twenties or early thirties. A man in a black cap and white shirt stands beside her, looking down at the ground. A crowd of people, some wearing masks, stands on the sidewalk behind them, watching the scene unfold. A bus with a bicycle mounted on its front is parked on the street, and a person in a yellow shirt stands near the bus, holding a sign. The bus has the words \"DO SOMETHING\" displayed on its front. The atmosphere suggests a protest or demonstration, with participants actively engaging and expressing their views.",
+  "captionB": "A woman in a red dress stands in the foreground, her hands resting gently on the hood of a vintage red car. Her head is slightly tilted, and her eyes are focused on the two toy cars placed on the ground in front of her. The scene is set in a parking lot, with several other classic cars parked in the background, including a black car and a green car. The woman appears to be in her mid-30s, and her posture suggests a sense of nostalgia or contemplation as she gazes at the miniature versions of the cars she is surrounded by. The juxtaposition of the real cars and the toy cars creates a playful and whimsical contrast, highlighting the timeless appeal of these classic vehicles."
+ },
+ {
+  "group": "t127",
+  "a": 547,
+  "b": 707,
+  "baselineScore": 1.0,
+  "baselineType": "ironic",
+  "hypothesis": "ironic: a sign or text announces or demands \u2018racism is not patriotism\u2019, while the other image's subject literally embodies or contradicts that very idea",
+  "captionA": "A woman and a man stand side by side, both draped in American flags. The woman, with her back to the camera, wears a flag that covers her from shoulders to knees. The man, also facing away, wears a flag draped over his shoulders and back. Both are wearing baseball caps. The woman's hands are at her sides, while the man's hands are in his pockets. They are standing on a paved area, possibly a walkway or plaza, with a crowd of people in the background. Some are seated on folding chairs, while others stand. The crowd appears to be at an outdoor event, possibly a concert or festival, as suggested by the presence of a stage and lighting in the background. The atmosphere seems casual and festive.",
+  "captionB": "A woman in a blue shirt and sunglasses holds a yellow flag, her hands gripping the pole firmly. Her head is slightly tilted, and her gaze is directed toward the right side of the frame. Another woman, wearing a black shirt and a Guy Fawkes mask, stands beside her, holding a sign that reads \"RACISM IS NOT PATRIOTISM.\" The woman in the mask has long brown hair and is looking toward the left side of the frame. Behind them, a crowd of people is visible, some holding signs and others observing the scene. The atmosphere suggests a protest or demonstration, with individuals actively participating and expressing their views. The emotional register is one of determination and solidarity, as the participants are focused on their cause and the message they are conveying."
+ },
+ {
+  "group": "t127",
+  "a": 186,
+  "b": 390,
+  "baselineScore": 0.8999999761581421,
+  "baselineType": "complementary",
+  "hypothesis": null,
+  "captionA": "A woman in a black dress and knee-high socks stands in the center of a group of people, her right hand raised in a fist, her left hand gripping a red flag. She is wearing a face mask and her head is turned slightly to the left, looking toward the crowd. Her feet are firmly planted on the ground. To her right, a man in a black shirt and jeans is also wearing a face mask and holding a red flag, his right hand raised in a fist. He is looking toward the crowd. Behind them, several people are standing, some with bicycles, and others with their hands raised or fists clenched. The scene is illuminated by streetlights, casting long shadows on the ground. The crowd appears to be engaged in a peaceful protest or demonstration, with some individuals looking at the woman and others looking in different directions. The overall mood is one of solidarity and determination.",
+  "captionB": "A woman, likely in her twenties or thirties, stands in the foreground, holding a megaphone and speaking passionately. She wears a yellow top and green pants, her head tilted slightly upward as she addresses the crowd. Her hands grip the megaphone firmly, and her mouth is open mid-speech. Behind her, a man in a black shirt and cap stands with his arms raised, holding a sign that reads \"DO NOT.\" Another person, partially obscured, holds a megaphone in the background. The scene appears to be a protest or demonstration, with several individuals holding signs and banners. The setting is outdoors, with trees and buildings visible in the background. The atmosphere suggests a sense of urgency and activism."
+ },
+ {
+  "group": "golden14",
+  "a": 587,
+  "b": 645,
+  "baselineScore": 0.0,
+  "baselineType": "none",
+  "hypothesis": "ironic: a sign or text announces or demands \u2018miss\u2019, while the other image's subject literally embodies or contradicts that very idea",
+  "captionA": "Two mannequins, one dressed in a dark outfit with a green bag, the other in a blue and white checkered dress, hold hands. The mannequin in the dark outfit wears a bracelet on the hand that holds the other's hand. The mannequins are positioned side by side, with their hands clasped together. The scene is static, with no movement or interaction between the mannequins. The photograph captures a moment of stillness, with no indication of emotion or action beyond the holding of hands.",
+  "captionB": "A woman, likely in her twenties or thirties, stands in front of a glass wall, her shadow cast prominently on the surface. She wears a cap and a jacket, and her hands are in her pockets. Her head is slightly tilted, and her gaze is directed downward, seemingly lost in thought. The text \"Don't miss us too much\" is printed on the glass behind her, adding a poignant message to the scene. The overall mood is reflective and somewhat melancholic, as the woman appears to be alone and deep in thought."
  }
 ]
