@@ -223,6 +223,45 @@ final class JudgeEvidenceTests: XCTestCase {
         } else { XCTFail("expected sameKindDepicted probe") }
     }
 
+    func testFacePaintIsNotADepiction() {
+        // #128 96/631: "a face painted with a clown-like design" is a real face
+        // with makeup, not a depicted flag. "painted" must not flip the register.
+        let capA = "A woman with a face painted with a clown-like design is holding an American flag."
+        let capB = "Behind the crowd, two flags are hanging: the American flag and the Texas state flag."
+        let vf = JudgeEvidence.verify(
+            finding(.realVsDepicted, qA: "a face painted with a clown-like design",
+                    qB: "two flags are hanging: the American flag and the Texas state flag"),
+            captionA: capA, captionB: capB)
+        XCTAssertFalse(JudgeVerdict.compute(findings: [vf]).connected)
+    }
+
+    func testPaintingNounStillCountsAsDepiction() {
+        // The noun form (a framed painting) is unaffected by dropping "painted".
+        let capA = "A real dog lies on the rug by the fire."
+        let capB = "A framed painting of a dog hangs above the mantel."
+        let vf = JudgeEvidence.verify(
+            finding(.realVsDepicted, qA: "A real dog lies on the rug",
+                    qB: "A framed painting of a dog hangs above the mantel"),
+            captionA: capA, captionB: capB)
+        let v = JudgeVerdict.compute(findings: [vf])
+        XCTAssertTrue(v.connected)
+        XCTAssertEqual(v.relationshipType, "contrastive")
+    }
+
+    func testRationaleNotTruncatedForNormalQuotes() {
+        // #128: the old 70/200 caps clipped real quotes mid-phrase. A realistic
+        // real-vs-depicted rationale must now render its full template tail.
+        let capA = "A woman with long blonde hair stands beside a group of pigeons scattered across the plaza stones."
+        let capB = "Two women sit dwarfed beneath a large mural of a peacock's head painted on the brick wall behind them."
+        let vf = JudgeEvidence.verify(
+            finding(.realVsDepicted, qA: "a group of pigeons scattered across the plaza stones",
+                    qB: "a large mural of a peacock's head", eA: false, eB: false),
+            captionA: capA, captionB: capB)
+        let v = JudgeVerdict.compute(findings: [vf])
+        XCTAssertTrue(v.rationale.hasSuffix("depicted in the other."))
+        XCTAssertFalse(v.rationale.contains("…"))
+    }
+
     func testToyIsNotADepictionWord() {
         // 52/842 + 111/616 class: "toy"/"possibly a toy" hedges are not a
         // verified register flip.

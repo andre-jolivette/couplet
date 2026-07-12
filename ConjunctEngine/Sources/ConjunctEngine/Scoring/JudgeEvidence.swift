@@ -235,12 +235,17 @@ public enum JudgeVerdict {
     /// one of these in exactly one span, or the register flip is unverified
     /// (the join-3 false-premise class: two physical signs are the same register).
     static let kDepictionWords: Set<String> = [
-        "mural", "statue", "poster", "drawing", "painting", "painted",
+        "mural", "statue", "poster", "drawing", "painting",
         "sculpture", "photograph", "photo", "picture", "illustration", "cartoon",
         "billboard", "mannequin", "mannequins", "figurine", "miniature",
-        "replica", "artwork", "graffiti", "printed", "print", "depicted", "drawn"
+        "replica", "artwork", "graffiti", "depicted", "drawn"
         // NOT "toy": "possibly a phone or a toy" hedges, and a toy in hand is a
         // real object — the sameKindDepicted probe carries the register burden.
+        // NOT "painted"/"printed"/"print": "a face painted with a clown design",
+        // "a printed shirt" are REAL things wearing paint/print, not depictions
+        // (#128, 96/631 flag pair). The noun forms (painting/photograph/print-as-
+        // artwork) are covered by their own entries; the sameKindDepicted probe
+        // catches the rest.
     ]
 
     /// Generic everyday actions: a stem overlap on these alone is not direct
@@ -394,11 +399,18 @@ public enum JudgeVerdict {
         .textVsWorld, .sourceReceiver, .sameSubjectReversal, .realVsDepicted, .gestureEcho
     ]
 
+    // Rationale sizing (#128): the stored rationale is templated from verified
+    // quotes; the old 70/200 caps truncated real quotes mid-phrase ("…depicted
+    // in the oth…"). Widened so a two-quote rationale rarely clips. TEXT column,
+    // no DB limit; the lightbox rail wraps.
+    static let kQuoteInRationaleMax = 130
+    static let kRationaleMax = 340
+
     /// Structural correction + confidence table for one verified finding.
     private static func candidate(for vf: VerifiedFinding, categoryNote: String?) -> Candidate? {
         let f = vf.finding
         let signCount = (vf.signTextA ? 1 : 0) + (vf.signTextB ? 1 : 0)
-        let qA = clip(f.quoteA, 70), qB = clip(f.quoteB, 70)
+        let qA = clip(f.quoteA, kQuoteInRationaleMax), qB = clip(f.quoteB, kQuoteInRationaleMax)
 
         // Two sign texts = the same register on both sides. Whatever kind the
         // model reported, nothing is depicted and nothing is enacted — two
@@ -431,7 +443,7 @@ public enum JudgeVerdict {
                 vf: vf, kind: .textVsWorld,
                 confidence: direct ? 0.95 : 0.75,
                 probes: probes,
-                rationale: clip("Text \"\(clip(message, 70))\" in one image is lived in the other: \"\(sceneQ)\".", 200))
+                rationale: clip("Text \"\(clip(message, kQuoteInRationaleMax))\" in one image is lived in the other: \"\(sceneQ)\".", kRationaleMax))
         }
 
         // No sign side.
@@ -446,7 +458,7 @@ public enum JudgeVerdict {
                             : (f.explicitA || f.explicitB) ? 0.75 : 0.60
             return Candidate(vf: vf, kind: .sourceReceiver, confidence: conf,
                              probes: [.samePhenomenon(source: f.quoteA, receiver: f.quoteB)],
-                             rationale: clip("\"\(qA)\" meets \"\(qB)\" — source and receiver of one phenomenon.", 200))
+                             rationale: clip("\"\(qA)\" meets \"\(qB)\" — source and receiver of one phenomenon.", kRationaleMax))
         case .sameSubjectReversal:
             // Capped below the top tier: caption spans can't prove two spans
             // are the SAME person, so the probe's yes is weaker evidence than
@@ -454,7 +466,7 @@ public enum JudgeVerdict {
             let conf: Float = (f.explicitA && f.explicitB) ? 0.80 : 0.70
             return Candidate(vf: vf, kind: .sameSubjectReversal, confidence: conf,
                              probes: [.sameSubjectOpposed(a: f.quoteA, b: f.quoteB)],
-                             rationale: clip("\"\(qA)\" against \"\(qB)\" — the same subject in opposed states.", 200))
+                             rationale: clip("\"\(qA)\" against \"\(qB)\" — the same subject in opposed states.", kRationaleMax))
         case .realVsDepicted:
             // The register flip must be verifiable: a depiction word in
             // exactly one span. Two real things (truck ↔ truck) or none fail.
@@ -467,11 +479,11 @@ public enum JudgeVerdict {
             let depicted = depA ? f.quoteA : f.quoteB
             return Candidate(vf: vf, kind: .realVsDepicted, confidence: 0.90,
                              probes: [.sameKindDepicted(real: real, depicted: depicted)],
-                             rationale: clip("\"\(qA)\" ↔ \"\(qB)\" — the same thing real in one frame, depicted in the other.", 200))
+                             rationale: clip("\"\(qA)\" ↔ \"\(qB)\" — the same thing real in one frame, depicted in the other.", kRationaleMax))
         case .gestureEcho:
             return Candidate(vf: vf, kind: .gestureEcho, confidence: 0.70,
                              probes: [.sameGesture(a: f.quoteA, b: f.quoteB, category: categoryNote)],
-                             rationale: clip("The same gesture in both frames: \"\(qA)\" / \"\(qB)\".", 200))
+                             rationale: clip("The same gesture in both frames: \"\(qA)\" / \"\(qB)\".", kRationaleMax))
         case .sharedCategory:
             return nil
         }
