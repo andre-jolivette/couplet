@@ -134,11 +134,15 @@ receiver span describe receiving, blocking, or reacting to the SAME phenomenon t
 source emits — so that the phenomenon genuinely crosses from one photograph to the \
 other? A woman cupping her ears blocks out the sound a megaphone produces (true). \
 People dancing together are not receiving a speech (false). Two people making similar \
-gestures or expressions are NOT source and receiver (false). Second: is the link \
-EXPLICIT on both sides — a directly described physical action or instrument on each \
-side (megaphone to mouth; hands cupped over ears), rather than an inference from \
-context ("engaged in conversation" implies sound but is not explicit)? Answer with \
-JSON only: {"same_phenomenon": true or false, "explicit_both_sides": true or false}
+gestures or expressions are NOT source and receiver (false). CRUCIAL: if the RECEIVER \
+span actually describes PRODUCING or EMITTING the same phenomenon too — both singing \
+or speaking into microphones, both playing instruments, both shouting — then there \
+are TWO SOURCES and no receiver: answer false. The receiver must be RECEIVING, not \
+also producing. Second: is the link EXPLICIT on both sides — a directly described \
+physical action or instrument on each side (megaphone to mouth; hands cupped over \
+ears), rather than an inference from context ("engaged in conversation" implies sound \
+but is not explicit)? Answer with JSON only: \
+{"same_phenomenon": true or false, "explicit_both_sides": true or false}
 """
 
     static let kSameKindPrompt = """
@@ -167,11 +171,15 @@ caption shows the idea, answer exactly NONE. Answer with JSON only: {"span": "..
 
     static let kSameSubjectPrompt = """
 You examine one proposed contrast between two photographs. Two caption spans are \
-given. Question: do they describe the SAME specific subject (the same person, place, \
-or object) in genuinely OPPOSED states or outcomes? Two different people of the same \
-kind (two men in black shirts at different protests), or the same subject in merely \
-different-but-not-opposed poses, do NOT qualify. Answer with JSON only: \
-{"same_subject_opposed": true or false}
+given. For a genuine contrast BOTH must hold. (1) SAME INDIVIDUAL: the spans are the \
+same specific person, place, or object — established by a name, distinctive shared \
+clothing or features, or explicit continuity. Two people who merely share a generic \
+description (two young women; two men in black shirts) are DIFFERENT subjects. Default \
+to false unless there is positive evidence it is the same individual. (2) OPPOSED \
+STATES: a genuine reversal of outcome or condition (triumph vs defeat; the same street \
+empty vs crowded; celebrated vs mourned). A mere difference in pose or activity \
+(standing vs sitting; arm raised vs resting; inside vs outside) is NOT opposition. If \
+either fails, answer false. Answer with JSON only: {"same_subject_opposed": true or false}
 """
 
     static let kSameGesturePrompt = """
