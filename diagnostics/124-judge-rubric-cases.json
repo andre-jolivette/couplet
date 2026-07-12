@@ -398,5 +398,55 @@
   "hypothesis": "ironic: a sign or text announces or demands \u2018miss\u2019, while the other image's subject literally embodies or contradicts that very idea",
   "captionA": "Two mannequins, one dressed in a dark outfit with a green bag, the other in a blue and white checkered dress, hold hands. The mannequin in the dark outfit wears a bracelet on the hand that holds the other's hand. The mannequins are positioned side by side, with their hands clasped together. The scene is static, with no movement or interaction between the mannequins. The photograph captures a moment of stillness, with no indication of emotion or action beyond the holding of hands.",
   "captionB": "A woman, likely in her twenties or thirties, stands in front of a glass wall, her shadow cast prominently on the surface. She wears a cap and a jacket, and her hands are in her pockets. Her head is slightly tilted, and her gaze is directed downward, seemingly lost in thought. The text \"Don't miss us too much\" is printed on the glass behind her, adding a poignant message to the scene. The overall mood is reflective and somewhat melancholic, as the woman appears to be alone and deep in thought."
+ },
+ {
+  "group": "t128_target",
+  "a": 357,
+  "b": 534,
+  "baselineScore": 0.949999988079071,
+  "baselineType": "complementary",
+  "hypothesis": "contrastive: the same kind of thing \u2014 a microphone \u2014 appears REAL in one image and as a depicted version in the other, one earnest and one play or representation",
+  "captionA": "A young man stands in the foreground, wearing a white T-shirt with the word \"Imposter\" printed on it, along with a graphic of a face. He holds a microphone in his right hand and looks to his left, seemingly engaged in conversation or performance. Behind him, a group of people stands near a wall, some holding microphones and speaking into them. The setting appears to be an outdoor event or gathering, possibly a street performance or community meeting. The wall behind them is adorned with various posters and flyers, and a speaker is positioned on a table. The atmosphere suggests a casual, community-oriented event with a focus on music or speech.",
+  "captionB": "A man, likely in his 30s or 40s, stands in the foreground, wearing a sleeveless denim vest with \"TOTALPUNK\" printed on it. His head is slightly tilted back, and his eyes are wide open, suggesting surprise or intense focus. He appears to be singing or speaking into a microphone, which is not visible in the frame. Behind him, a drummer is partially visible, seated and playing the drums. The lighting is dim, with red and orange hues dominating the scene, creating a dramatic and intense atmosphere. The background includes musical instruments, indicating a live performance setting. The man's expression and posture convey a sense of passion or intensity, possibly reflecting the energy of the music."
+ },
+ {
+  "group": "t128_target",
+  "a": 390,
+  "b": 512,
+  "baselineScore": 0.800000011920929,
+  "baselineType": "contrastive",
+  "hypothesis": "contrastive: the same kind of thing \u2014 a trees \u2014 appears REAL in one image and as a depicted version in the other, one earnest and one play or representation",
+  "captionA": "A woman, likely in her twenties or thirties, stands in the foreground, holding a megaphone and speaking passionately. She wears a yellow top and green pants, her head tilted slightly upward as she addresses the crowd. Her hands grip the megaphone firmly, and her mouth is open mid-speech. Behind her, a man in a black shirt and cap stands with his arms raised, holding a sign that reads \"DO NOT.\" Another person, partially obscured, holds a megaphone in the background. The scene appears to be a protest or demonstration, with several individuals holding signs and banners. The setting is outdoors, with trees and buildings visible in the background. The atmosphere suggests a sense of urgency and activism.",
+  "captionB": "A woman, likely in her twenties or thirties, sits inside a white van, her head slightly tilted as she looks out the window. Her long hair falls over her shoulders, and she wears a dark cap. Her hands rest on the steering wheel, and her gaze is directed toward the camera, suggesting she is aware of being photographed. The van is parked in an outdoor setting, with trees and a building visible in the background. The scene appears calm and ordinary, with no immediate action or interaction between the woman and her surroundings."
+ },
+ {
+  "group": "t128_target",
+  "a": 552,
+  "b": 759,
+  "baselineScore": 0.800000011920929,
+  "baselineType": "contrastive",
+  "hypothesis": null,
+  "captionA": "A woman, likely in her twenties, is the main subject of this photograph. She is wearing a black top and light-colored pants, and she is holding a white bag in her right hand. Her left arm is extended outward, and her hand appears to be in motion, possibly gesturing or pointing. Her head is slightly tilted downward, and her gaze is directed toward the ground. She is walking on a street, and her feet are firmly planted on the ground.\n\nIn the background, there is a crowd of people, some of whom are standing and others who appear to be moving. The crowd is blurred, indicating motion and a sense of activity. The setting seems to be an urban area, with buildings visible in the distance. The photograph is in black and white, which adds a timeless quality to the scene.\n\nThe woman's posture and the way she is holding the bag suggest a casual, everyday moment. There is no indication of strong emotion or significant interaction with others in the frame. The overall mood of the photograph is neutral, capturing a slice of life in a bustling city environment.",
+  "captionB": "A woman, likely in her twenties, sits casually on a step outside a building with a white brick facade. She wears a white cap, a sleeveless plaid dress, and white sneakers. Her hands rest on her knees, and she looks directly at the camera with a slight smile. Her legs are crossed, and her feet are firmly planted on the ground. The setting appears to be an urban street, with a white pipe running vertically along the wall and a small white stool or chair partially visible behind her. The ground is paved with reddish-brown tiles. The overall mood is relaxed and casual."
+ },
+ {
+  "group": "golden",
+  "a": 751,
+  "b": 888,
+  "baselineScore": 0.8999999761581421,
+  "baselineType": "contrastive",
+  "hypothesis": "contrastive: the same kind of thing \u2014 a table \u2014 appears REAL in one image and as a depicted version in the other, one earnest and one play or representation",
+  "captionA": "A woman, likely in her late 20s or early 30s, stands inside a dimly lit caf\u00e9, her back to the camera. She wears a light-colored top and dark pants, her hands resting on the counter as she looks out the large glass window. The caf\u00e9 is sparsely furnished with a single table and a few chairs, and a small bouquet of flowers sits on the table. The reflection in the glass shows the street outside, where a person walks by, partially obscured by the caf\u00e9's interior. The woman appears contemplative, her gaze fixed on the street, perhaps lost in thought or observing something outside. The overall atmosphere is quiet and introspective.",
+  "captionB": "A woman wearing a white shirt with a large, irregular hole cut out of the front stands in front of a framed painting of \"The Last Supper.\" The painting depicts Jesus and his disciples around a table, with Jesus at the center. The woman's shirt is positioned directly in front of the painting, obscuring the lower half of the image. The painting is set against a marble-patterned wall. The woman appears to be standing still, and the hole in her shirt is the only unusual element in the scene. The painting itself is detailed, with the figures in various poses and expressions, but the focus is on the juxtaposition of the woman's shirt and the artwork. The scene does not convey any particular emotional register, as there are no visible gestures or expressions that suggest strong emotions. The incongruity lies in the unexpected placement of the woman's shirt in front of the painting, which creates a humorous and somewhat absurd visual effect."
+ },
+ {
+  "group": "t128_target",
+  "a": 96,
+  "b": 631,
+  "baselineScore": 0.8999999761581421,
+  "baselineType": "contrastive",
+  "hypothesis": "contrastive: the same kind of thing \u2014 a flag \u2014 appears REAL in one image and as a depicted version in the other, one earnest and one play or representation",
+  "captionA": "A woman with long blonde hair and a face painted with a clown-like design is holding an American flag. She is wearing an orange patterned shirt and appears to be mid-stride, with her right hand gripping the flag and her left hand slightly raised. Her head is tilted slightly forward, and her eyes are directed toward the camera. Beside her, another woman with voluminous blonde hair and dramatic makeup is seated. She is wearing a beige top and a black skirt with a heart-shaped brooch. Her hands are resting on a sign that reads, \"ALL THE NAZIS ARE D,\" with the rest of the text obscured. The sign also has the words \"OUR EVERYONE IS\" visible. The woman with the sign is looking directly at the camera with a confident expression. The background shows a cityscape with tall buildings and a clear blue sky. The overall scene suggests a public demonstration or protest.",
+  "captionB": "Two men are sitting on a metal railing, facing each other. The man on the left, wearing a teal shirt and jeans, has his legs crossed and is looking to his right. The man on the right, dressed in a striped shirt and a cowboy hat, is holding a rope in his left hand and has his right hand resting on the railing. Both men are wearing boots. Behind them, two flags are hanging: the American flag and the Texas state flag. The setting appears to be an indoor arena or a similar venue. The men seem to be engaged in a conversation, possibly discussing something related to the event or activity taking place in the arena. The atmosphere appears casual and relaxed."
  }
 ]
