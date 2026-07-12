@@ -74,6 +74,9 @@ do not invent one.
 - If a PROPOSED CONNECTION is given, it comes from a noisy automated system: try to \
 ground it in caption spans as a finding, but if the captions do not support it, do \
 not force it — report only what the captions actually contain.
+- Include a "note" ONLY for shared_category findings — 2-4 words naming the shared \
+scene kind (e.g. "both protests", "two portraits"). Omit the note field entirely for \
+every other finding kind; the quotes speak for themselves.
 
 An empty findings list is a valid answer.
 """
@@ -208,7 +211,12 @@ Answer with JSON only: {"same_gesture": true or false}
                         "explicitB": ["type": "boolean"],
                         "note": ["type": "string"]
                     ],
-                    "required": ["kind", "quoteA", "quoteB", "explicitA", "explicitB", "note"]
+                    // #129: "note" is optional (not required) — the model omits
+                    // it for scoring findings (pure generation savings), and
+                    // only fills it for shared_category, where the pipeline
+                    // uses it as the category description for the inherent-idea
+                    // probe. The parser defaults a missing note to "".
+                    "required": ["kind", "quoteA", "quoteB", "explicitA", "explicitB"]
                 ]
             ]
         ],
@@ -365,7 +373,7 @@ Answer with JSON only: {"same_gesture": true or false}
         func span(in caption: String) async throws -> String? {
             guard let raw = try await callOllama(system: Self.kGroundPrompt,
                                                  prompt: "HYPOTHESIS: \(hypothesis)\n\nCAPTION: \(caption)",
-                                                 schema: Self.kSpanSchema),
+                                                 schema: Self.kSpanSchema, stage: "grounding"),
                   let obj = Self.parseJSONObject(raw),
                   let s = obj["span"] as? String,
                   s.uppercased() != "NONE",
@@ -404,7 +412,7 @@ Answer with JSON only: {"same_gesture": true or false}
             let worldCaption = signOnA ? captionB : captionA
             guard let raw = try await callOllama(system: Self.kRetrievePrompt,
                                                  prompt: "MESSAGE: \(message)\nCAPTION: \(worldCaption)",
-                                                 schema: Self.kSpanSchema),
+                                                 schema: Self.kSpanSchema, stage: "retrieval"),
                   let obj = Self.parseJSONObject(raw),
                   let span = obj["span"] as? String,
                   span.uppercased() != "NONE",
@@ -432,7 +440,7 @@ Answer with JSON only: {"same_gesture": true or false}
     private func run(probe: JudgeProbe, verdict: inout JudgeVerdictResult) async throws -> String? {
         func askBool(_ system: String, _ prompt: String, _ field: String) async throws -> Bool {
             guard let raw = try await callOllama(system: system, prompt: prompt,
-                                                 schema: Self.boolSchema(field)),
+                                                 schema: Self.boolSchema(field), stage: "probe"),
                   let obj = Self.parseJSONObject(raw),
                   let answer = obj[field] as? Bool else { return false }
             return answer
@@ -442,7 +450,7 @@ Answer with JSON only: {"same_gesture": true or false}
         case .textWorldLink(let message, let scene):
             guard let raw = try await callOllama(system: Self.kTextWorldLinkPrompt,
                                                  prompt: "MESSAGE: \(message)\nSCENE: \(scene)",
-                                                 schema: Self.kLinkSchema),
+                                                 schema: Self.kLinkSchema, stage: "probe"),
                   let obj = Self.parseJSONObject(raw),
                   let link = obj["link"] as? String else {
                 return "Link probe unusable — confirm withheld."
@@ -467,7 +475,7 @@ Answer with JSON only: {"same_gesture": true or false}
         case .samePhenomenon(let source, let receiver):
             let prompt = "SOURCE: \(source)\nRECEIVER: \(receiver)"
             guard let raw = try await callOllama(system: Self.kSamePhenomenonPrompt, prompt: prompt,
-                                                 schema: Self.kPhenomenonSchema),
+                                                 schema: Self.kPhenomenonSchema, stage: "probe"),
                   let obj = Self.parseJSONObject(raw),
                   let same = obj["same_phenomenon"] as? Bool else {
                 return "Phenomenon probe unusable — confirm withheld."
@@ -512,7 +520,19 @@ Answer with JSON only: {"same_gesture": true or false}
     /// Returns the model's raw `response` text, or nil on task cancellation.
     /// Throws on real network/HTTP failures so the caller can track consecutive
     /// failures and abort if the server is down.
-    private func callOllama(system: String, prompt: String, schema: [String: Any]) async throws -> String? {
+    // Per-stage call counts + wall time, for throughput analysis (#129).
+    // Negligible overhead; read via perfReport(), zero via resetPerf().
+    private var stagePerf: [String: (calls: Int, ms: Double)] = [:]
+
+    public func resetPerf() { stagePerf = [:] }
+    public func perfReport() -> String {
+        stagePerf.sorted { $0.key < $1.key }
+            .map { "\($0.key)\tcalls=\($0.value.calls)\tms=\(Int($0.value.ms))" }
+            .joined(separator: "\n")
+    }
+
+    private func callOllama(system: String, prompt: String, schema: [String: Any],
+                            stage: String = "extraction") async throws -> String? {
         let body: [String: Any] = [
             "model": model,
             "system": system,
@@ -540,6 +560,7 @@ Answer with JSON only: {"same_gesture": true or false}
 
         let data: Data
         let response: URLResponse
+        let t0 = Date()
         do {
             (data, response) = try await session.data(for: request)
         } catch let urlError as URLError where urlError.code == .cancelled {
@@ -549,6 +570,8 @@ Answer with JSON only: {"same_gesture": true or false}
             print("ThematicScorerV2: connection error (is ollama running?) — \(error.localizedDescription)")
             throw error
         }
+        let prev = stagePerf[stage] ?? (0, 0)
+        stagePerf[stage] = (prev.calls + 1, prev.ms + Date().timeIntervalSince(t0) * 1000)
 
         guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
             let code = (response as? HTTPURLResponse)?.statusCode ?? -1
