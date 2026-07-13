@@ -105,7 +105,11 @@ scene physically shows. It may be direct (message "Smile", scene of a woman smil
 figures holding hands -> "longing for closeness"). Rules: the idea must be present in \
 BOTH the message's words and the scene's physical content. A message must state an \
 idea — a bare noun or label matching an object in the scene is a word coincidence, not \
-an idea (message "POLE", scene with a flag on a pole -> NONE). A generic everyday \
+an idea (message "POLE", scene with a flag on a pole -> NONE). A brand, company, \
+place, or other proper noun on the sign that simply names a logo, product, store, or \
+place present in the other image is a word coincidence, NOT a lived idea (message \
+"TESLA", scene showing a Tesla logo or car -> NONE; message "STARBUCKS", scene with a \
+Starbucks cup -> NONE). A generic everyday \
 action anyone does (walking, standing, sitting, looking, entering) is not a shared \
 idea (message "JUST WALK IN", scene of a girl walking -> NONE). If the scene merely \
 happens near the message's topic, shares generic props, clothing, or posture, or is \
